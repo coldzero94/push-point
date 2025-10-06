@@ -1,2 +1,1 @@
-# push-point
-for memo app
+## Push-point
