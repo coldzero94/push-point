@@ -10,14 +10,9 @@ data:
   DB_NAME: "linkarchive"
   DB_USER: "linkuser"
 
-  # Redis
+  # Redis (Cache + Message Queue)
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
-
-  # RabbitMQ
-  RABBITMQ_HOST: "rabbitmq"
-  RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: "admin"
 
   # MinIO
   MINIO_ENDPOINT: "minio:9000"

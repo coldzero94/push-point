@@ -36,13 +36,15 @@
        │ ┌──────────────────────────────────┤
        │ │                                  │
        ↓ ↓                                  ↓
-┌─────────────────────┐              ┌──────────────────────┐
-│  Redis (Cache/Queue)│              │   RabbitMQ           │
-│  - Session Store    │←─────────────│   - Job Queue        │
-│  - API Cache        │              │   - Dead Letter Q    │
-│  - Rate Limit       │              │   - Retry Logic      │
-└─────────────────────┘              └──────────────────────┘
-       ↓                                    ↓
+┌─────────────────────────────────────────────────────────┐
+│  Redis (Cache + Message Queue)                          │
+│  - Session Store                                         │
+│  - API Cache                                             │
+│  - Rate Limit                                            │
+│  - Redis Streams (비동기 작업 큐)                         │
+│    * tasks:scraping, tasks:tagging, tasks:thumbnail     │
+└────────────────────────┬────────────────────────────────┘
+                         ↓
 ┌─────────────────────────────────────────────────────────────────┐
 │                    PostgreSQL (Primary DB)                       │
 │                    - User Data                                   │
@@ -87,38 +89,80 @@
 
 **구현**: nginx-ingress
 
-### 3. API Server (Go)
+### 3. API Server (Go + Gin)
 **책임**:
-- RESTful API 제공
-- 인증/인가 (JWT)
+- RESTful API 제공 (Gin 프레임워크)
+- 인증/인가 (JWT 기반)
 - 비즈니스 로직 처리
 - 경량 작업 동기 처리
 - 무거운 작업 큐 등록
 
+**기술 스택**:
+- **웹 프레임워크**: Gin
+- **ORM**: Ent (Facebook의 엔티티 프레임워크)
+- **인증**: golang-jwt/jwt
+- **캐시 & 메시징**: go-redis (Redis Streams)
+- **스토리지**: aws-sdk-go-v2 (S3 호환)
+
 **연결**:
-- PostgreSQL: 데이터 CRUD
-- Redis: 세션, 캐시, Rate Limiting
-- RabbitMQ: Job 발행 (Publisher)
-- MinIO: Pre-signed URL 생성
+- PostgreSQL: Ent ORM을 통한 타입 안전한 데이터 CRUD
+- Redis: go-redis를 통한 세션, 캐시, Rate Limiting, 메시지 큐
+- MinIO: AWS SDK S3로 Pre-signed URL 생성
+
+**레이어 구조**:
+```
+HTTP Request
+    ↓
+Handler (Gin) - 요청 검증, 응답 직렬화
+    ↓
+Service - 비즈니스 로직
+    ↓
+Repository (Ent) - 데이터 접근
+    ↓
+PostgreSQL
+```
 
 **포트**: 8080
 
 **스케일링**: Horizontal (여러 Pod)
 
-### 4. Worker (Go)
+### 4. Worker (Go + gocron)
 **책임**:
 - 비동기 작업 전담 처리
-- URL 메타데이터 크롤링
+- URL 메타데이터 크롤링 (colly)
 - OpenAI API 호출 (태그 생성)
 - 썸네일 다운로드 및 리사이징
 - MinIO 업로드
+- 주기적 작업 스케줄링 (gocron)
+
+**기술 스택**:
+- **ORM**: Ent (API Server와 동일)
+- **스케줄러**: gocron
+- **웹 스크래핑**: chromedp 또는 HTTP 클라이언트
+- **OpenAI**: go-openai
+- **이미지 처리**: Go 표준 image 패키지
+- **메시징**: go-redis (Redis Streams)
+- **스토리지**: aws-sdk-go-v2 (S3)
 
 **연결**:
-- RabbitMQ: Job 소비 (Consumer)
-- PostgreSQL: 처리 결과 저장
-- MinIO: 이미지 업로드
-- OpenAI API: 태그 생성 요청
+- Redis Streams: go-redis를 통한 Job 소비 (Consumer Group)
+- PostgreSQL: Ent ORM을 통한 처리 결과 저장
+- MinIO: AWS SDK S3로 이미지 업로드
+- OpenAI API: go-openai로 태그 생성 요청
 - Redis: 분산 락 (중복 처리 방지)
+
+**작업 흐름**:
+```
+Redis Streams (tasks:*)
+    ↓
+Worker Consumer (XReadGroup)
+    ↓
+Scraper → OpenAI (태그) → Image Processing
+    ↓
+Ent ORM → PostgreSQL
+    ↓
+AWS S3 SDK → MinIO
+```
 
 **스케일링**: Horizontal (여러 Worker 동시 실행)
 
@@ -139,12 +183,13 @@
 - Master-Replica 구조 (향후)
 - 자동 백업
 
-### 6. Redis
+### 6. Redis (Cache + Message Queue)
 **책임**:
 - 인메모리 캐싱
 - 세션 관리
 - Rate Limiting
 - 분산 락
+- **비동기 작업 큐 (Redis Streams)**
 
 **데이터 구조**:
 ```
@@ -152,40 +197,32 @@ Session: user:{user_id}:session
 Cache: cache:link:{link_id}:metadata (TTL: 1h)
 Rate Limit: ratelimit:{user_id}:{endpoint}
 Lock: lock:scrape:{url_hash}
+
+# Redis Streams (메시지 큐)
+tasks:scraping     - URL 크롤링 작업
+tasks:tagging      - AI 태그 생성 작업
+tasks:thumbnail    - 썸네일 처리 작업
 ```
 
-**영속성**: AOF + RDB 스냅샷
-
-### 7. RabbitMQ
-**책임**:
-- 안정적인 메시지 큐잉
-- 작업 분배
-- 재시도 로직
-- Dead Letter Queue
-
-**Exchange & Queue**:
+**Redis Streams 메시지 형식**:
 ```
-Exchange: link.tasks (topic)
-  ├─ scrape.queue      (routing: task.scrape)
-  ├─ tag.queue         (routing: task.tag)
-  ├─ thumbnail.queue   (routing: task.thumbnail)
-  └─ dlq.queue         (routing: task.failed)
+XADD tasks:scraping * job_id uuid-v4 link_id 12345 url https://example.com retry_count 0
 ```
 
-**메시지 형식**:
-```json
-{
-  "job_id": "uuid-v4",
-  "link_id": 12345,
-  "url": "https://example.com",
-  "task_type": "scrape",
-  "priority": 5,
-  "retry_count": 0,
-  "created_at": "2025-10-05T10:00:00Z"
-}
+**Consumer Groups**:
+```
+Group: workers-scraping
+  ├─ Consumer: worker-1
+  ├─ Consumer: worker-2
+  └─ Consumer: worker-3
+
+Group: workers-tagging
+  └─ Consumer: worker-1
 ```
 
-### 8. MinIO
+**영속성**: AOF (Append Only File) 사용
+
+### 7. MinIO
 **책임**:
 - S3 호환 객체 스토리지
 - 이미지 저장 및 서빙

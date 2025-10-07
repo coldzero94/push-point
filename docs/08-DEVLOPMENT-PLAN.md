@@ -29,9 +29,18 @@ Phase 4: 배포 & 최적화 (1-2주)
 
 #### Day 1-2: 프로젝트 초기 설정
 - [x] Go 프로젝트 구조 생성
-- [x] 로컬 K8s 환경 구축 (Kind/Minikube)
-- [x] PostgreSQL, Redis, RabbitMQ 배포
-- [x] 기본 헬스체크 엔드포인트
+- [x] 로컬 K8s 환경 구축 (Minikube)
+- [x] PostgreSQL, Redis, RabbitMQ, MinIO 배포
+- [x] Go 패키지 설치
+  - [x] Gin (웹 프레임워크)
+  - [x] Ent (ORM)
+  - [x] go-redis (Redis 클라이언트)
+  - [x] amqp091-go (RabbitMQ)
+  - [x] aws-sdk-go-v2 (S3/MinIO)
+  - [x] golang-jwt/jwt (JWT)
+  - [x] viper (설정 관리)
+  - [x] zap (로깅)
+- [ ] 기본 헬스체크 엔드포인트
 
 **디렉토리 구조**:
 ```

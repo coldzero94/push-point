@@ -1,0 +1,93 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-server-hpa
+  namespace: push-point
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-server
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # CPU 70% 이상 시 스케일 아웃
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80  # 메모리 80% 이상 시 스케일 아웃
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60  # 스케일 업 안정화 시간
+      policies:
+      - type: Percent
+        value: 50  # 최대 50%씩 증가
+        periodSeconds: 60
+      - type: Pods
+        value: 2  # 한 번에 최대 2개 Pod 추가
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 스케일 다운 안정화 시간 (5분)
+      policies:
+      - type: Percent
+        value: 25  # 최대 25%씩 감소
+        periodSeconds: 60
+      - type: Pods
+        value: 1  # 한 번에 최대 1개 Pod 제거
+        periodSeconds: 60
+      selectPolicy: Min
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-hpa
+  namespace: push-point
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker
+  minReplicas: 2
+  maxReplicas: 20  # Worker는 더 많이 스케일 가능
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75  # CPU 75% 이상 시 스케일 아웃
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85  # 메모리 85% 이상 시 스케일 아웃
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30  # Worker는 빠르게 스케일 업
+      policies:
+      - type: Percent
+        value: 100  # 최대 100%씩 증가 (2배)
+        periodSeconds: 30
+      - type: Pods
+        value: 4  # 한 번에 최대 4개 Pod 추가
+        periodSeconds: 30
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 180  # 스케일 다운 안정화 시간 (3분)
+      policies:
+      - type: Percent
+        value: 50  # 최대 50%씩 감소
+        periodSeconds: 60
+      - type: Pods
+        value: 2  # 한 번에 최대 2개 Pod 제거
+        periodSeconds: 60
+      selectPolicy: Min
