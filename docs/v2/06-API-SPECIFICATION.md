@@ -52,8 +52,8 @@ curl -H "Authorization: Bearer dev-key" http://localhost:8080/api/v1/links
 
 목록(`GET /api/v1/links`)과 검색(`GET /api/v1/search`)은 **keyset 커서** 방식을 쓴다.
 
-- `cursor` (string, optional): 이전 응답의 `next_cursor` 값을 그대로 전달. 첫 페이지는 생략. 불투명(opaque) 토큰이므로 클라이언트가 내용을 해석하거나 조작하지 않는다.
-- `limit` (int, 기본 20, 최대 100): 페이지 크기.
+- `cursor` (string, optional): 이전 응답의 `next_cursor` 값을 그대로 전달. 첫 페이지는 생략. 불투명(opaque) 토큰이므로 클라이언트가 내용을 해석하거나 조작하지 않는다. 목록 커서와 검색(FTS) 커서는 형식이 달라 서로 호환되지 않는다 — 모드가 다르거나 형식이 깨진 커서는 400 `invalid_input`.
+- `limit` (int, 기본 20, 최대 100): 페이지 크기. 1 미만은 400 `invalid_input`, 100 초과는 100으로 보정된다.
 - 응답의 `next_cursor` (string | null): 다음 페이지 커서. `null`이면 마지막 페이지.
 
 ```json
@@ -114,7 +114,7 @@ POST /api/v1/links
 }
 ```
 
-이 API는 `url_hash` 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group 로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다(중복 시 200 `duplicate:true`). 오프라인 큐에 남은 요청을 안심하고 다시 보낼 수 있는 근거다.
+이 API는 `url_hash` 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group 로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다(중복 시 200 `duplicate:true`). 오프라인 큐에 남은 요청을 안심하고 다시 보낼 수 있는 근거다. 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(`pending` 복귀, `note` 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
 
 **상태 코드**: 201(신규 저장) / 200(중복) / 400(`invalid_input`, url 누락·형식 오류)
 
@@ -140,7 +140,7 @@ GET /api/v1/links?cursor=&limit=&tag=&status=
       "title": "Go 동시성 패턴 완전 정복",
       "description": "goroutine과 채널을 이용한 워커 풀 구성부터 singleflight까지…",
       "content_type": "video",
-      "thumb_url": "/thumbs/a3/a3f1b2c4d5e6f7a8.jpg",
+      "thumb_url": "/thumbs/a3/a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8.jpg",
       "status": "done",
       "tags": [
         {"id": 3, "name": "dev", "source": "rules", "confidence": 0.82},
@@ -158,6 +158,8 @@ GET /api/v1/links?cursor=&limit=&tag=&status=
 - `thumb_url`은 `/thumbs/{dir}/{file}` 형태의 서버 상대 경로다 (경로 규칙은 8절). 썸네일이 없으면 `null`.
 - `tags[].source`는 `rules` | `embed` | `manual`, `confidence`는 `manual`이면 `null`.
 
+**상태 코드**: 200 / 400(`invalid_input` — 잘못된 커서·limit·status 형식)
+
 ### 4.3 링크 상세 조회
 
 ```
@@ -173,7 +175,7 @@ GET /api/v1/links/{id}
   "title": "Go 동시성 패턴 완전 정복",
   "description": "goroutine과 채널을 이용한 워커 풀 구성부터 singleflight, errgroup을 활용한 에러 전파까지 실전 예제로 다룬다.",
   "content_type": "video",
-  "thumb_url": "/thumbs/a3/a3f1b2c4d5e6f7a8.jpg",
+  "thumb_url": "/thumbs/a3/a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8.jpg",
   "status": "done",
   "tags": [
     {"id": 3, "name": "dev", "source": "rules", "confidence": 0.82},
@@ -196,9 +198,9 @@ GET /api/v1/links/{id}
 ```
 
 - 목록 항목의 전체 필드에 `author`, `published_at`, `duration_sec`, `word_count`, `lang`, `error`가 추가된다. `published_at`·`duration_sec`·`word_count`는 값이 없으면 `null`, `author`·`lang`·`error`는 빈 문자열이다 (05 스키마의 NOT NULL DEFAULT '' 정의와 일치).
-- `jobs`는 이 링크에 연결된 잡의 상태 요약 `{scrape, tag, thumb: status}`다. 각 값은 `pending` | `running` | `done` | `failed`. 위 예시처럼 `thumb`이 `failed`여도 링크 `status`는 `done`일 수 있다 — 썸네일 잡은 best-effort이며 실패해도 링크 상태에 영향을 주지 않는다 (`thumb_url`만 `null`로 남는다).
+- `jobs`는 이 링크에 연결된 잡의 상태 요약 `{scrape, tag, thumb: status}`다. 각 값은 `pending` | `running` | `done` | `failed`. 해당 kind의 잡이 아직 없으면 필드가 생략된다 — `scrape` 잡은 저장 트랜잭션에서 항상 함께 생성되므로 항상 존재하고, `tag`는 scrape 성공 후, `thumb`은 og:image가 있을 때만 생긴다 (M1에서는 `scrape`만 있다). 위 예시처럼 `thumb`이 `failed`여도 링크 `status`는 `done`일 수 있다 — 썸네일 잡은 best-effort이며 실패해도 링크 상태에 영향을 주지 않는다 (`thumb_url`만 `null`로 남는다).
 
-**상태 코드**: 200 / 404(`not_found`)
+**상태 코드**: 200 / 400(`invalid_input` — 정수가 아닌 id) / 404(`not_found`)
 
 ### 4.4 링크 수정 (메모/태그)
 
@@ -215,7 +217,7 @@ PATCH /api/v1/links/{id}
 ```
 
 - `note` (string, optional): 전달 시 메모 교체.
-- `tags` (string 배열, optional): 태그 **이름** 배열. 전달 시 이 링크의 태그를 **전체 교체**한다 — 부분 추가/삭제 API는 없다.
+- `tags` (string 배열, optional): 태그 **이름** 배열. 전달 시 이 링크의 태그를 **전체 교체**한다 — 부분 추가/삭제 API는 없다. `null`이거나 필드를 생략하면 태그를 유지하고, 빈 배열 `[]`이면 전체 제거로 처리한다.
   - 추가된 태그: `link_tags(source='manual', confidence=NULL)` 저장 + `tag_feedback(action='added')` 기록
   - 제거된 태그: `link_tags`에서 삭제 + `tag_feedback(action='removed')` 기록
 
@@ -231,11 +233,11 @@ PATCH /api/v1/links/{id}
 DELETE /api/v1/links/{id}
 ```
 
-소프트 삭제 — `deleted_at`만 기록하며 행은 남는다. 이후 목록/검색/상세에서 제외된다.
+소프트 삭제 — `deleted_at`만 기록하며 행은 남는다. 이후 목록/검색/상세에서 제외된다. 같은 URL을 다시 저장(4.1)하면 행이 복원된다.
 
 **Response**: 204 No Content
 
-**상태 코드**: 204 / 404
+**상태 코드**: 204 / 400(`invalid_input` — 정수가 아닌 id) / 404
 
 ### 4.6 실패 링크 재시도
 
@@ -331,7 +333,7 @@ DELETE /api/v1/tags/{id}
 
 **Response**: 204 No Content
 
-**상태 코드**: 204 / 404
+**상태 코드**: 204 / 400(`invalid_input` — 정수가 아닌 id) / 404
 
 ## 6. 검색 (Search)
 
@@ -342,7 +344,7 @@ GET /api/v1/search?q=&tag=&from=&to=&cursor=&limit=
 ```
 
 **Query Parameters**:
-- `q` (string, 필수): 검색어. 길이에 따라 검색 경로가 갈린다.
+- `q` (string, 필수): 검색어. 앞뒤 공백 제거 후 빈 문자열이면 400 `invalid_input`. 길이에 따라 검색 경로가 갈린다.
   - **3자 이상**: FTS5 trigram `MATCH` + `bm25` 랭킹. 한국어도 형태소 분석 없이 부분 문자열 매칭이 된다. 응답 `"mode": "fts"`.
   - **3자 미만**: trigram 특성상 FTS5 매칭이 불가능하지만 400으로 거부하지 않고 **LIKE 폴백**으로 동작한다 — `links` 테이블의 title/note/description을 `LIKE`로 스캔(검색어의 `%`·`_`는 ESCAPE 처리)하고 `created_at DESC`로 정렬한다. 응답 `"mode": "like"`, `rank`는 `null`. 실측 10만 행 풀스캔 37ms로 예산 내다.
 - `tag` (string, optional): 태그 이름 필터
@@ -363,7 +365,7 @@ GET /api/v1/search?q=&tag=&from=&to=&cursor=&limit=
       "title": "Go 동시성 패턴 완전 정복",
       "description": "goroutine과 채널을 이용한 워커 풀 구성부터 singleflight까지…",
       "content_type": "video",
-      "thumb_url": "/thumbs/a3/a3f1b2c4d5e6f7a8.jpg",
+      "thumb_url": "/thumbs/a3/a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8.jpg",
       "status": "done",
       "tags": [
         {"id": 3, "name": "dev", "source": "rules", "confidence": 0.82}
@@ -379,11 +381,13 @@ GET /api/v1/search?q=&tag=&from=&to=&cursor=&limit=
 
 `rank`는 bm25 점수로, 값이 작을수록 관련도가 높다. `"mode": "like"` 응답에서는 모든 항목의 `rank`가 `null`이고 정렬은 `created_at DESC`다. 성능 목표: 1만 링크 기준 < 30ms (FTS5 경로).
 
+FTS 모드의 커서는 bm25 rank 기반 keyset이므로, 페이지 사이에 쓰기(저장·삭제·재색인)가 발생하면 FTS 페이지 경계가 이동할 수 있다 (단일 사용자 규모에서 허용).
+
 ## 7. 통계 (Stats)
 
 ### GET /api/v1/stats
 
-**M6 예정** — iOS 위젯용 데이터를 한 번의 호출로 제공한다. M6 이전에는 404를 반환한다.
+**구현 완료** — iOS 위젯용 데이터를 한 번의 호출로 제공한다 (위젯 활용은 M6).
 
 **Response** (200 OK):
 ```json
@@ -410,7 +414,7 @@ GET /api/v1/search?q=&tag=&from=&to=&cursor=&limit=
 `data/thumbs/` 아래의 썸네일 JPEG를 그대로 서빙한다. 경로 형식은 `{url_hash 앞 2자리}/{url_hash}.jpg` (dir = 앞 2자리, file = `{url_hash}.jpg`)이며, 목록/상세 응답의 `thumb_url`이 정확히 이 경로를 가리킨다.
 
 ```
-GET /thumbs/a3/a3f1b2c4d5e6f7a8.jpg
+GET /thumbs/a3/a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8.jpg
 ```
 
 이 엔드포인트는 **인증이 면제된다** — Tailscale이 네트워크 경계를 이루고, iOS `AsyncImage`가 커스텀 헤더를 지원하지 않기 때문이다. 썸네일은 단일 사이즈(최대 폭 640px, JPEG q80) 하나뿐이므로 v1처럼 사이즈 변형을 경로로 고르는 개념이 없다.

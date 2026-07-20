@@ -1,0 +1,48 @@
+# Push-Point CI — 머지 게이트 (main 룰셋의 required status check "ci")
+# 최소한의 "코드 망가짐 방지": 포맷 → 빌드 → vet → race 테스트 → 계약 드리프트 → enum 정합
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: extractions/setup-just@v2
+
+      - name: gofmt 검사 (수정 없이 위반만 검출)
+        run: |
+          out=$(gofmt -l backend)
+          if [ -n "$out" ]; then echo "gofmt 위반:"; echo "$out"; exit 1; fi
+
+      - name: 빌드
+        working-directory: backend
+        run: go build ./...
+
+      - name: go vet
+        working-directory: backend
+        run: go vet ./...
+
+      - name: 테스트 (race)
+        working-directory: backend
+        run: go test -race ./...
+
+      - name: 계약 드리프트 검사 (just gen-check)
+        run: |
+          go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+          just gen-check
+
+      - name: enum 정합 검사 (openapi.yaml ↔ migrations CHECK)
+        run: |
+          if [ -f scripts/lint_enums.sh ]; then bash scripts/lint_enums.sh; else echo "lint_enums.sh 없음 — 건너뜀"; fi

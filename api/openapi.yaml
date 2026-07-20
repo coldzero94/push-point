@@ -25,7 +25,7 @@ tags:
   - name: search
     description: FTS5 전문 검색 (3자 미만은 LIKE 폴백)
   - name: stats
-    description: 통계 (M6, iOS 위젯용)
+    description: 통계 (iOS 위젯용 — 위젯 활용은 M6)
   - name: thumbs
     description: 썸네일 정적 서빙
 
@@ -76,6 +76,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinkPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
     post:
@@ -87,6 +89,8 @@ paths:
         즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다.
         `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group
         로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`).
+        소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(pending 복귀, note 교체,
+        scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
       requestBody:
         required: true
         content:
@@ -148,6 +152,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LinkDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -160,6 +166,7 @@ paths:
         `note` 전달 시 메모 교체. `tags`(태그 이름 배열) 전달 시 이 링크의 태그를 전체 교체한다 —
         추가분은 `link_tags(source='manual', confidence=NULL)` + `tag_feedback(added)`,
         제거분은 `tag_feedback(removed)` 기록. tag_feedback은 M5 재랭킹 학습 데이터다.
+        `tags`가 `null`이거나 생략되면 태그를 유지하고, 빈 배열 `[]`이면 전체 제거로 처리한다.
       requestBody:
         required: true
         content:
@@ -187,6 +194,8 @@ paths:
       responses:
         "204":
           description: 삭제 완료 (본문 없음)
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -304,6 +313,8 @@ paths:
       responses:
         "204":
           description: 삭제 완료 (본문 없음)
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -338,7 +349,15 @@ paths:
           description: created_at 범위 끝 (unix epoch 초)
           schema:
             type: integer
-        - $ref: "#/components/parameters/Cursor"
+        - name: cursor
+          in: query
+          description: >-
+            이전 응답의 `next_cursor` 값. 첫 페이지는 생략. 불투명(opaque) 토큰 —
+            목록 커서와 검색 커서는 형식이 달라 서로 호환되지 않는다 (형식 불일치는 400).
+            FTS 모드 커서는 bm25 rank 기반이라 페이지 사이에 쓰기가 발생하면 FTS 페이지
+            경계가 이동할 수 있다 (단일 사용자 규모에서 허용).
+          schema:
+            type: string
         - $ref: "#/components/parameters/Limit"
       responses:
         "200":
@@ -357,7 +376,7 @@ paths:
       operationId: getStats
       tags: [stats]
       summary: 통계 조회
-      description: iOS 위젯용 데이터를 한 번의 호출로 제공한다 (M6 예정 — 그 이전에는 404).
+      description: iOS 위젯용 데이터를 한 번의 호출로 제공한다 (구현 완료 — 위젯 활용은 M6).
       responses:
         "200":
           description: 통계
@@ -397,7 +416,7 @@ paths:
           schema:
             type: string
             pattern: "^[0-9a-f]{64}\\.jpg$"
-          example: a3f1b2c4d5e6f7a8.jpg
+          example: a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8.jpg
       responses:
         "200":
           description: 썸네일 이미지
@@ -582,8 +601,11 @@ components:
               description: 최종 실패 사유. 실패 없으면 빈 문자열
             jobs:
               type: object
-              description: "이 링크에 연결된 잡 상태 요약. thumb은 best-effort — failed여도 링크 status에 영향 없음"
-              required: [scrape, tag, thumb]
+              description: >-
+                이 링크에 연결된 잡 상태 요약. 해당 kind의 잡이 아직 없으면 필드 생략
+                (scrape 잡은 저장 트랜잭션에서 항상 생성되므로 필수). thumb은 best-effort —
+                failed여도 링크 status에 영향 없음
+              required: [scrape]
               properties:
                 scrape:
                   $ref: "#/components/schemas/JobStatus"
@@ -688,7 +710,7 @@ components:
 
     Stats:
       type: object
-      description: 통계 응답 (M6, iOS 위젯용)
+      description: 통계 응답 (iOS 위젯용 — 위젯 활용은 M6)
       required: [total_links, links_this_week, by_tag, by_day]
       properties:
         total_links:
