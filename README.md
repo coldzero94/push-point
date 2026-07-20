@@ -1,449 +1,171 @@
 # Push-Point
 
-링크 아카이브 - 자동 AI 태그 기반 개인 메모 앱
+> Push-Point v2 — 마지막 업데이트: 2026-07-20
 
-## 🚀 로컬 개발 환경 시작하기
+저장한 링크에 자동으로 태그가 붙는 개인 링크 아카이브. 단일 Go 바이너리로 동작한다.
 
-### 사전 요구사항
+v2의 방향은 단순하다. 인프라가 아니라 제품부터 만든다 — 유저가 0명인 서비스에 오토스케일링을 붙이는 대신, `just dev` 한 번으로 뜨는 단일 프로세스의 설계 품질로 성능을 확보한다. 자동 태깅은 외부 LLM API 없이 규칙 기반 + ONNX 임베딩의 경량 NLU 파이프라인으로 해결하며, 이것이 이 프로젝트의 기술적 차별점이다.
 
-```bash
-# 필수 설치
-- Docker Desktop
-- Minikube
-- kubectl
-- Go 1.21+ (goenv 사용 권장)
-- make
-```
+## 빠른 시작
 
-## 🎯 빠른 시작 (Makefile 사용)
+### 요구사항
 
-### 한 번에 전체 배포
+- Go 1.25+
+- just (`brew install just`)
+
+### 실행
 
 ```bash
-# Minikube 시작 + 전체 인프라 배포
-make deploy
-
-# 또는 단계별로
-make minikube-start  # Minikube 클러스터 시작
-make k8s-up          # K8s 리소스 배포
+just dev
+# cd backend && PUSHPOINT_API_KEY=dev-key go run ./cmd/pushpoint
+# 콜드 스타트 < 1s, http://localhost:8080 에서 서빙
 ```
 
-### 주요 Makefile 명령어
+### 링크 저장
 
 ```bash
-# === 기본 명령어 ===
-make help            # 사용 가능한 모든 명령어 보기
-make k8s-status      # 전체 리소스 상태 확인
-make pods            # Pod 목록 및 상태
-
-# === 클러스터 관리 ===
-make minikube-start  # Minikube 시작
-make minikube-stop   # Minikube 중지
-make minikube-status # Minikube 상태 확인
-
-# === 배포 관리 ===
-make k8s-up          # 전체 배포
-make k8s-down        # 전체 삭제
-make k8s-restart     # 재시작 (삭제 후 재배포)
-
-# === 모니터링 ===
-make logs-api        # API Server 로그
-make logs-worker     # Worker 로그
-make logs-redis      # Redis 로그
-make metrics         # 리소스 사용량
-
-# === 스케일링 ===
-make scale-api REPLICAS=5      # API Server 5개로 스케일
-make scale-worker REPLICAS=10  # Worker 10개로 스케일
-make hpa-status                # HPA 상태 확인
-
-# === Port Forward ===
-make port-forward-api    # API Server: http://localhost:8080
-make port-forward-minio  # MinIO Console: http://localhost:9001
+curl -X POST http://localhost:8080/api/v1/links \
+  -H "Authorization: Bearer dev-key" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/article", "note": "나중에 읽기"}'
+# 201 {"id": 1, "status": "pending", "created_at": 1784937600}
+# 스크랩·태깅은 비동기로 진행되어 3초 이내에 제목·태그·썸네일이 채워진다
 ```
 
----
-
-## 📖 상세 가이드 (수동 설정)
-
-### 1. Go 설치 (goenv 사용)
+### 목록 조회
 
 ```bash
-# goenv로 Go 설치
-goenv install 1.25.1
-goenv local 1.25.1
-
-# 설치 확인
-go version  # go version go1.25.1 darwin/arm64
+curl "http://localhost:8080/api/v1/links?limit=20" \
+  -H "Authorization: Bearer dev-key"
+# keyset 커서 페이지네이션 — 응답의 next_cursor를 ?cursor=로 전달
 ```
 
-### 2. Minikube 클러스터 시작
+### 검색
 
 ```bash
-# Minikube 시작 (CPU 4개, 메모리 6GB)
-minikube start --cpus=4 --memory=6144 --driver=docker
-
-# 클러스터 확인
-kubectl cluster-info
+curl "http://localhost:8080/api/v1/search?q=쿠버네티스" \
+  -H "Authorization: Bearer dev-key"
+# FTS5 trigram 전문 검색 (검색어 3자 이상), bm25 랭킹
 ```
 
-### 3. Metrics Server 활성화 (HPA를 위해 필요)
+## justfile 레시피
 
-```bash
-# Minikube에서 Metrics Server 활성화
-minikube addons enable metrics-server
+태스크 러너는 [just](https://just.systems)다 (2026-07-20 도구 평가 후 채택). 모든 Go 레시피는 루트 justfile이 `backend/` 디렉터리에서 실행한다 (`cd backend && ...`).
 
-# 활성화 확인
-kubectl top nodes
+| 레시피 | 설명 |
+|---|---|
+| `just` | 레시피 목록 출력 (default) |
+| `just dev` | `PUSHPOINT_API_KEY=dev-key go run ./cmd/pushpoint` — 로컬 개발 서버 |
+| `just build` | `go build -o bin/pushpoint ./cmd/pushpoint` |
+| `just gen` | `api/openapi.yaml` → `backend/internal/api/gen/` 코드 생성 (oapi-codegen v2.8.0 핀, 생성물은 커밋 대상) |
+| `just gen-check` | 드리프트 방지 — gen 후 git diff가 남으면 실패 (CI·검증 매트릭스, M1+) |
+| `just test` | `go test ./...` |
+| `just bench` | 마이크로벤치: `go test -bench=. -benchmem ./...` (p99 판정은 bench-http가 담당) |
+| `just bench-http` | 저장 API HTTP 경로 p99 게이트 — p99 < 50ms 초과 시 exit 1 (M1+) |
+| `just test-crash` | 크래시 복구 검증 — 저장 → kill -9 → 재기동 → 전량 done 단언 (M2+) |
+| `just seed 100000` | 벤치용 한영 혼합 시드 DB 생성 (고정 난수, 인자 생략 시 n=10000) |
+| `just eval` | golden set 태깅 정확도 측정 — top-3 Recall, 베이스라인 병기 (M3+) |
+| `just lint` | `golangci-lint run` |
+| `just fmt` | `gofmt` / `goimports` |
+
+## 아키텍처
+
+```
+┌─────────────────────────────────────────────────┐
+│                push-point (단일 바이너리)          │
+│                                                 │
+│  HTTP API ──▶ enqueue ──▶ jobs 테이블 (SQLite)   │
+│     │                          │                │
+│     │                    dispatcher (goroutine) │
+│     │                          │                │
+│     │              ┌───────────┴──────────┐     │
+│     │              ▼                      ▼     │
+│     │         scraper pool           tagger     │
+│     │         (bounded N)         (NLU 파이프라인)│
+│     │              │                      │     │
+│     ▼              ▼                      ▼     │
+│  SQLite (WAL) ◀── links / tags / FTS5 ◀──┘     │
+│  data/thumbs/ ◀── 썸네일                        │
+└─────────────────────────────────────────────────┘
+        ▲                          ▲
+   iOS Share Ext              iOS 앱 (목록/검색)
 ```
 
-### 4. K8s 인프라 배포
+핵심 흐름:
 
-```bash
-# Namespace 및 Config 생성
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
+1. 저장 API는 `INSERT links` + `INSERT jobs(scrape)`를 한 트랜잭션으로 커밋하고 즉시 201을 반환한다 (p99 < 50ms).
+2. dispatcher goroutine이 jobs 테이블에서 잡을 원자적으로 claim해 워커에 배분한다 — 재시작해도 잡이 유실되지 않는다.
+3. scraper pool이 메타데이터를 파싱하고, 성공 트랜잭션에서 tag 잡(og:image가 있으면 thumb 잡도)을 연쇄 enqueue한다.
+4. tagger가 통제된 태그 사전에 대해 분류를 수행해 태그를 붙이면 링크 상태가 `done`이 된다 — 저장부터 태그 완료까지 3초 이내.
 
-# 인프라 서비스 배포
-kubectl apply -f k8s/postgresql.yaml
-kubectl apply -f k8s/redis.yaml
-kubectl apply -f k8s/minio.yaml
-
-# 배포 상태 확인
-kubectl get pods -n push-point
-
-# 모든 Pod가 Running 상태가 될 때까지 대기 (1-2분 소요)
-kubectl wait --for=condition=ready pod --all -n push-point --timeout=300s
-```
-
-### 5. 외부 서비스 접근 설정
-
-```bash
-# MinIO Console 접근
-minikube service minio-nodeport -n push-point
-# 또는
-kubectl port-forward -n push-point svc/minio 9001:9001
-# 접속: http://localhost:9001 (ID: minioadmin, PW: minioadmin123)
-
-# MinIO에서 'thumbnails' 버킷 생성
-# Console에서 Buckets > Create Bucket > "thumbnails"
-```
-
-### 6. Go 백엔드 실행 (개발 모드)
-
-```bash
-cd backend
-
-# 의존성 설치
-go mod tidy
-
-# API Server 실행
-go run cmd/server/main.go
-
-# (별도 터미널에서) Worker 실행
-go run cmd/worker/main.go
-```
-
-### 7. 데이터베이스 접근 (선택사항)
-
-```bash
-# PostgreSQL Port Forward
-kubectl port-forward -n push-point svc/postgresql 5432:5432
-
-# psql로 접속
-psql -h localhost -p 5432 -U linkuser -d linkarchive
-# Password: linkpass123
-```
-
-## 📊 서비스 상태 확인
-
-```bash
-# 전체 Pod 상태
-kubectl get pods -n push-point
-
-# 특정 서비스 로그 확인
-kubectl logs -f -n push-point -l app=postgresql
-kubectl logs -f -n push-point -l app=redis
-
-# 전체 리소스 확인
-kubectl get all -n push-point
-
-# HPA 상태 확인
-kubectl get hpa -n push-point
-
-# 리소스 사용량 확인
-kubectl top pods -n push-point
-kubectl top nodes
-```
-
-## ⚖️ 자동 스케일링 (HPA)
-
-Push-Point는 Horizontal Pod Autoscaler를 사용하여 자동으로 스케일링됩니다.
-
-### API Server HPA
-- **최소 Pod**: 2개
-- **최대 Pod**: 10개
-- **스케일 조건**:
-  - CPU 사용률 70% 이상
-  - 메모리 사용률 80% 이상
-
-### Worker HPA
-- **최소 Pod**: 2개
-- **최대 Pod**: 20개
-- **스케일 조건**:
-  - CPU 사용률 75% 이상
-  - 메모리 사용률 85% 이상
-
-### HPA 관리 명령어
-
-```bash
-# HPA 상태 확인
-kubectl get hpa -n push-point
-kubectl describe hpa api-server-hpa -n push-point
-kubectl describe hpa worker-hpa -n push-point
-
-# 수동 스케일 조정 (테스트용)
-kubectl scale deployment api-server -n push-point --replicas=5
-kubectl scale deployment worker -n push-point --replicas=10
-
-# HPA 비활성화 (테스트 시)
-kubectl delete hpa api-server-hpa -n push-point
-kubectl delete hpa worker-hpa -n push-point
-
-# HPA 재활성화
-kubectl apply -f k8s/hpa.yaml
-```
-
-## 🛠️ 개발 명령어
-
-### Makefile로 쉽게 관리
-
-```bash
-# === 클러스터 관리 ===
-make minikube-start      # Minikube 시작
-make minikube-stop       # Minikube 중지
-make minikube-delete     # Minikube 삭제 (전체 초기화)
-make minikube-status     # Minikube 상태 확인
-
-# === K8s 리소스 관리 ===
-make k8s-up              # 전체 배포
-make k8s-down            # 전체 리소스 삭제
-make k8s-restart         # 재시작 (삭제 후 재배포)
-make k8s-status          # 전체 상태 확인
-make pods                # Pod 목록
-
-# === 애플리케이션 개발 ===
-make build-api           # API Server 이미지 빌드
-make build-worker        # Worker 이미지 빌드
-make docker-build        # 전체 이미지 빌드
-
-# === 로그 확인 ===
-make logs-api            # API Server 로그 실시간 확인
-make logs-worker         # Worker 로그 실시간 확인
-make logs-redis          # Redis 로그 확인
-make logs-postgres       # PostgreSQL 로그 확인
-
-# === 스케일링 ===
-make scale-api REPLICAS=5       # API Server 5개로 스케일
-make scale-worker REPLICAS=10   # Worker 10개로 스케일
-make hpa-status                 # HPA 상태 확인
-
-# === 모니터링 ===
-make metrics             # 리소스 사용량 확인
-
-# === Port Forward ===
-make port-forward-api    # API Server (http://localhost:8080)
-make port-forward-minio  # MinIO Console (http://localhost:9001)
-```
-
-### Go 빌드 및 테스트 (로컬)
-
-```bash
-# 의존성 설치
-cd backend
-go mod tidy
-
-# 로컬 빌드
-go build -o bin/server cmd/server/main.go
-go build -o bin/worker cmd/worker/main.go
-
-# 로컬 실행
-./bin/server
-./bin/worker
-
-# 테스트 실행
-go test ./...
-go test -v ./internal/...
-
-# 테스트 커버리지
-go test -cover ./...
-```
-
-## 📁 프로젝트 구조
+## 프로젝트 구조
 
 ```
 push-point/
-├── backend/                   # Go 백엔드
-│   ├── cmd/
-│   │   ├── server/           # API Server
-│   │   └── worker/           # Worker
+├── api/                       # API 계약 (기계 원본)
+│   ├── openapi.yaml           # OpenAPI 3.1 — 백엔드·클라이언트가 여기서 생성
+│   └── README.md
+├── backend/                   # Go 단일 바이너리 (API + worker + NLU 런타임 추론)
+│   ├── cmd/pushpoint/main.go  # 단일 진입점
 │   ├── internal/
-│   │   ├── config/
-│   │   ├── handler/          # API 핸들러
-│   │   ├── service/          # 비즈니스 로직
-│   │   ├── repository/       # DB 접근
-│   │   ├── model/            # 데이터 모델
-│   │   └── middleware/       # 미들웨어
-│   ├── pkg/
-│   │   ├── scraper/          # 웹 크롤러
-│   │   ├── queue/            # Redis Streams 클라이언트
-│   │   ├── storage/          # MinIO 클라이언트
-│   │   └── openai/           # OpenAI 클라이언트
-│   ├── migrations/           # DB 마이그레이션
-│   └── go.mod
-├── k8s/                      # Kubernetes 설정
-│   ├── namespace.yaml
-│   ├── configmap.yaml
-│   ├── secret.yaml
-│   ├── postgresql.yaml
-│   ├── redis.yaml           # Cache + Message Queue (Redis Streams)
-│   ├── minio.yaml
-│   ├── api-server.yaml      # API Server Deployment + Service
-│   ├── worker.yaml          # Worker Deployment
-│   └── hpa.yaml             # Horizontal Pod Autoscaler
-├── Makefile                 # K8s 관리 명령어
-├── docs/                     # 프로젝트 문서
-└── README.md
+│   │   ├── api/               # HTTP 핸들러 (chi)
+│   │   │   └── gen/           # oapi-codegen 생성물 (just gen, 커밋 대상)
+│   │   ├── store/             # Store 인터페이스 + sqlite 구현
+│   │   ├── queue/             # Queue 인터페이스 + sqlite jobs 구현
+│   │   ├── scraper/           # fetch + goquery 파싱, singleflight
+│   │   ├── tagger/            # Tagger 인터페이스 + rules / onnx 구현
+│   │   └── thumbs/            # 썸네일 생성·저장
+│   ├── migrations/            # SQLite 마이그레이션 (golang-migrate, embed)
+│   └── go.mod                 # module github.com/coby/push-point/backend
+├── nlu/                       # NLU 오프라인 자산 (런타임 코드 아님)
+│   ├── dictionary/            # 태그 사전 정의·시드 (커밋 대상)
+│   ├── golden/                # 태깅 품질 golden set (JSONL, 커밋 대상)
+│   └── models/                # M5: ONNX 변환 스크립트(Python)·모델 아티팩트
+├── ios/                       # M4: SwiftUI 앱 + Share Extension
+├── frontend/                  # 웹 프론트 — 명시적 비목표(M6 이후 검토), 자리만 예약
+├── docs/
+│   ├── README.md              # v1 ↔ v2 문서 인덱스·비교
+│   ├── v1/                    # v1 기획서 아카이브 (수정 금지)
+│   └── v2/                    # 현행 문서 (단일 진실 원천)
+├── deploy/k8s-future/         # v1 k8s 매니페스트 보존 (미사용)
+├── CLAUDE.md
+└── justfile                   # 태스크 러너 레시피 13개 — dev / test / bench / eval 등 (backend 대상)
 ```
 
-## 🔧 트러블슈팅
+### 워크스페이스
 
-### Minikube가 시작되지 않는 경우
+- `api/` — API 계약의 기계 원본 `openapi.yaml` (OpenAPI 3.1) — 백엔드·클라이언트 코드 생성원
+- `backend/` — Go 단일 바이너리 (API + worker + NLU 런타임 추론)
+- `nlu/` — NLU 오프라인 자산: 태그 사전 정의, golden set, 모델 변환 스크립트 (런타임 코드 아님, backend는 산출물만 읽는다)
+- `ios/` — M4: SwiftUI 앱 + Share Extension
+- `frontend/` — 웹 프론트엔드 자리 예약 (명시적 비목표, M6 이후 검토)
 
-```bash
-# Makefile 사용
-make minikube-delete
-make minikube-start
+## 성능 목표
 
-# 또는 직접 명령
-minikube delete
-minikube start --cpus=4 --memory=6144 --driver=docker
-```
+로컬 M-시리즈 기준. p99 판정은 `just bench-http`, 마이크로벤치는 `just bench`로 검증한다 (마일스톤별 검증 매트릭스는 [docs/v2/08-DEVELOPMENT-PLAN.md](docs/v2/08-DEVELOPMENT-PLAN.md)).
 
-### Pod가 Pending 상태인 경우
+| 지표 | 목표 |
+|---|---|
+| 저장 API p99 | < 50ms |
+| 저장 → 태그 완료 (비동기) | < 3s |
+| 검색 (FTS5, 1만 링크) | < 30ms |
+| 링크 10만 건에서 목록 스크롤 API | < 50ms |
+| 콜드 스타트 (바이너리 실행 → 서빙) | < 1s |
 
-```bash
-# Pod 상태 확인
-make pods
+## 문서
 
-# 특정 Pod 상세 정보
-kubectl describe pod <pod-name> -n push-point
+현행 문서는 `docs/v2/`가 단일 진실 원천이다. v1 기획서는 docs/v1/ 아카이브, 비교는 [docs/README.md](docs/README.md) 참고.
 
-# 리소스 부족 시 Minikube 재시작
-make minikube-delete
-make minikube-start
-make k8s-up
-```
+- [00-README.md](docs/v2/00-README.md) — 문서 목차와 읽는 순서
+- [01-PROJECT-OVERVIEW.md](docs/v2/01-PROJECT-OVERVIEW.md) — 프로젝트 목표, v1→v2 전환 배경, 비목표
+- [02-TECH-SPEC.md](docs/v2/02-TECH-SPEC.md) — 기술 스택 선정과 근거 (SQLite, chi, NLU 파이프라인)
+- [03-SYSTEM-ARCHITECTURE.md](docs/v2/03-SYSTEM-ARCHITECTURE.md) — 단일 프로세스 아키텍처와 컴포넌트 경계
+- [04-DATA-FLOW.md](docs/v2/04-DATA-FLOW.md) — 저장부터 태깅 완료까지의 잡 큐 동작과 복구
+- [05-DATA-SCHEMA.md](docs/v2/05-DATA-SCHEMA.md) — SQLite 스키마, FTS5, PRAGMA 설정
+- [06-API-SPECIFICATION.md](docs/v2/06-API-SPECIFICATION.md) — REST API 명세 (인증, 커서 페이지네이션, 에러 형식)
+- [07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md) — 단일 바이너리 배포·백업 전략과 deploy/k8s-future/
+- [08-DEVELOPMENT-PLAN.md](docs/v2/08-DEVELOPMENT-PLAN.md) — M1~M6 마일스톤과 완료 기준
 
-### Redis가 연결되지 않는 경우
+## v1 인프라에 대하여
 
-```bash
-# Redis 로그 확인
-make logs-redis
-
-# Redis 재시작
-kubectl rollout restart deployment/redis -n push-point
-
-# 전체 재시작
-make k8s-restart
-```
-
-### HPA가 작동하지 않는 경우
-
-```bash
-# Metrics Server 활성화 확인
-minikube addons list | grep metrics-server
-
-# Metrics Server 활성화
-minikube addons enable metrics-server
-
-# HPA 상태 확인
-make hpa-status
-
-# 리소스 사용량 확인
-make metrics
-```
-
-### API Server 또는 Worker 이미지가 없는 경우
-
-```bash
-# Docker 이미지 빌드 (Minikube Docker 환경에서)
-make docker-build
-
-# 개별 빌드
-make build-api
-make build-worker
-
-# Deployment 재시작
-kubectl rollout restart deployment/api-server -n push-point
-kubectl rollout restart deployment/worker -n push-point
-```
-
-### 전체 환경 초기화
-
-```bash
-# 완전히 새로 시작
-make k8s-down
-make minikube-delete
-make deploy
-```
-
-## 📚 추가 문서
-
-### 프로젝트 문서
-- [프로젝트 개요](docs/00-README.md)
-- [기술 스택](docs/02-TECH-SPEC.md) - **Redis Streams 메시지 큐 사용**
-- [시스템 아키텍처](docs/03-SYSTEM-ARCHITECTURE.md) - **HPA 자동 스케일링 포함**
-- [데이터 플로우](docs/04-DATA-FLOW.md)
-- [데이터베이스 스키마](docs/05-DATA-SCHEMA.md)
-- [API 명세서](docs/06-API-SPECIFICATION.md)
-- [K8s 배포 설정](docs/07-K8S-SETTINGS.md)
-- [개발 계획](docs/08-DEVLOPMENT-PLAN.md)
-
-### 설정 파일
-- [Makefile](Makefile) - K8s 클러스터 관리 명령어
-- [K8s 매니페스트](k8s/) - Kubernetes 배포 설정
-  - [namespace.yaml](k8s/namespace.yaml) - Namespace
-  - [configmap.yaml](k8s/configmap.yaml) - 환경 설정
-  - [secret.yaml](k8s/secret.yaml) - 비밀 정보
-  - [postgresql.yaml](k8s/postgresql.yaml) - PostgreSQL
-  - [redis.yaml](k8s/redis.yaml) - Redis (캐시 + 메시지 큐)
-  - [minio.yaml](k8s/minio.yaml) - MinIO (객체 스토리지)
-  - [api-server.yaml](k8s/api-server.yaml) - API Server + Service
-  - [worker.yaml](k8s/worker.yaml) - Worker
-  - [hpa.yaml](k8s/hpa.yaml) - Horizontal Pod Autoscaler
-
-### Makefile 주요 타겟
-
-| 명령어 | 설명 |
-|--------|------|
-| `make help` | 모든 명령어 목록 보기 |
-| `make deploy` | 전체 배포 (Minikube + K8s) |
-| `make k8s-up` | K8s 리소스 배포 |
-| `make k8s-down` | K8s 리소스 삭제 |
-| `make k8s-restart` | 재시작 (삭제 후 재배포) |
-| `make k8s-status` | 전체 상태 확인 |
-| `make pods` | Pod 목록 |
-| `make logs-api` | API Server 로그 |
-| `make logs-worker` | Worker 로그 |
-| `make scale-api REPLICAS=N` | API Server 스케일 조정 |
-| `make scale-worker REPLICAS=N` | Worker 스케일 조정 |
-| `make hpa-status` | HPA 상태 확인 |
-| `make metrics` | 리소스 사용량 확인 |
-| `make port-forward-api` | API Server 포트 포워드 |
-| `make port-forward-minio` | MinIO Console 포트 포워드 |
-| `make docker-build` | Docker 이미지 빌드 |
-| `make minikube-start` | Minikube 시작 |
-| `make minikube-stop` | Minikube 중지 |
-
+v1은 Minikube 위에 PostgreSQL, Redis Streams, MinIO를 올리고 HPA로 스케일링하는 구조였다. 유저 0명 단계에서 이 구성은 로컬 테스트 마찰만 키우는 역설계라 판단해, v2는 SQLite(WAL) + 인프로세스 워커 풀 + 로컬 디스크의 단일 바이너리로 전환했다. 다만 k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`에 보존한다 — 지금 접는 것이지 버리는 것이 아니다. Store/Queue/Tagger가 인터페이스 뒤에 있으므로, 실제 유저가 생겨 분산 구성이 필요해지는 시점에 구현체만 교체해 부활시킨다.

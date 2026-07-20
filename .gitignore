@@ -27,6 +27,15 @@ go.work.sum
 # env file
 .env
 
+# Claude Code personal project notes (not shared)
+CLAUDE.local.md
+
+# Build output
+bin/
+
+# Runtime data (SQLite DB, thumbnails)
+data/
+
 # Editor/IDE
 # .idea/
 # .vscode/

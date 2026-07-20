@@ -1,0 +1,734 @@
+openapi: 3.1.0
+
+info:
+  title: Push-Point API
+  version: 0.1.0
+  description: |
+    Push-Point v2 HTTP API의 기계 원본(contract-first). 단일 사용자 앱이며 정적 Bearer API 키 1개(`PUSHPOINT_API_KEY`)로 인증한다.
+
+    이 문서가 API의 단일 진실 원천이다 — `docs/v2/06-API-SPECIFICATION.md`(사람용 해설)와 다르면 이 파일이 우선한다.
+    시간 필드는 전부 unix epoch 초 단위 정수다. `GET /debug/pprof/*`(Go 표준 프로파일링)는 서버가 서빙하지만 계약 대상이 아니다.
+
+servers:
+  - url: http://localhost:8080
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: system
+    description: 헬스체크
+  - name: links
+    description: 링크 저장·조회·수정
+  - name: tags
+    description: 통제된 태그 사전 관리
+  - name: search
+    description: FTS5 전문 검색 (3자 미만은 LIKE 폴백)
+  - name: stats
+    description: 통계 (M6, iOS 위젯용)
+  - name: thumbs
+    description: 썸네일 정적 서빙
+
+paths:
+  /healthz:
+    get:
+      operationId: healthz
+      tags: [system]
+      summary: 헬스체크
+      description: 프로세스 생존 확인. 인증 없음.
+      security: []
+      responses:
+        "200":
+          description: 프로세스 정상
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+              example:
+                status: ok
+
+  /api/v1/links:
+    get:
+      operationId: listLinks
+      tags: [links]
+      summary: 링크 목록 조회
+      description: >
+        keyset 커서 페이지네이션 (OFFSET 금지). `(created_at, id)` 인덱스를 타므로
+        링크 10만 건에서도 p99 < 50ms.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/TagFilter"
+        - name: status
+          in: query
+          description: 링크 상태 필터
+          schema:
+            $ref: "#/components/schemas/LinkStatus"
+      responses:
+        "200":
+          description: 링크 목록 페이지
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createLink
+      tags: [links]
+      summary: 링크 저장
+      description: >
+        `INSERT INTO links` + `INSERT INTO jobs(kind='scrape')`를 한 트랜잭션으로 커밋하고
+        즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다.
+        `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group
+        로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkInput"
+      responses:
+        "201":
+          description: 신규 저장 완료 (scrape 잡 enqueue됨)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, created_at]
+                properties:
+                  id:
+                    type: integer
+                  status:
+                    $ref: "#/components/schemas/LinkStatus"
+                  created_at:
+                    $ref: "#/components/schemas/EpochSeconds"
+              example:
+                id: 1234
+                status: pending
+                created_at: 1752980000
+        "200":
+          description: 동일 `url_hash`가 이미 존재 — 새로 만들지 않고 기존 id 반환 (멱등)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, duplicate]
+                properties:
+                  id:
+                    type: integer
+                  duplicate:
+                    type: boolean
+                    const: true
+              example:
+                id: 987
+                duplicate: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/links/{id}:
+    parameters:
+      - $ref: "#/components/parameters/LinkId"
+    get:
+      operationId: getLink
+      tags: [links]
+      summary: 링크 상세 조회
+      description: 목록 항목 전체 필드 + author, published_at, duration_sec, word_count, lang, error, jobs 요약.
+      responses:
+        "200":
+          description: 링크 상세
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateLink
+      tags: [links]
+      summary: 링크 수정 (메모/태그)
+      description: >
+        `note` 전달 시 메모 교체. `tags`(태그 이름 배열) 전달 시 이 링크의 태그를 전체 교체한다 —
+        추가분은 `link_tags(source='manual', confidence=NULL)` + `tag_feedback(added)`,
+        제거분은 `tag_feedback(removed)` 기록. tag_feedback은 M5 재랭킹 학습 데이터다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkUpdateInput"
+      responses:
+        "200":
+          description: 수정 반영된 링크 상세
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteLink
+      tags: [links]
+      summary: 링크 삭제 (소프트)
+      description: 소프트 삭제 — `deleted_at`만 기록하며 행은 남는다. 이후 목록/검색/상세에서 제외된다.
+      responses:
+        "204":
+          description: 삭제 완료 (본문 없음)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/links/{id}/retry:
+    post:
+      operationId: retryLink
+      tags: [links]
+      summary: 실패 링크 재시도
+      description: >
+        `status='failed'`인 링크의 잡을 다시 enqueue한다. 링크는 `pending`으로 되돌아가고
+        워커가 처음부터 다시 처리한다. `failed` 상태가 아닌 링크는 400.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+      responses:
+        "202":
+          description: 재-enqueue 수락
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id:
+                    type: integer
+                  status:
+                    $ref: "#/components/schemas/LinkStatus"
+              example:
+                id: 1234
+                status: pending
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/tags:
+    get:
+      operationId: listTags
+      tags: [tags]
+      summary: 태그 사전 조회
+      description: 통제된 태그 사전 전체 + 사용 수(`link_count`, 삭제되지 않은 링크 기준).
+      responses:
+        "200":
+          description: 태그 사전
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createTag
+      tags: [tags]
+      summary: 태그 생성
+      description: "`name`은 대소문자 무시 UNIQUE — 중복이면 400."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/TagInput"
+                - required: [name]
+      responses:
+        "201":
+          description: 생성된 태그
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/tags/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TagId"
+    patch:
+      operationId: updateTag
+      tags: [tags]
+      summary: 태그 수정
+      description: >
+        `name`, `aliases` 모두 optional. `aliases`는 규칙 기반 태거의 매칭 대상 —
+        alias를 잘 채우는 것이 태깅 정확도를 올리는 가장 싼 방법이다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TagInput"
+      responses:
+        "200":
+          description: 수정된 태그
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteTag
+      tags: [tags]
+      summary: 태그 삭제
+      description: 사전에서 제거한다. `link_tags` 연결은 FK CASCADE로 함께 삭제된다.
+      responses:
+        "204":
+          description: 삭제 완료 (본문 없음)
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/search:
+    get:
+      operationId: search
+      tags: [search]
+      summary: 검색
+      description: >
+        `q`가 3자 이상이면 FTS5 trigram MATCH + bm25 랭킹 (응답 `mode: "fts"`).
+        3자 미만은 에러(400)가 아니라 LIKE 폴백이다 — links 테이블의 title/note/description을
+        LIKE 스캔(`%`·`_` ESCAPE 처리)하고 `created_at DESC` 정렬, 응답 `mode: "like"`에
+        모든 항목의 `rank`는 null (실측 10만 행 풀스캔 37ms로 예산 내).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: 검색어. 3자 이상 = FTS5, 3자 미만 = LIKE 폴백 (400 아님).
+          schema:
+            type: string
+            minLength: 1
+        - $ref: "#/components/parameters/TagFilter"
+        - name: from
+          in: query
+          description: created_at 범위 시작 (unix epoch 초)
+          schema:
+            type: integer
+        - name: to
+          in: query
+          description: created_at 범위 끝 (unix epoch 초)
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: 검색 결과 페이지 (`mode`로 검색 경로 표시)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: 통계 조회
+      description: iOS 위젯용 데이터를 한 번의 호출로 제공한다 (M6 예정 — 그 이전에는 404).
+      responses:
+        "200":
+          description: 통계
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /thumbs/{dir}/{file}:
+    get:
+      operationId: getThumb
+      tags: [thumbs]
+      summary: 썸네일 정적 서빙
+      description: >
+        `data/thumbs/` 아래의 썸네일 JPEG(단일 사이즈, 최대 폭 640px, q80)를 그대로 서빙한다.
+        경로 형식은 `{url_hash 앞 2자리}/{url_hash}.jpg` — 목록/상세 응답의 `thumb_url`이
+        정확히 이 경로를 가리킨다. 인증 면제 — Tailscale이 네트워크 경계를 이루고,
+        iOS AsyncImage가 커스텀 헤더를 지원하지 않기 때문이다.
+      security: []
+      parameters:
+        - name: dir
+          in: path
+          required: true
+          description: "url_hash 앞 2자리 (hex)"
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{2}$"
+          example: a3
+        - name: file
+          in: path
+          required: true
+          description: "`{url_hash}.jpg` 파일명"
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}\\.jpg$"
+          example: a3f1b2c4d5e6f7a8.jpg
+      responses:
+        "200":
+          description: 썸네일 이미지
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                contentMediaType: image/jpeg
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "정적 API 키 1개 (`PUSHPOINT_API_KEY`). `Authorization: Bearer {key}`"
+
+  parameters:
+    LinkId:
+      name: id
+      in: path
+      required: true
+      description: 링크 id
+      schema:
+        type: integer
+    TagId:
+      name: id
+      in: path
+      required: true
+      description: 태그 id
+      schema:
+        type: integer
+    Cursor:
+      name: cursor
+      in: query
+      description: 이전 응답의 `next_cursor` 값. 첫 페이지는 생략. 불투명(opaque) 토큰.
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      description: 페이지 크기
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+    TagFilter:
+      name: tag
+      in: query
+      description: 태그 이름 필터
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: 잘못된 요청 (`invalid_input`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: invalid_input
+              message: url is required
+    Unauthorized:
+      description: API 키 누락 또는 불일치 (`unauthorized`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: unauthorized
+              message: invalid api key
+    NotFound:
+      description: 리소스 없음 — 소프트 삭제된 링크 포함 (`not_found`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: not_found
+              message: link not found
+
+  schemas:
+    EpochSeconds:
+      type: integer
+      description: unix epoch seconds
+
+    EpochSecondsNullable:
+      type: [integer, "null"]
+      description: unix epoch seconds
+
+    LinkStatus:
+      type: string
+      description: 링크 처리 파이프라인 상태
+      enum: [pending, scraping, tagging, done, failed]
+
+    ContentType:
+      type: string
+      description: 도메인·URL 패턴 휴리스틱으로 판정한 콘텐츠 종류
+      enum: [video, article, post, other]
+
+    JobStatus:
+      type: string
+      description: 잡 상태
+      enum: [pending, running, done, failed]
+
+    LinkTag:
+      type: object
+      description: 링크에 부착된 태그 (부착 출처·신뢰도 포함)
+      required: [id, name, source, confidence]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        source:
+          type: string
+          description: 부착 출처 — rules(Phase A) / embed(Phase B) / manual(사용자)
+          enum: [rules, embed, manual]
+        confidence:
+          type: [number, "null"]
+          description: 태거의 신뢰 점수. manual이면 null
+
+    Link:
+      type: object
+      description: 링크 목록 항목
+      required:
+        [id, url, domain, title, description, content_type, thumb_url, status, tags, note, created_at]
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        domain:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          description: 목록에서는 200자로 절단 (전체는 상세 조회)
+        content_type:
+          $ref: "#/components/schemas/ContentType"
+        thumb_url:
+          type: [string, "null"]
+          description: "`/thumbs/{dir}/{file}` 형태의 서버 상대 경로. 썸네일 없으면 null"
+        status:
+          $ref: "#/components/schemas/LinkStatus"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/LinkTag"
+        note:
+          type: string
+          description: 개인 메모
+        created_at:
+          $ref: "#/components/schemas/EpochSeconds"
+
+    LinkDetail:
+      description: 링크 상세 — 목록 항목 전체 필드 + 메타·에러·잡 요약
+      allOf:
+        - $ref: "#/components/schemas/Link"
+        - type: object
+          required: [author, published_at, duration_sec, word_count, lang, error, jobs]
+          properties:
+            author:
+              type: string
+            published_at:
+              $ref: "#/components/schemas/EpochSecondsNullable"
+            duration_sec:
+              type: [integer, "null"]
+            word_count:
+              type: [integer, "null"]
+            lang:
+              type: string
+            error:
+              type: string
+              description: 최종 실패 사유. 실패 없으면 빈 문자열
+            jobs:
+              type: object
+              description: "이 링크에 연결된 잡 상태 요약. thumb은 best-effort — failed여도 링크 status에 영향 없음"
+              required: [scrape, tag, thumb]
+              properties:
+                scrape:
+                  $ref: "#/components/schemas/JobStatus"
+                tag:
+                  $ref: "#/components/schemas/JobStatus"
+                thumb:
+                  $ref: "#/components/schemas/JobStatus"
+
+    LinkInput:
+      type: object
+      description: 링크 저장 요청
+      required: [url]
+      properties:
+        url:
+          type: string
+        note:
+          type: string
+          description: 개인 메모 (optional)
+
+    LinkUpdateInput:
+      type: object
+      description: 링크 수정 요청 — note는 교체, tags는 전체 교체 (부분 추가/삭제 API 없음)
+      properties:
+        note:
+          type: string
+        tags:
+          type: array
+          description: 태그 이름 배열. 존재하지 않는 태그 이름이면 400
+          items:
+            type: string
+
+    LinkPage:
+      type: object
+      description: 커서 페이지네이션 응답 래퍼
+      required: [links, next_cursor]
+      properties:
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/Link"
+        next_cursor:
+          type: [string, "null"]
+          description: 다음 페이지 커서. null이면 마지막 페이지
+
+    SearchResult:
+      description: 검색 결과 항목 — 목록 항목 + bm25 rank
+      allOf:
+        - $ref: "#/components/schemas/Link"
+        - type: object
+          required: [rank]
+          properties:
+            rank:
+              type: [number, "null"]
+              description: "bm25 점수 (낮을수록 관련도 높음). mode가 like면 null"
+
+    SearchPage:
+      type: object
+      description: 검색 응답 래퍼 — 커서 페이지네이션 + 검색 경로(mode)
+      required: [mode, links, next_cursor]
+      properties:
+        mode:
+          type: string
+          description: "검색 경로: q 3자 이상 = fts (FTS5 MATCH + bm25), 3자 미만 = like (LIKE 폴백, created_at DESC)"
+          enum: [fts, like]
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+        next_cursor:
+          type: [string, "null"]
+          description: 다음 페이지 커서. null이면 마지막 페이지
+
+    Tag:
+      type: object
+      description: 태그 사전 항목 + 사용 수
+      required: [id, name, aliases, link_count]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          description: 태그 이름 (대소문자 무시 UNIQUE)
+        aliases:
+          type: array
+          description: 동의어·영문/한글 표기 — Phase A 문자열 매칭의 재료
+          items:
+            type: string
+        link_count:
+          type: integer
+          description: 이 태그가 붙은 (삭제되지 않은) 링크 수
+
+    TagInput:
+      type: object
+      description: 태그 생성/수정 요청 (생성 시 name 필수)
+      properties:
+        name:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+
+    Stats:
+      type: object
+      description: 통계 응답 (M6, iOS 위젯용)
+      required: [total_links, links_this_week, by_tag, by_day]
+      properties:
+        total_links:
+          type: integer
+        links_this_week:
+          type: integer
+        by_tag:
+          type: array
+          items:
+            type: object
+            required: [name, count]
+            properties:
+              name:
+                type: string
+              count:
+                type: integer
+        by_day:
+          type: array
+          description: 최근 30일 일별 저장 수
+          items:
+            type: object
+            required: [date, count]
+            properties:
+              date:
+                type: string
+                description: "YYYY-MM-DD (localtime)"
+              count:
+                type: integer
+
+    Error:
+      type: object
+      description: 공통 에러 형식 — 코드는 4개가 전부 (단일 사용자라 forbidden/rate_limit 없음)
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [unauthorized, not_found, invalid_input, internal]
+            message:
+              type: string

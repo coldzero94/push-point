@@ -1,0 +1,34 @@
+# Push-Point
+
+개인용 링크 저장·자동 태깅 앱 — 단일 사용자, LLM 없는 경량 NLU가 기술적 차별점.
+현재 상태: 문서·계획 단계 (M1 전, Go 코드 미작성. `backend/go.mod`는 의존성 0으로 초기화됨).
+
+## 워크스페이스 (모노레포)
+
+- `api/` — API 기계 원본 `openapi.yaml` (OpenAPI 3.1) — 백엔드·클라이언트 코드 생성원 (`just gen`).
+- `backend/` — Go 단일 바이너리 (API + worker + NLU 런타임 추론). 모든 실행 코드는 여기.
+- `nlu/` — NLU 오프라인 **자산 전용**: dictionary/(태그 사전), golden/(평가셋), models/(ONNX 변환). 런타임 추론은 `backend/internal/tagger`(Go)이며, Python은 `nlu/models/`에서만 허용.
+- `ios/` — M4: SwiftUI 앱 + Share Extension. 아직 코드 없음.
+- `frontend/` — 명시적 비목표. M6 이후 판단 전까지 코드 추가 금지.
+- `docs/v2/` = 단일 진실 원천, `docs/v1/` = v1 아카이브 (수정 금지), 비교는 `docs/README.md`.
+- `deploy/k8s-future/` — v1 k8s 매니페스트 보존 (미사용, 수정 금지).
+
+## 명령 (루트 justfile, Go 레시피는 backend/ 대상)
+
+- `just dev` — 로컬 실행 (PUSHPOINT_API_KEY=dev-key)
+- `just test` — 전체 테스트 (`cd backend && go test ./...`)
+- `just bench` — 마이크로벤치 (p99 판정 수단 아님 — bench-http가 담당)
+- `just bench-http` — 저장 API HTTP 경로 p99 게이트, p99 < 50ms 초과 시 exit 1 (M1+)
+- `just eval` — nlu/golden/ 태깅 top-3 정확도 측정 (M3+)
+- `just gen` — api/openapi.yaml → backend/internal/api/gen/ 생성 (oapi-codegen v2.8.0 핀, 생성물 커밋)
+- 그 외 레시피(build/gen-check/test-crash/seed/lint/fmt)는 `just` 실행으로 목록 확인
+
+## 핵심 규칙
+
+- 문서는 한국어로 쓴다 (코드·식별자·기술 용어는 영어).
+- 태스크 러너는 just (2026-07-20 평가 후 채택 — 재평가 트리거: frontend 착수·협업자 합류). API 계약 스택은 수작성 OpenAPI 3.1 + oapi-codegen v2.8.0 핀 + swift-openapi-generator (2026-07-20 심사 확정, 배경은 docs/v2/09-PLAN-REVIEW.md와 .claude/rules/api.md).
+- 설계 원본: 스키마 = `docs/v2/05-DATA-SCHEMA.md`, API = `api/openapi.yaml` (`docs/v2/06-API-SPECIFICATION.md`는 해설), 계획 = `docs/v2/08-DEVELOPMENT-PLAN.md`. 설계를 바꿀 땐 원본을 먼저 고치고 나머지를 따라가게 한다 (API는 `just gen`으로 생성물 재생성).
+- 측정 없는 "잘 되는 것 같다" 금지 — 성능·품질 주장은 `just bench-http`(p99 게이트) / `just bench` / `just eval` 수치로 뒷받침한다.
+- v1 스택(PostgreSQL/Redis/MinIO/OpenAI/k8s/Gin/Ent)은 "v1→v2 대비" 맥락에서만 언급한다. 현재 아키텍처 설명에 등장 금지.
+- 계획 점검(2026-07-20) 권고 8건은 반영 완료 — 배경·근거는 `docs/v2/09-PLAN-REVIEW.md` 참조.
+- 영역별 세부 규칙은 `.claude/rules/`에 경로 스코프로 분리돼 있다 (backend·nlu·ios·docs).
