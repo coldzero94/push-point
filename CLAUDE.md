@@ -25,10 +25,15 @@
 
 ## 핵심 규칙
 
-- 문서는 한국어로 쓴다 (코드·식별자·기술 용어는 영어).
+- `docs/`는 한국어로 쓴다 (코드·식별자·기술 용어는 영어). 루트 `README.md`는 영어 — 퍼블릭 GitHub 첫 화면이다.
+- 커밋 메시지는 Conventional Commits(`feat:`/`fix:`/`docs:`/`chore:` 등), 제목은 영어 한 줄.
 - 태스크 러너는 just (2026-07-20 평가 후 채택 — 재평가 트리거: frontend 착수·협업자 합류). API 계약 스택은 수작성 OpenAPI 3.1 + oapi-codegen v2.8.0 핀 + swift-openapi-generator (2026-07-20 심사 확정, 배경은 docs/v2/09-PLAN-REVIEW.md와 .claude/rules/api.md).
 - 설계 원본: 스키마 = `docs/v2/05-DATA-SCHEMA.md`, API = `api/openapi.yaml` (`docs/v2/06-API-SPECIFICATION.md`는 해설), 계획 = `docs/v2/08-DEVELOPMENT-PLAN.md`. 설계를 바꿀 땐 원본을 먼저 고치고 나머지를 따라가게 한다 (API는 `just gen`으로 생성물 재생성).
 - 측정 없는 "잘 되는 것 같다" 금지 — 성능·품질 주장은 `just bench-http`(p99 게이트) / `just bench` / `just eval` 수치로 뒷받침한다.
+- **완료 정의**: 구현 작업은 `just fmt`·`just lint`·`just test`·`just gen-check`를 전부 통과시킨 뒤에만 완료를 선언하고, 실행한 명령과 출력을 증거로 제시한다 (출력 없는 성공 주장 금지).
+- **스윕 규칙**: 여러 파일에 걸친 일괄 수정은 기억으로 담당을 배정하지 말고, `grep -l`/glob으로 대상 목록을 먼저 생성해 파일로 저장한 뒤 체크리스트로 소거한다. 완료 시 같은 검색을 재실행해 잔여 0을 확인한다.
 - v1 스택(PostgreSQL/Redis/MinIO/OpenAI/k8s/Gin/Ent)은 "v1→v2 대비" 맥락에서만 언급한다. 현재 아키텍처 설명에 등장 금지.
 - 계획 점검(2026-07-20) 권고 8건은 반영 완료 — 배경·근거는 `docs/v2/09-PLAN-REVIEW.md` 참조.
-- 영역별 세부 규칙은 `.claude/rules/`에 경로 스코프로 분리돼 있다 (backend·nlu·ios·docs).
+- **코드리뷰 게이트**: 구현 작업(마일스톤·기능 단위)이 끝나면 커밋 전에 `/pr-review-toolkit:review-pr`로 코드리뷰를 돌린다. high/medium 발견 사항을 수습한 뒤에 커밋·푸시하고, 의도적으로 넘기는 항목은 사유를 남긴다.
+- **머지 규칙**: main 직접 push 금지 (GitHub 룰셋 `main-protection`이 강제 — PR 필수, `ci` 체크 통과 필수, force-push·삭제 차단). 흐름: 브랜치 → 커밋·푸시 → PR → CI 녹색 + 코드리뷰 게이트 → 머지. CI가 main에서 깨지면 다른 작업보다 먼저 수습한다.
+- 영역별 세부 규칙은 `.claude/rules/`에 경로 스코프로 분리돼 있다 (backend·nlu·ios·docs·api).
