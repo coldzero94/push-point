@@ -1,0 +1,35 @@
+/* Tailwind CSS v4 — CSS-first config (@theme). Imported from src/main.tsx. */
+@import "tailwindcss";
+
+/* Dark mode: `dark:` follows the `.dark` class on <html>, which lib/theme.ts
+   toggles from (localStorage override ?? prefers-color-scheme). This keeps the
+   system default while allowing a manual toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Apple SD Gothic Neo",
+    "Noto Sans KR", "Segoe UI", sans-serif;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  .dark {
+    color-scheme: dark;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-white);
+    color: var(--color-neutral-900);
+  }
+  .dark body {
+    background-color: var(--color-neutral-950);
+    color: var(--color-neutral-100);
+  }
+}

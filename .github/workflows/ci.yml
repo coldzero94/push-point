@@ -46,3 +46,52 @@ jobs:
       - name: enum 정합 검사 (openapi.yaml ↔ migrations CHECK)
         run: |
           if [ -f scripts/lint_enums.sh ]; then bash scripts/lint_enums.sh; else echo "lint_enums.sh 없음 — 건너뜀"; fi
+
+  # 웹 프론트 — openapi.yaml의 3번째 소비자. 계약 드리프트 차단 + 빌드 (backend gen-check와 대칭)
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: extractions/setup-just@v2
+
+      - name: 의존성 설치
+        working-directory: frontend
+        run: npm ci
+
+      - name: 계약 드리프트 검사 (just web-gen-check)
+        run: just web-gen-check
+
+      - name: 린트 (oxlint)
+        working-directory: frontend
+        run: npm run lint
+
+      - name: 타입 체크 (tsc --noEmit)
+        working-directory: frontend
+        run: npx tsc --noEmit -p tsconfig.app.json
+
+      - name: 웹 빌드 (just web-build)
+        run: just web-build
+
+      # 릴리스 전용 경로(embed_frontend) 검증 — ci job은 태그 없이 빌드하므로
+      # spa.go가 컴파일조차 되지 않는다. dist가 생긴 지금(위 web-build 직후)만
+      # 이 태그로 빌드·테스트할 수 있다.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: embed 빌드 (go build -tags embed_frontend)
+        working-directory: backend
+        run: go build -tags embed_frontend ./...
+
+      - name: embed 테스트 (go test -tags embed_frontend)
+        working-directory: backend
+        run: go test -count=1 -tags embed_frontend ./internal/web/... ./internal/api/...

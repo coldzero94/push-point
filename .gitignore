@@ -36,6 +36,13 @@ bin/
 # Runtime data (SQLite DB, thumbnails)
 data/
 
+# Frontend (web) — build output & deps. schema.d.ts IS committed (contract artifact).
+frontend/dist/
+frontend/node_modules/
+# go:embed copy target — `just web-build` copies frontend/dist here for the
+# `embed_frontend` release build (go:embed can't reach outside the package dir).
+backend/internal/web/dist/
+
 # Editor/IDE
 # .idea/
 # .vscode/

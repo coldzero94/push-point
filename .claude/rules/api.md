@@ -9,6 +9,7 @@ paths:
 - 필드 타입·상태 enum(`content_type`, `status`, `source` 등)은 `docs/v2/05-DATA-SCHEMA.md` 스키마와 일치를 유지한다.
 - 시각 필드는 전부 **integer unix epoch 초** (`created_at`, `published_at` 등). `format: date-time` 문자열 금지.
 - 엔드포인트를 추가/변경하면 `just gen`을 재실행하고 생성물(`backend/internal/api/gen/`)을 함께 커밋한다. `just gen-check`가 CI에서 드리프트를 차단한다.
+- 이 계약의 소비자는 **3자**다: backend(oapi-codegen v2.8.0)·iOS(swift-openapi-generator)·web(openapi-typescript, `just web-gen`). 스펙 변경 시 세 생성물의 재생성·커밋이 완료 조건 — 웹 세부는 `.claude/rules/frontend.md`.
 - 하위호환: 단일 사용자 앱이라 파괴적 변경(필드 삭제·타입 변경·경로 변경)은 허용된다. 단, 배포된 iOS 앱 버전과의 정합은 변경한 본인이 책임진다 — 앱을 먼저(또는 같은 작업에서) 맞출 것.
 - 계약상 인증 면제는 `GET /healthz`·`GET /thumbs/{dir}/{file}` **2개뿐** (`security: []`). 그 외 전 엔드포인트는 bearer 필수 — 새 면제를 추가하지 말 것. 계약 밖 진단 라우트 `/debug/pprof`는 bearer 대신 **루프백 전용 차단**(더 강한 경계)으로 의도된 예외다.
 

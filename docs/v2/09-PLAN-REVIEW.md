@@ -1,7 +1,7 @@
 # 계획 점검 결과 (Plan Review)
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
-> 상태: **반영 완료 (2026-07-20)** — 권고 8건 전부 docs/v2·justfile(구 Makefile)에 반영됨.
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
+> 상태: **반영 완료 (2026-07-20)** — 권고 8건 전부 docs/v2·justfile(구 Makefile)에 반영됨. **추가: 웹 프론트엔드 정식 편입 (2026-07-21, 아래 5절)**.
 
 ## 1. 점검 방법
 
@@ -83,3 +83,17 @@ yalue/onnxruntime_go는 **cgo 필수 + onnxruntime 공유 라이브러리(.dylib
 | YouTube oEmbed에 description 없음 (태거 입력 빈약) | 확인 |
 | modernc.org/sqlite: FTS5 trigram·RETURNING 동작, 성능 여유 | 확인 (실측) |
 | `go test -bench`로는 p99 측정 불가 | 확인 |
+
+## 5. 웹 프론트엔드 정식 편입 (2026-07-21)
+
+**결정**: 웹 프론트엔드를 명시적 비목표에서 **iOS와 대등한 정식 클라이언트**로 승격한다. 두 클라이언트는 같은 `api/openapi.yaml` 계약을 소비하므로 기능이 동일하며, 저장의 "iOS 공유 시트 2초 진입"만 iOS 고유다(웹은 URL 입력창). 역할 분담이 아니라 동일 기능·진입 방식만 다름.
+
+**발동된 재평가 트리거 2개** (착수 시 문서화하기로 예정됐던 것):
+- CLAUDE.md의 태스크 러너 재평가 트리거 "frontend 착수" — 발동. just 유지(웹 태스크는 `web-*` 레시피로 justfile에 추가, 도구 교체 없음).
+- `.claude/rules/api.md`의 TypeSpec 재평가 트리거 "웹 착수로 Node 툴체인 도입 시" — 발동. **판단: 수작성 openapi.yaml 3.1 유지 확정.** TypeSpec 조건(오퍼레이션 40+)은 미충족(현재 15개)이고, 단순·안정적 스펙에 TypeSpec의 빌드 단계는 한계 이득이라 그대로 둔다.
+
+**스택** (별도 리서치 심사): Vite + React 19 + TS SPA, Tailwind v4 + shadcn(Radix 핀), TanStack Router + Query v5, openapi-typescript(schema.d.ts 커밋) + openapi-fetch(Bearer onRequest). openapi-react-query는 2025-12 maintenance mode + useInfiniteQuery 타입 결함 때문에 미채택 — TanStack useInfiniteQuery를 직접 감쌈(타입 수작성 0). 배포는 Go `//go:embed`(embed_frontend 태그)로 단일 바이너리 유지.
+
+**계약 정렬**: `api/openapi.yaml`이 backend(oapi-codegen)·iOS(swift-openapi-generator)·web(openapi-typescript) 3자의 단일 타입 원본. 웹도 `just web-gen`/`web-gen-check`로 백엔드와 동일 규율.
+
+→ 반영: 01-PROJECT-OVERVIEW.md · 08-DEVELOPMENT-PLAN.md(M-Web) · CLAUDE.md · .claude/rules/frontend.md · frontend/README.md · justfile · .github/workflows/ci.yml (2026-07-21)
