@@ -3,8 +3,9 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 // Ports are configurable so a busy port on the dev machine never blocks a run.
-// `just dev` picks the first free port from 8420 and passes it here as
-// PUSHPOINT_API_PORT; `just web-dev` detects the running backend the same way.
+// `just dev` picks the first free port from 8420 and records it; `just web-dev`
+// reads that port and passes it here as PUSHPOINT_API_PORT, so parallel
+// checkouts (one worktree per agent) each proxy to their own backend.
 const apiPort = process.env.PUSHPOINT_API_PORT ?? '8420'
 const apiTarget = `http://localhost:${apiPort}`
 const webPort = Number(process.env.PUSHPOINT_WEB_PORT ?? 8421)

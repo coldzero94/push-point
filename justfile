@@ -19,9 +19,13 @@ dev:
         echo "http://127.0.0.1:$p"
         # 이 worktree가 쓰는 포트를 남긴다 — web-dev가 포트 스캔보다 이 값을 먼저 본다.
         # (worktree 병렬 실행 시 다른 worktree의 백엔드에 프록시가 붙는 사고 방지)
-        # data/는 gitignore라 worktree 밖으로 새지 않는다. exec 이후엔 트랩을 못 걸어
-        # 남는 파일은 web-dev가 /healthz로 검증한다.
-        mkdir -p backend/data && printf '%s\n' "$p" > backend/data/.dev-api-port
+        # data/는 gitignore라 커밋되지 않고 체크아웃마다 따로 존재한다. exec 이후엔
+        # 트랩을 못 걸어 종료 시 지우지 못하므로, 남은 값은 web-dev가 /healthz로
+        # 확인하고 응답이 없으면 그렇게 알린다. 기록 실패로 서버 기동을 막지는
+        # 않는다 — web-dev가 포트 스캔으로 폴백하면 되므로 경고만 남긴다.
+        if ! { mkdir -p backend/data && printf '%s\n' "$p" > backend/data/.dev-api-port; }; then
+          echo "경고: 포트 기록 실패 — just web-dev가 포트 스캔으로 백엔드를 찾습니다"
+        fi
         cd backend
         exec env PUSHPOINT_ADDR="127.0.0.1:$p" PUSHPOINT_API_KEY="${PUSHPOINT_API_KEY:-dev-key}" go run ./cmd/pushpoint
       fi
@@ -81,30 +85,44 @@ web-dev:
     set -euo pipefail
     if [ ! -f frontend/package.json ]; then echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; exit 1; fi
     if [ ! -d frontend/node_modules ]; then echo "frontend/node_modules가 없습니다. 먼저: just web-install"; exit 1; fi
-    api="${PUSHPOINT_API_PORT:-}"
-    # 1순위: 같은 worktree의 just dev가 남긴 포트. 포트 스캔은 다른 worktree(Orca 등
-    # 병렬 작업)의 백엔드를 먼저 찾을 수 있어서, 내 worktree의 값이 있으면 그걸 쓴다.
-    if [ -z "$api" ] && [ -f backend/data/.dev-api-port ]; then
-      p="$(head -n1 backend/data/.dev-api-port | tr -dc '0-9')"
-      if [ -n "$p" ]; then
-        api="$p"
+    portfile=backend/data/.dev-api-port
+    api=""
+    if [ -n "${PUSHPOINT_API_PORT:-}" ]; then
+      api="$PUSHPOINT_API_PORT"
+      echo "PUSHPOINT_API_PORT 지정: :$api → 프록시 연결"
+    else
+      # 1순위: 같은 worktree의 just dev가 남긴 포트. 포트 스캔은 다른 worktree(Orca 등
+      # 병렬 작업)의 백엔드를 먼저 찾을 수 있어서, 내 worktree의 값이 있으면 그걸 쓴다.
+      # api·web 탭이 동시에 뜨면 dev가 포트를 적기 전(실측 0.6초)에 여기 도달하므로
+      # 잠깐 기다렸다 스캔으로 넘어간다. 내용이 비었거나 숫자가 아니면 무시한다.
+      if [ ! -f "$portfile" ]; then
+        echo "이 worktree의 백엔드 포트 기록을 기다리는 중 (최대 2초)…"
+        for _ in $(seq 1 8); do
+          if [ -f "$portfile" ]; then break; fi
+          sleep 0.25
+        done
+      fi
+      if [ -f "$portfile" ]; then api="$(head -n1 "$portfile" | tr -dc '0-9')"; fi
+      if [ -n "$api" ]; then
         if curl -sf -m 0.3 "http://127.0.0.1:$api/healthz" >/dev/null 2>&1; then
           echo "이 worktree의 백엔드: :$api → 프록시 연결"
         else
           echo "이 worktree의 백엔드 포트 :$api (아직 응답 없음 — just dev 가 뜨면 자동 연결)"
         fi
+      else
+        # 폴백: 이 worktree에 쓸 만한 기록이 없다 — 살아있는 아무 백엔드나 찾는다.
+        # 다른 체크아웃의 것일 수 있으므로 그 사실을 감추지 않고 알린다.
+        for i in $(seq 0 20); do
+          p=$((8420 + i))
+          if curl -sf -m 0.3 "http://127.0.0.1:$p/healthz" >/dev/null 2>&1; then api="$p"; break; fi
+        done
+        if [ -n "$api" ]; then
+          echo "백엔드 감지: :$api → 프록시 연결 (이 worktree의 기록이 없습니다 — 다른 체크아웃의 백엔드일 수 있습니다)"
+        else
+          api=8420
+          echo "실행 중인 백엔드를 못 찾았습니다 — 프록시를 :$api 로 둡니다 (먼저 just dev 를 띄우세요)"
+        fi
       fi
-    fi
-    if [ -z "$api" ]; then
-      for i in $(seq 0 20); do
-        p=$((8420 + i))
-        if curl -sf -m 0.3 "http://127.0.0.1:$p/healthz" >/dev/null 2>&1; then api="$p"; break; fi
-      done
-      if [ -n "$api" ]; then echo "백엔드 감지: :$api → 프록시 연결"; fi
-    fi
-    if [ -z "$api" ]; then
-      api=8420
-      echo "실행 중인 백엔드를 못 찾았습니다 — 프록시를 :$api 로 둡니다 (먼저 just dev 를 띄우세요)"
     fi
     cd frontend
     exec env PUSHPOINT_API_PORT="$api" npm run dev

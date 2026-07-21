@@ -1,10 +1,11 @@
 # Orca (https://www.onorca.dev) — worktree 훅. Orca가 `git worktree add`로 새 worktree를
 # 만들 때 scripts.setup이, 아카이브 직전에 scripts.archive가 실행된다.
 #
-# 실행 환경(Orca 구현 기준, 문서화되어 있지 않음):
-#   - 셸은 bash이고 `set -e`가 앞에 자동으로 붙는다. cwd는 새 worktree 루트.
+# 실행 환경(onorca.dev 문서에 없어 Orca 소스 src/main/hooks.ts에서 확인):
 #   - 주입 변수: $ORCA_ROOT_PATH(원본 체크아웃), $ORCA_WORKTREE_PATH, $ORCA_WORKSPACE_NAME.
-#   - archive 훅은 120초 타임아웃.
+#   - setup은 전용 터미널에서 bash로 돌고 `set -e`가 앞에 붙는다(buildPosixRunnerScript).
+#     archive는 별도 경로(runHook)라 `set -e` 없이 120초 타임아웃으로 실행된다.
+#     경로마다 다르므로 아래 스크립트는 set -e와 cd를 스스로 챙긴다.
 # 로컬 설정(Settings → Setup Script)에도 스크립트를 넣으면 Advanced의 command source
 # 정책에 따라 둘 다 실행될 수 있다. 소스는 이 파일 하나로 유지한다.
 
@@ -14,11 +15,16 @@ scripts:
   # 즉 실제로 비는 건 gitignore된 frontend/node_modules 하나뿐이며, 이게 없으면
   # web-dev·web-build·web-gen-check가 _web-required 가드에서 exit 1 한다.
   setup: |
-    # lock이 원본과 같으면 APFS 클론(cp -c)으로 즉시 복사하고, 다르면 정직하게 npm ci.
+    set -e
+    cd "${ORCA_WORKTREE_PATH:-.}"
+    # lock이 원본과 같으면 APFS 클론(cp -c, macOS 전용)으로 즉시 복사하고, 아니면 npm ci.
+    # 복사가 중간에 실패하면 반쯤 채워진 트리를 남기지 말고 지운 뒤 npm ci로 간다
+    # (깨진 node_modules를 성공으로 보고하는 것이 제일 나쁜 결말이다).
     if [ -d "$ORCA_ROOT_PATH/frontend/node_modules" ] \
        && cmp -s "$ORCA_ROOT_PATH/frontend/package-lock.json" frontend/package-lock.json; then
       cp -Rc "$ORCA_ROOT_PATH/frontend/node_modules" frontend/node_modules 2>/dev/null \
-        || cp -R "$ORCA_ROOT_PATH/frontend/node_modules" frontend/node_modules
+        || cp -R "$ORCA_ROOT_PATH/frontend/node_modules" frontend/node_modules \
+        || { echo "node_modules 복사 실패 → npm ci로 폴백"; rm -rf frontend/node_modules; just web-install; }
     else
       just web-install
     fi
