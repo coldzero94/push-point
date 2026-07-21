@@ -12,18 +12,23 @@ dev:
     set -euo pipefail
     if [ ! -d backend/cmd/pushpoint ]; then echo "backend/cmd/pushpoint가 없습니다."; exit 1; fi
     base="${PUSHPOINT_PORT:-8420}"
+    # 이전 세션의 기록을 먼저 지운다 — 빈 포트를 고르는 동안 web-dev가 옛 값을 읽고
+    # 굳어버리면(Vite는 시작할 때 프록시 대상을 한 번만 정한다) 그 포트를 지금 다른
+    # worktree가 쓰고 있을 때 남의 백엔드에 붙는다.
+    rm -f backend/data/.dev-api-port
     for i in $(seq 0 20); do
       p=$((base + i))
       if ! lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
         [ "$i" -eq 0 ] || echo "포트 $base 사용 중 → $p 로 실행합니다 (웹은 just web-dev가 자동 감지)"
         echo "http://127.0.0.1:$p"
-        # 이 worktree가 쓰는 포트를 남긴다 — web-dev가 포트 스캔보다 이 값을 먼저 본다.
-        # (worktree 병렬 실행 시 다른 worktree의 백엔드에 프록시가 붙는 사고 방지)
-        # data/는 gitignore라 커밋되지 않고 체크아웃마다 따로 존재한다. exec 이후엔
-        # 트랩을 못 걸어 종료 시 지우지 못하므로, 남은 값은 web-dev가 /healthz로
-        # 확인하고 응답이 없으면 그렇게 알린다. 기록 실패로 서버 기동을 막지는
-        # 않는다 — web-dev가 포트 스캔으로 폴백하면 되므로 경고만 남긴다.
-        if ! { mkdir -p backend/data && printf '%s\n' "$p" > backend/data/.dev-api-port; }; then
+        # 이 worktree가 쓰는 포트를 "<포트> <PID>"로 남긴다 — web-dev가 포트 스캔보다
+        # 이 값을 먼저 본다(worktree 병렬 실행 시 남의 백엔드에 붙는 사고 방지).
+        # PID를 함께 적는 이유: exec 이후엔 트랩을 못 걸어 종료 시 파일을 지울 수
+        # 없다. /healthz만으로는 살아있는 기록과 죽은 기록을 구분할 수 없고(응답한
+        # 쪽이 다른 worktree의 백엔드여도 200이다), PID 생존 확인은 구분할 수 있다.
+        # exec는 PID를 유지하므로 $$가 곧 서버 프로세스의 PID다.
+        # 기록 실패로 서버 기동을 막지는 않는다 — web-dev가 스캔으로 폴백하면 된다.
+        if ! { mkdir -p backend/data && printf '%s %s\n' "$p" "$$" > backend/data/.dev-api-port; }; then
           echo "경고: 포트 기록 실패 — just web-dev가 포트 스캔으로 백엔드를 찾습니다"
         fi
         cd backend
@@ -79,13 +84,29 @@ eval:
 web-install:
     @if [ -f frontend/package.json ]; then cd frontend && npm ci; else echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; fi
 
-# Vite dev 서버 :8421 (프록시로 /api·/thumbs·/healthz → Go :8420, 실행 중인 포트 자동 감지)
+# Vite dev 서버 :8421 (프록시로 /api·/thumbs·/healthz → Go, 같은 체크아웃의 just dev가
+# 기록한 포트 우선 — 기록이 없을 때만 :8420부터 스캔)
 web-dev:
     #!/usr/bin/env bash
     set -euo pipefail
     if [ ! -f frontend/package.json ]; then echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; exit 1; fi
     if [ ! -d frontend/node_modules ]; then echo "frontend/node_modules가 없습니다. 먼저: just web-install"; exit 1; fi
     portfile=backend/data/.dev-api-port
+    # 살아있는 기록일 때만 포트를 돌려준다. 형식이 깨졌거나(수동 편집, 권한 오류)
+    # 기록을 남긴 just dev가 이미 죽었으면 없는 셈 친다 — 죽은 기록의 포트는 지금
+    # 다른 worktree의 백엔드가 쓰고 있을 수 있고, 그때 /healthz는 200을 준다.
+    live_port() {
+      local port pid
+      # -r까지 보는 이유: 읽을 수 없는 파일이면 리다이렉션 단계에서 셸이 직접
+      # "Permission denied"를 찍는다(read의 2>/dev/null로는 못 막는다).
+      [ -f "$portfile" ] && [ -r "$portfile" ] || return 1
+      read -r port pid < "$portfile" 2>/dev/null || return 1
+      case "${port:-}" in ''|*[!0-9]*) return 1 ;; esac
+      [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || return 1
+      [ -n "${pid:-}" ] || return 1
+      kill -0 "$pid" 2>/dev/null || return 1
+      echo "$port"
+    }
     api=""
     if [ -n "${PUSHPOINT_API_PORT:-}" ]; then
       api="$PUSHPOINT_API_PORT"
@@ -94,15 +115,16 @@ web-dev:
       # 1순위: 같은 worktree의 just dev가 남긴 포트. 포트 스캔은 다른 worktree(Orca 등
       # 병렬 작업)의 백엔드를 먼저 찾을 수 있어서, 내 worktree의 값이 있으면 그걸 쓴다.
       # api·web 탭이 동시에 뜨면 dev가 포트를 적기 전(실측 0.6초)에 여기 도달하므로
-      # 잠깐 기다렸다 스캔으로 넘어간다. 내용이 비었거나 숫자가 아니면 무시한다.
-      if [ ! -f "$portfile" ]; then
+      # 잠깐 기다렸다 스캔으로 넘어간다.
+      api="$(live_port || true)"
+      if [ -z "$api" ]; then
         echo "이 worktree의 백엔드 포트 기록을 기다리는 중 (최대 2초)…"
         for _ in $(seq 1 8); do
-          if [ -f "$portfile" ]; then break; fi
+          api="$(live_port || true)"
+          if [ -n "$api" ]; then break; fi
           sleep 0.25
         done
       fi
-      if [ -f "$portfile" ]; then api="$(head -n1 "$portfile" | tr -dc '0-9')"; fi
       if [ -n "$api" ]; then
         if curl -sf -m 0.3 "http://127.0.0.1:$api/healthz" >/dev/null 2>&1; then
           echo "이 worktree의 백엔드: :$api → 프록시 연결"
