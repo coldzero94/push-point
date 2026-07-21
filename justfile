@@ -70,7 +70,7 @@ eval:
 web-install:
     @if [ -f frontend/package.json ]; then cd frontend && npm ci; else echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; fi
 
-# Vite dev 서버 :5173 (프록시로 /api·/thumbs·/healthz → Go :8080)
+# Vite dev 서버 :8421 (프록시로 /api·/thumbs·/healthz → Go :8420, 실행 중인 포트 자동 감지)
 web-dev:
     #!/usr/bin/env bash
     set -euo pipefail

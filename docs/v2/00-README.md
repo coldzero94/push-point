@@ -31,7 +31,7 @@ v2의 핵심 가치는 네 가지다.
 ## 빠른 시작
 
 ```bash
-git clone https://github.com/your-org/push-point.git
+git clone https://github.com/coldzero94/push-point.git
 cd push-point
 just dev
 ```
@@ -114,11 +114,14 @@ push-point/
 │   ├── internal/
 │   │   ├── api/               # HTTP 핸들러 (chi)
 │   │   │   └── gen/           # oapi-codegen 생성물 (just gen, 커밋 대상)
+│   │   ├── config/            # PUSHPOINT_* 환경 변수 로딩
 │   │   ├── store/             # Store 인터페이스 + sqlite 구현
 │   │   ├── queue/             # Queue 인터페이스 + sqlite jobs 구현
 │   │   ├── scraper/           # fetch + goquery 파싱, singleflight
-│   │   ├── tagger/            # Tagger 인터페이스 + rules / onnx 구현
-│   │   └── thumbs/            # 썸네일 생성·저장
+│   │   ├── safedial/          # SSRF 가드 (사설 대역 다이얼 차단)
+│   │   ├── tagger/            # M3: Tagger 인터페이스 + rules / onnx 구현
+│   │   ├── thumbs/            # 썸네일 생성·저장
+│   │   └── web/               # SPA 서빙 (embed_frontend 태그 전용)
 │   ├── migrations/            # SQLite 마이그레이션 (golang-migrate, embed)
 │   └── go.mod                 # module github.com/coby/push-point/backend
 ├── nlu/                       # NLU 오프라인 자산 (런타임 코드 아님)

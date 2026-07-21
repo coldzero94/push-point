@@ -3,12 +3,12 @@ paths:
   - "ios/**"
 ---
 
-# iOS 워크스페이스 규칙 (M4)
+# iOS workspace rules (M4)
 
-- SwiftUI. React Native 금지 (v1 잔재).
-- 제품의 심장은 Share Extension: 공유 시트에서 한 탭 → 저장 완료까지 2초 미만이 DoD다.
-- API 키는 Keychain(앱 그룹 공유)에 저장. 서버 접근은 Tailscale 경유 — 주소는 IP 형식(`http://100.x.y.z:8420`)을 쓴다 (호스트네임 + 평문 HTTP는 ATS 차단).
-- API 클라이언트는 `api/openapi.yaml`에서 **swift-openapi-generator**(Apple 공식, URLSession 트랜스포트)로 생성한 코드를 사용한다 — API 요청/응답 타입 수작성 금지 (`docs/v2/06-API-SPECIFICATION.md`는 해설).
-- **구현 착수 전 `docs/v2/09-PLAN-REVIEW.md`의 ⑥(App Group 로컬 큐 — 서버 불달 시 저장 유실 방지)·⑦(ATS/절전/On-Demand VPN/개발자 계정) 확인.** "POST 후 즉시 닫힘" 패턴은 요청 유실 경로이므로 금지.
-- 목록은 커서 페이지네이션(`next_cursor`) 기반 무한 스크롤 — 페이지 번호 가정 금지.
-- 표시 폴백: 서버는 og·title 부재 시 `title`을 빈 문자열로 그대로 준다(사실을 숨기지 않음). 앱은 `title`이 비면 `domain`(그다음 `url`)을 대신 표시한다 — 빈 셀 방지는 클라이언트 책임.
+- SwiftUI. No React Native (a v1 leftover).
+- The heart of the product is the Share Extension: one tap in the share sheet to save complete in under 2 seconds is the DoD.
+- Store the API key in the Keychain (shared via app group). Server access goes through Tailscale — use the IP form for the address (`http://100.x.y.z:8420`) (a hostname over plaintext HTTP is blocked by ATS).
+- The API client uses code generated from `api/openapi.yaml` by **swift-openapi-generator** (Apple official, URLSession transport) — never hand-write API request/response types (`docs/v2/06-API-SPECIFICATION.md` is commentary).
+- **Before starting implementation, review items ⑥ (App Group local queue — prevents save loss when the server is unreachable) and ⑦ (ATS / low power mode / On-Demand VPN / developer account) in `docs/v2/09-PLAN-REVIEW.md`.** The "POST then close immediately" pattern loses requests and is forbidden.
+- The list uses cursor-based infinite scroll (`next_cursor`) — never assume page numbers.
+- Display fallback: when og and title are missing, the server returns `title` as an empty string as-is (it does not hide the fact). When `title` is empty, the app shows `domain` instead (then `url`) — preventing empty cells is the client's responsibility.

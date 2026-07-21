@@ -50,7 +50,14 @@ curl -X POST http://localhost:8420/api/v1/links \
 # 몇 초 후 목록 조회 — 스크랩·태깅이 끝났으면 status가 done
 curl -H "Authorization: Bearer dev-key" \
   "http://localhost:8420/api/v1/links?limit=5"
+# keyset 커서 페이지네이션 — 응답의 next_cursor를 ?cursor= 로 넘긴다
+
+# 검색 — FTS5 trigram 전문 검색, bm25 랭킹
+curl -H "Authorization: Bearer dev-key" \
+  "http://localhost:8420/api/v1/search?q=kubernetes"
 ```
+
+`q`가 3자 이상이면 FTS5 trigram MATCH + bm25 랭킹(`"mode":"fts"`), 3자 미만이면 400이 아니라 LIKE 폴백으로 동작한다(`"mode":"like"`) — 상세는 [06-API-SPECIFICATION.md](06-API-SPECIFICATION.md).
 
 ---
 
@@ -65,6 +72,7 @@ curl -H "Authorization: Bearer dev-key" \
 | `PUSHPOINT_API_KEY` | (없음, 필수) | Bearer 인증 키. `just dev`는 `dev-key`로 설정 |
 | `PUSHPOINT_SCRAPE_CONCURRENCY` | `8` | 스크래퍼 워커 동시 실행 상한 |
 | `PUSHPOINT_LOG_LEVEL` | `info` | slog 로그 레벨 (`debug`/`info`/`warn`/`error`) |
+| `PUSHPOINT_ALLOW_PRIVATE_HOSTS` | `false` | `true`면 스크랩·썸네일의 사설 대역 차단(SSRF 가드)을 해제 — 로컬 fixture 테스트 전용 |
 
 실사용 구동 시에는 `PUSHPOINT_API_KEY`를 충분히 긴 랜덤 문자열로 교체할 것 (`openssl rand -hex 32` 등).
 
@@ -340,6 +348,20 @@ just test-crash       # 빌드 → fixture 서버 → 저장 → kill -9 → 재
 ```
 
 p99 판정은 `just bench-http`가 담당한다 — go test 벤치는 평균만 내므로 p99 판정 수단이 아니다. 검색(1만 링크) < 30ms, 10만 건 목록 < 50ms 등 [02-TECH-SPEC.md](02-TECH-SPEC.md)의 목표치를 매 마일스톤마다 검증한다 (마일스톤별 검증 매트릭스는 [08-DEVELOPMENT-PLAN.md](08-DEVELOPMENT-PLAN.md)). 수치 없는 "빨라진 것 같다"는 인정하지 않는다.
+
+### 실측 기록
+
+측정 환경: Apple Silicon 로컬 개발 머신, 2026-07-20. 저장 p99는 `just bench-http`, 콜드 스타트는 `scripts/coldstart.sh` 출력이다. 목표 열은 [00-README.md](00-README.md)의 성능 목표 표와 같은 값이며, 실측 열은 마일스톤이 진행되면서 채워진다.
+
+| 지표 | 목표 | 실측 (2026-07-20) |
+|---|---|---|
+| 저장 API p99 | < 50ms | p50 0.244ms / p95 0.35ms / p99 0.981ms |
+| 저장 → 태그 완료 (비동기) | < 3s | — (태거는 M3) |
+| 검색 (FTS5, 1만 링크) | < 30ms | — |
+| 링크 10만 건에서 목록 스크롤 API | < 50ms | — |
+| 콜드 스타트 (바이너리 실행 → 서빙) | < 1s | 314~684ms |
+
+수치를 갱신할 때는 측정 일자와 측정에 쓴 커맨드를 함께 바꾼다 — 언제 어떤 경로로 잰 값인지가 빠지면 비교가 불가능해진다.
 
 ---
 
