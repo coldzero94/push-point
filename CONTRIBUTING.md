@@ -14,6 +14,8 @@ just --list       # every recipe with its description
 
 Operational topics — environment variables, launchd/systemd, Tailscale access from the phone, bookmark/Takeout import, backup and restore — are documented in [docs/v2/07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md).
 
+Working in git worktrees (one per agent) needs no manual setup: `frontend/node_modules` is the only ignored path a fresh worktree misses, and `orca.yaml` restores it — cloned from the primary checkout when the lockfile matches, `just web-install` otherwise. Dev servers pick free ports per worktree, so several can run at once. The file is [Orca](https://www.onorca.dev)-specific but readable as the checklist for any worktree tool; `.orca/` holds per-user overrides and is ignored.
+
 ## Workflow
 
 Direct pushes to `main` are blocked by the GitHub ruleset `main-protection`: a pull request is required, the `ci` status check must pass, and force-push and branch deletion are blocked.
@@ -58,7 +60,7 @@ All Go recipes run inside `backend/`. Recipes for milestones that have not lande
 | `just seed 100000` | Mixed Korean/English seed DB for benchmarks (fixed seed, default n=10000) |
 | `just eval` | Tagging accuracy on the golden set — top-3 recall against the baseline (M3+) |
 | `just web-install` | `npm ci` in `frontend/` |
-| `just web-dev` | Vite dev server on `:8421`; probes `/healthz` from `:8420` to find the backend to proxy to |
+| `just web-dev` | Vite dev server on `:8421`; proxies to the port `just dev` recorded in this checkout, else probes `/healthz` from `:8420` |
 | `just web-gen` | `api/openapi.yaml` → `frontend/src/lib/api/schema.d.ts` (openapi-typescript pinned, output committed) |
 | `just web-gen-check` | Web contract drift guard (CI) |
 | `just web-build` | Production bundle → `frontend/dist/`, copied to `backend/internal/web/dist/` for `go:embed` |

@@ -29,7 +29,7 @@ just web-install  # once — installs web dependencies
 just web-dev      # web UI on :8421, proxied to the backend it finds
 ```
 
-A busy port never blocks a run: `just dev` scans upward from 8420 for a free port and prints the one it picked, `just web-dev` probes `/healthz` to locate the running backend, and Vite moves off 8421 by itself if that port is taken.
+A busy port never blocks a run: `just dev` scans upward from 8420 for a free port and prints the one it picked, `just web-dev` proxies to the backend of the same checkout (falling back to a `/healthz` probe from 8420), and Vite moves off 8421 by itself if that port is taken. Several checkouts — git worktrees, one per agent — can therefore run side by side without colliding.
 
 Save a link:
 

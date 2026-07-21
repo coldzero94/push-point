@@ -43,6 +43,9 @@ frontend/node_modules/
 # `embed_frontend` release build (go:embed can't reach outside the package dir).
 backend/internal/web/dist/
 
+# Orca — per-user overrides (.orca/issue-command). orca.yaml IS committed.
+.orca/
+
 # Editor/IDE
 # .idea/
 # .vscode/
