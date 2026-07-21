@@ -1,6 +1,6 @@
 # Push-Point 문서
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
 
 **Push-Point**는 유튜브 영상이나 웹 아티클을 공유하면 자동으로 태그가 붙고, 태그·검색으로 다시 찾아볼 수 있는 개인용 링크 아카이브다.
 
@@ -11,7 +11,7 @@ v2의 핵심 가치는 네 가지다.
 - **프라이버시** — 저장한 링크와 메모가 외부 서비스로 나가지 않는다. 모든 처리가 로컬에서 끝난다.
 - **단일 바이너리** — API 서버 + 워커가 Go 프로세스 하나. `just dev` 한 번으로 전체가 뜬다. 백업은 `data/` 디렉터리 복사.
 
-리포는 api(API 계약 — `openapi.yaml` 기계 원본) / backend(Go 단일 바이너리) / nlu(NLU 오프라인 자산) / ios(SwiftUI) / frontend(예약) 5개 워크스페이스의 모노레포로 구성된다.
+리포는 api(API 계약 — `openapi.yaml` 기계 원본) / backend(Go 단일 바이너리) / nlu(NLU 오프라인 자산) / ios(SwiftUI) / frontend(웹 SPA — iOS와 대등한 full-feature 클라이언트) 5개 워크스페이스의 모노레포로 구성된다.
 
 ## 문서 목차
 
@@ -126,7 +126,7 @@ push-point/
 │   ├── golden/                # 태깅 품질 golden set (JSONL, 커밋 대상)
 │   └── models/                # M5: ONNX 변환 스크립트(Python)·모델 아티팩트
 ├── ios/                       # M4: SwiftUI 앱 + Share Extension
-├── frontend/                  # 웹 프론트 — 명시적 비목표(M6 이후 검토), 자리만 예약
+├── frontend/                  # 웹 SPA (Vite + React 19 + TS) — iOS와 대등한 full-feature 클라이언트
 ├── docs/
 │   ├── README.md              # v1 ↔ v2 문서 인덱스·비교
 │   ├── v1/                    # v1 기획서 아카이브 (수정 금지)
@@ -156,4 +156,3 @@ v2에서 하지 않는 것들이다. 안 하는 것이 결정 사항이다.
 - **회원가입 / 멀티유저** — 단일 사용자, API 키 하나로 인증
 - **OpenAI 등 외부 LLM API 의존** — NLU 파이프라인이 이 프로젝트의 정체성
 - **Android** — iOS 실사용 검증 후 판단
-- **웹 프론트엔드** — Share Extension + iOS 앱이 우선. 필요 시 M6 이후

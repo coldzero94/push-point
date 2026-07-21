@@ -1,6 +1,6 @@
 # 개발 계획
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
 
 이 문서는 사용자가 확정한 v2 계획의 공식 버전이다. v1의 8~10주 계획(k8s 배포·OpenAI 태깅·동기화 중심)은 폐기하고, "내가 매일 쓰는 앱"을 목표로 6개월 계획을 새로 세운다.
 
@@ -34,6 +34,9 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 | M4 iOS | 5주 | Share Extension(로컬 큐) + 목록 + Tailscale 실기기 (검색·상세 편집은 컷 후보) | 서버 오프라인에도 공유 저장 2초 내 성공·유실 0건, 연속 7일 하루 1건+ 저장 |
 | M5 태깅 B | 4주 | Go 토크나이저 + ONNX 베이크오프 + 앙상블 + tag_feedback 반영 | 진입: Phase A 베이스라인+15pp. 종료: 앙상블 Phase A+10pp (참고 80%) |
 | M6 다듬기 | 4주 | 위젯 + 성능 튜닝 + 공개 글 (Live Activity는 이후 후보) | `scripts/streak.sh` 4주 연속 일일 사용, 기술 글 1편 |
+| M-Web 웹 앱 | 병렬 트랙 | Vite+React+TS SPA, `api/openapi.yaml` 계약 소비(openapi-typescript), 6개 화면, Go embed 서빙 | `just web-gen-check` 드리프트 0 + `just web-build` 성공(단일 바이너리 embed), iOS와 대등한 기능 |
+
+**M-Web (웹 앱)** — iOS(M4)와 **대등한 정식 클라이언트**다. iOS를 밀지 않는 병렬 트랙으로, 실사용 열람·검색·관리 수요를 채운다. 두 클라이언트는 같은 `api/openapi.yaml` 계약을 소비하므로 기능이 동일하고, **저장의 "iOS 공유 시트 2초 진입"만 iOS 고유**다(웹은 URL 입력창 + 선택적 북마클릿). 스택·계약 파이프라인·embed 배포 상세는 [02-TECH-SPEC.md](02-TECH-SPEC.md)·`.claude/rules/frontend.md`. M4의 검색·상세 편집 화면이 컷돼도 웹이 백필하므로 그 컷이 안전장치가 된다.
 
 순서의 의미: **실사용 시작이 M2 종료(5주차)로 앞당겨졌다.** 단축어 캡처(M1)와 임포트+매일 저장(M2)으로 실데이터가 먼저 쌓이고, M3~M6은 그 데이터 위에서 돈다. M4는 실사용의 시작점이 아니라 저장 경로를 단축어에서 Share Extension으로 바꿔 마찰을 줄이는 단계다.
 
@@ -225,7 +228,7 @@ bench-http / test-crash / seed 레시피는 justfile에 기존 가드 패턴("M1
 - 회원가입 / 멀티유저 — 단일 사용자, API 키 하나로 인증
 - OpenAI 등 외부 LLM API 의존 — NLU 파이프라인이 이 프로젝트의 정체성
 - Android — iOS 실사용 검증 후 판단
-- 웹 프론트엔드 — Share Extension + iOS 앱이 우선. 필요 시 M6 이후
+- (2026-07-21 갱신: 웹 프론트엔드는 비목표에서 제외됨 — iOS와 대등한 정식 클라이언트로 승격, 아래 M-Web 참고. 배경은 [09-PLAN-REVIEW.md](09-PLAN-REVIEW.md))
 
 ---
 
@@ -234,9 +237,8 @@ bench-http / test-crash / seed 레시피는 justfile에 기존 가드 패턴("M1
 전부 실사용 검증(4주 연속 일일 사용)이 끝난 뒤에만 검토한다.
 
 1. Live Activity — M6 범위에서 제외됨 (컷 순서 1번). 위젯 실사용 후 필요가 확인되면
-2. 웹 프론트엔드 — 데스크톱에서의 열람·정리 수요가 실제로 확인되면
-3. Android — iOS에서의 저장 습관이 자리 잡은 뒤
-4. 멀티유저 — 남에게 권할 만한 물건이 됐을 때. Store/Queue/Tagger 인터페이스 뒤 구현체 교체 + `deploy/k8s-future/` 부활로 대응
+2. Android — iOS에서의 저장 습관이 자리 잡은 뒤
+3. 멀티유저 — 남에게 권할 만한 물건이 됐을 때. Store/Queue/Tagger 인터페이스 뒤 구현체 교체 + `deploy/k8s-future/` 부활로 대응
 
 ---
 

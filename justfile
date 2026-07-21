@@ -50,6 +50,62 @@ seed n='10000':
 eval:
     @if [ -d nlu/golden ] && [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint eval ../nlu/golden/; else echo "nlu/golden/ 또는 backend/cmd/pushpoint가 아직 없습니다. just eval은 M3에서 활성화됩니다."; fi
 
+# --- web (frontend) — api/openapi.yaml의 3번째 소비자, backend gen과 대칭 ---
+# 가드는 frontend/package.json(스캐폴드 유무). 의존성 미설치는 안내 후 `just web-install`.
+
+# 웹 의존성 설치 — npm ci(package-lock.json 고정 버전 재현 설치, CI와 동일 경로)
+web-install:
+    @if [ -f frontend/package.json ]; then cd frontend && npm ci; else echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; fi
+
+# Vite dev 서버 :5173 (프록시로 /api·/thumbs·/healthz → Go :8080)
+web-dev:
+    @if [ ! -f frontend/package.json ]; then echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; \
+    elif [ ! -d frontend/node_modules ]; then echo "frontend/node_modules가 없습니다. 먼저: just web-install"; \
+    else cd frontend && npm run dev; fi
+
+# 게이트 레시피(CI가 호출)이므로 전제가 없으면 조용히 통과하지 않고 exit 1 한다.
+# api/openapi.yaml → frontend/src/lib/api/schema.d.ts 계약 타입 생성 (핀 버전, @latest 금지). 생성물 커밋 대상
+web-gen: _web-required
+    cd frontend && npm run gen
+
+# 드리프트 방지 — web-gen 후 git diff가 남으면 실패 (CI·완료 정의)
+web-gen-check: _web-required
+    just web-gen && git diff --exit-code frontend/src/lib/api/schema.d.ts
+
+# 게이트 레시피 공용 전제 검사 — frontend 스캐폴드·의존성이 없으면 실패시킨다.
+# (web-dev 같은 개발 편의 레시피는 안내만 하고 넘어가도 되지만, CI가 도는 경로는
+#  전제 미충족을 "아무 일 없이 통과"로 보이게 두면 게이트가 아니게 된다.)
+_web-required:
+    @if [ ! -f frontend/package.json ]; then echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전) — 게이트 레시피는 이 상태로 통과시키지 않습니다."; exit 1; fi
+    @if [ ! -d frontend/node_modules ]; then echo "frontend/node_modules가 없습니다. 먼저: just web-install"; exit 1; fi
+
+# go:embed는 패키지 디렉터리 하위만 가능(상대경로 embed 불가) → frontend/dist를
+# backend/internal/web/dist로 복사해야 `go build -tags embed_frontend`가 그것을 내장한다.
+# frontend/dist·backend/internal/web/dist 둘 다 미커밋(gitignore, CI가 빌드).
+# 프로덕션 번들 → frontend/dist/ 후 backend embed 위치(backend/internal/web/dist)로 복사
+web-build: _web-required
+    ( cd frontend && npm run build ) && \
+        rm -rf backend/internal/web/dist && \
+        mkdir -p backend/internal/web/dist && \
+        cp -R frontend/dist/. backend/internal/web/dist/ && \
+        echo "web-build: frontend/dist → backend/internal/web/dist 복사 완료 (릴리스: just release)"
+
+# embed_frontend 태그는 web-build가 만든 backend/internal/web/dist를 요구한다(순서 고정).
+# 릴리스 빌드 — 웹 번들을 내장한 단일 바이너리 backend/bin/pushpoint
+release: web-build
+    cd backend && go build -tags embed_frontend -o bin/pushpoint ./cmd/pushpoint
+    @echo "release: backend/bin/pushpoint (웹 embed 포함) 빌드 완료"
+
+# 웹 정적 분석 (oxlint)
+web-lint: _web-required
+    cd frontend && npm run lint
+
+# spa.go는 embed_frontend 태그에서만 컴파일돼 태그 없는 just test가 커버하지 못하고,
+# 임베드에 dist가 필요하므로 web-build 뒤에 돈다.
+# 웹 embed 경로 테스트 — SPA 셸·자산 헤더·계약 표면 JSON 404
+web-test: web-build
+    cd backend && go test -count=1 -tags embed_frontend ./internal/web/... ./internal/api/...
+
 # 정적 분석 (golangci-lint — govet 포함)
 lint:
     @if command -v golangci-lint >/dev/null 2>&1; then cd backend && golangci-lint run; else echo "golangci-lint가 설치되어 있지 않습니다. 설치: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest (M1에서 backend/go.mod tool 지시자로 버전 핀 예정)"; fi
