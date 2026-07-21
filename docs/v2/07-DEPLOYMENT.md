@@ -1,6 +1,6 @@
 # 배포·운영
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
 
 v2의 배포 단위는 단일 Go 바이너리 하나다. v1이 요구하던 Docker Desktop, kubectl, Minikube, Helm은 전부 필요 없다. 이 문서는 로컬 실행부터 집 Mac 상시 구동, iPhone에서의 접근, 단축어 캡처, 백업, 관측까지 운영에 필요한 전부를 다룬다. v1의 k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`에 보존했다 (마지막 섹션 참고).
 
@@ -204,7 +204,66 @@ M4 앱이 나오기 전까지의 **공식 캡처 경로**다. 단축어 앱으�
 
 ---
 
-## 6. 백업·복원
+## 6. 북마크·Takeout 임포트 (M2)
+
+M2의 목표 중 하나는 **실관심사 링크 300건 이상을 한 번에 적재**하는 것이다 ([08-DEVELOPMENT-PLAN.md](08-DEVELOPMENT-PLAN.md)). 매일 하나씩 저장하기 전에, 이미 브라우저 북마크와 YouTube 시청기록에 쌓여 있는 관심사를 밀어넣으면 M3 태거의 `corpus_df`(TF-IDF 코퍼스)가 실데이터로 워밍되고, golden set 층화 샘플링의 모수가 확보된다. 임포트는 `pushpoint import` 서브커맨드가 담당한다 — 추출한 URL을 `POST /api/v1/links`로 순차 전송(초당 약 10건)하며, url_hash 멱등이라 몇 번을 재실행해도 중복 저장은 `200 duplicate`로 안전하게 정리된다.
+
+전제: 서버가 이미 떠 있어야 한다(§1 로컬 실행). 임포트는 별도 프로세스로, 아래처럼 실행한다.
+
+### 브라우저 북마크 (Netscape HTML export)
+
+각 브라우저의 북마크 관리자에서 HTML로 내보낸다 (Netscape bookmark 형식 — `<A HREF="...">`).
+
+- Chrome/Edge: 북마크 관리자(`chrome://bookmarks`) → 우상단 ⋮ → **북마크 내보내기**
+- Firefox: 북마크 라이브러리(`Ctrl+Shift+O`) → 가져오기 및 백업 → **HTML로 북마크 내보내기**
+- Safari: 파일 → **북마크 내보내기**
+
+```bash
+cd backend
+go run ./cmd/pushpoint import \
+  -type bookmarks \
+  -file ~/Downloads/bookmarks.html \
+  -addr http://localhost:8080 \
+  -key dev-key
+```
+
+HTML 안의 모든 http(s) URL을 추출한다 (`javascript:` 북마클릿 등 비-HTTP 스킴은 건너뛴다).
+
+### YouTube Takeout (시청기록·좋아요)
+
+[takeout.google.com](https://takeout.google.com)에서 **YouTube 및 YouTube Music**만 선택 → 콘텐츠에서 "기록"(watch-history)·"재생목록"(좋아요 포함)을 포함해 내보낸다. 시청기록의 **기본 export 형식은 HTML**(`watch-history.html`)이며, Takeout의 "여러 형식" 설정에서 기록을 **JSON**으로 바꾸면 `watch-history.json`으로 받을 수 있다. 임포터는 HTML·JSON·CSV 셋 다 지원하고 파일 내용으로 자동 감지한다 (`-format auto` 기본, 필요 시 `html`/`csv`/`json` 강제). 즉 형식을 바꾸지 않고 기본 HTML을 그대로 넣어도 되고, JSON을 선택했다면 그것도 그대로 동작한다.
+
+```bash
+# watch-history.html — Takeout 기본 export (형식 자동 감지)
+go run ./cmd/pushpoint import \
+  -type takeout \
+  -file ~/Takeout/YouTube\ and\ YouTube\ Music/history/watch-history.html \
+  -addr http://localhost:8080 -key dev-key
+
+# watch-history.json — Takeout에서 JSON 형식을 선택한 경우 (자동 감지)
+go run ./cmd/pushpoint import -type takeout \
+  -file ~/Takeout/.../watch-history.json -addr http://localhost:8080 -key dev-key
+
+# 형식 강제 (html | csv | json)
+go run ./cmd/pushpoint import -type takeout -format csv \
+  -file ~/Takeout/.../watch-history.csv -addr http://localhost:8080 -key dev-key
+```
+
+형식과 무관하게 영상 watch URL(`youtube.com/watch?v=...`, `youtu.be/...`)만 추출하고 채널·검색 등 나머지 항목은 무시한다.
+
+### 출력
+
+진행률은 100건마다 로그로 나오고, 끝나면 요약 한 줄을 stdout에 출력한다:
+
+```
+저장 312 / 중복 18 / 실패 2
+```
+
+`저장`은 신규(201), `중복`은 이미 있던 URL(200), `실패`는 네트워크 오류·예상 밖 상태 코드다. 실패는 로그를 남기고 계속 진행하므로 한 건이 막혀도 전체가 중단되지 않는다. 저장된 링크는 워커 풀이 백그라운드에서 스크랩·태깅하므로, 임포트 직후 목록은 `status=pending`이었다가 몇 초 안에 제목·썸네일이 채워진다 ([04-DATA-FLOW.md](04-DATA-FLOW.md)).
+
+---
+
+## 7. 백업·복원
 
 데이터는 전부 `data/` 아래에 있다: `pushpoint.db`(+`-wal`, `-shm`)와 `thumbs/`. 링크 10만 건 기준 DB 약 150MB + 썸네일 약 3GB 규모다.
 
@@ -235,7 +294,7 @@ launchctl load ~/Library/LaunchAgents/ai.pushpoint.server.plist
 
 ---
 
-## 7. 관측
+## 8. 관측
 
 ### 헬스체크
 
@@ -284,7 +343,7 @@ p99 판정은 `just bench-http`가 담당한다 — go test 벤치는 평균만 
 
 ---
 
-## 8. deploy/k8s-future/ — 보존된 v1 매니페스트
+## 9. deploy/k8s-future/ — 보존된 v1 매니페스트
 
 v1의 Kubernetes 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 옮겨 보존했다. **지금 접는 것이지 버리는 것이 아니다.**
 

@@ -1,6 +1,6 @@
 # 시스템 아키텍처
 
-> Push-Point v2 — 마지막 업데이트: 2026-07-20
+> Push-Point v2 — 마지막 업데이트: 2026-07-21
 
 ## 1. 전체 구성
 
@@ -36,6 +36,8 @@ v2는 API 서버와 워커가 하나의 Go 프로세스(`backend/cmd/pushpoint/m
 3. dispatcher가 jobs 테이블에서 잡을 claim해 scraper pool에 넘긴다.
 4. scrape 성공 트랜잭션에서 `tag` 잡과 (og:image가 있으면) `thumb` 잡을 연쇄 enqueue한다.
 5. tagger가 NLU 파이프라인으로 태그를 붙이면 링크 상태가 `done`이 된다. 저장부터 태그 완료까지 목표는 3초 미만이다.
+
+> **M2 인터림 (tagger 부재)**: step 4~5는 tagger가 등록된 스테디 상태(M3 이후)다. tagger는 M3(Phase A)에서 도입되므로(08 마일스톤·아래 `backend/internal/tagger` 절), M2 시점에는 scrape 성공 트랜잭션이 `tag` 잡을 만들지 않고 `links.status`가 곧바로 `done`이 된다 (`thumb` 잡은 og:image가 있으면 M2에서도 연쇄 enqueue). 따라서 M2 스테디 상태의 링크 전이는 `pending → scraping → done`이며, `tagging` 상태는 M3부터 도달한다.
 
 클라이언트 관점에서는 "저장은 순간, 나머지는 알아서"다. 공유 시트가 2초 내 닫히는 UX는 클라이언트의 App Group 로컬 큐 우선 기록이 보장하고(서버가 꺼져 있어도 성립 — [02-TECH-SPEC.md](02-TECH-SPEC.md) iOS 절), 이 비동기 구조는 저장 API의 p99 < 50ms 응답을 만든다.
 

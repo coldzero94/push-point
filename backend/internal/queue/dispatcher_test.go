@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -53,7 +54,7 @@ func startDispatcher(t *testing.T, d *Dispatcher) (stop func()) {
 func TestDispatcherProcessesRegisteredKind(t *testing.T) {
 	db := newTestDB(t)
 	q := NewSQLite(db)
-	d := NewDispatcher(q, testLogger())
+	d := NewDispatcher(q, testLogger(), 8)
 
 	handled := make(chan int64, 1)
 	d.Register(KindScrape, func(ctx context.Context, job *Job) error {
@@ -83,7 +84,7 @@ func TestDispatcherLeavesUnregisteredKindPending(t *testing.T) {
 	// pending에 남는다 — M2에서 핸들러 등록 시 자연 활성화.
 	db := newTestDB(t)
 	q := NewSQLite(db)
-	d := NewDispatcher(q, testLogger())
+	d := NewDispatcher(q, testLogger(), 8)
 
 	d.Register(KindTag, func(ctx context.Context, job *Job) error { return nil })
 	stop := startDispatcher(t, d)
@@ -111,7 +112,7 @@ func TestDispatcherLeavesUnregisteredKindPending(t *testing.T) {
 func TestDispatcherFailsJobOnHandlerError(t *testing.T) {
 	db := newTestDB(t)
 	q := NewSQLite(db)
-	d := NewDispatcher(q, testLogger())
+	d := NewDispatcher(q, testLogger(), 8)
 
 	d.Register(KindScrape, func(ctx context.Context, job *Job) error {
 		return fmt.Errorf("스크랩 실패")
@@ -149,7 +150,7 @@ func TestDispatcherRecoversStaleOnStart(t *testing.T) {
 		t.Fatalf("사전 claim 실패: (%v, %v)", job, err)
 	}
 
-	d := NewDispatcher(q, testLogger())
+	d := NewDispatcher(q, testLogger(), 8)
 	handled := make(chan struct{}, 1)
 	d.Register(KindScrape, func(ctx context.Context, job *Job) error {
 		handled <- struct{}{}
@@ -170,7 +171,7 @@ func TestDispatcherRecoversStaleOnStart(t *testing.T) {
 func TestDispatcherGracefulShutdownWaitsInflight(t *testing.T) {
 	db := newTestDB(t)
 	q := NewSQLite(db)
-	d := NewDispatcher(q, testLogger())
+	d := NewDispatcher(q, testLogger(), 8)
 
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -212,7 +213,7 @@ func TestDispatcherShutdownReleasesCanceledJob(t *testing.T) {
 	// 아니라 pending 복귀 — 재시작 몇 번만으로 정상 잡이 영구 실패가 되면 안 된다.
 	db := newTestDB(t)
 	q := NewSQLite(db)
-	d := NewDispatcher(q, testLogger())
+	d := NewDispatcher(q, testLogger(), 8)
 
 	started := make(chan struct{})
 	d.Register(KindScrape, func(ctx context.Context, job *Job) error {
@@ -269,7 +270,7 @@ func TestDispatcherFailStopsWhenRecordFails(t *testing.T) {
 	// 호출측(main)이 이를 감지해 fail-stop하고, 재시작의 RecoverStale이 복구한다.
 	db := newTestDB(t)
 	q := &failCompleteQueue{NewSQLite(db)}
-	d := NewDispatcher(q, testLogger())
+	d := NewDispatcher(q, testLogger(), 8)
 
 	d.Register(KindScrape, func(ctx context.Context, job *Job) error {
 		return nil // 핸들러 성공 → Complete 경로 진입 → 주입된 기록 실패
@@ -298,7 +299,7 @@ func TestDispatcherFailsOnHandlerTimeoutWithoutShutdown(t *testing.T) {
 	// 셧다운이 아닌 핸들러 자체 타임아웃(DeadlineExceeded)은 여전히 Fail 경로다.
 	db := newTestDB(t)
 	q := NewSQLite(db)
-	d := NewDispatcher(q, testLogger())
+	d := NewDispatcher(q, testLogger(), 8)
 
 	d.Register(KindScrape, func(ctx context.Context, job *Job) error {
 		return context.DeadlineExceeded // 핸들러 내부 타임아웃 — dispatcher ctx는 살아 있음
@@ -325,4 +326,77 @@ func TestDispatcherFailsOnHandlerTimeoutWithoutShutdown(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func TestDispatcherBoundsInFlightClaims(t *testing.T) {
+	// F2: maxInFlight보다 많은 잡을 enqueue해도 동시에 running으로 뒤집히는 잡 수는
+	// maxInFlight 이하여야 한다 — claim이 워커 용량에 묶여 미실행 잡의 attempts가
+	// 즉시 소진되지 않는다. 느린 핸들러로 잡을 붙잡아 두고 DB running 카운트를 관측한다.
+	db := newTestDB(t)
+	q := NewSQLite(db)
+	const maxInFlight = 3
+	d := NewDispatcher(q, testLogger(), maxInFlight)
+
+	release := make(chan struct{})
+	var running int64 // 현재 핸들러에 진입한 잡 수
+	var peak int64    // 관측된 동시 최댓값
+	d.Register(KindScrape, func(ctx context.Context, job *Job) error {
+		cur := atomic.AddInt64(&running, 1)
+		for {
+			p := atomic.LoadInt64(&peak)
+			if cur <= p || atomic.CompareAndSwapInt64(&peak, p, cur) {
+				break
+			}
+		}
+		<-release // 셧다운/해제 전까지 슬롯을 붙잡는다
+		atomic.AddInt64(&running, -1)
+		return nil
+	})
+	stop := startDispatcher(t, d)
+
+	const nJobs = 12
+	for i := 0; i < nJobs; i++ {
+		linkID := insertLink(t, db, fmt.Sprintf("https://bound.example/%d", i))
+		enqueue(t, db, q, KindScrape, linkID)
+	}
+	q.Wake()
+
+	// 슬롯이 다 차서 안정될 시간을 준 뒤 DB running 카운트를 반복 관측한다.
+	// (상한) 어느 순간에도 running 잡 수는 maxInFlight를 넘지 않는다.
+	// (하한) 느린 핸들러로 포화시키면 정확히 maxInFlight개가 동시에 running이어야 한다 —
+	// peak가 maxInFlight에 도달하면 관측을 마친다.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var dbRunning int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE status='running'`).Scan(&dbRunning); err != nil {
+			t.Fatalf("running 카운트 조회 실패: %v", err)
+		}
+		if dbRunning > maxInFlight {
+			t.Fatalf("동시 running 잡 %d > maxInFlight %d (claim이 용량에 묶이지 않음)", dbRunning, maxInFlight)
+		}
+		if atomic.LoadInt64(&peak) == maxInFlight {
+			break // 정확 포화 관측 — 더 기다릴 필요 없음
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// 핸들러가 관측한 동시 진입 최댓값은 "정확히" maxInFlight여야 한다 — 상한(claim 폭주
+	// 없음)뿐 아니라 하한도 단언한다. claim이 "Wake당 1건"으로 붕괴하면 peak가 maxInFlight에
+	// 못 미쳐(예: 1) 이 단언이 회귀를 잡는다.
+	if p := atomic.LoadInt64(&peak); p != maxInFlight {
+		t.Fatalf("동시 핸들러 진입 최댓값 = %d, want %d (정확 포화 — 상·하한 동시 확인)", p, maxInFlight)
+	}
+
+	// 나머지 잡은 아직 pending으로 남아 attempts가 소진되지 않았어야 한다.
+	var pendingZeroAttempts int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE status='pending' AND attempts=0`).
+		Scan(&pendingZeroAttempts); err != nil {
+		t.Fatalf("pending 카운트 조회 실패: %v", err)
+	}
+	if pendingZeroAttempts == 0 {
+		t.Fatal("모든 잡이 claim됨 — claim이 용량에 묶이지 않았다 (attempts 소진 위험)")
+	}
+
+	close(release)
+	stop()
 }

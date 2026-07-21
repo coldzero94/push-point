@@ -1,6 +1,6 @@
 # 데이터 플로우
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
 
 모든 흐름은 단일 프로세스(`pushpoint` 바이너리) 안에서 일어난다.
 v1처럼 API 서버 → Redis → RabbitMQ → Worker로 네트워크를 건너다니는 구간이 없고,
@@ -114,6 +114,8 @@ v1처럼 API 서버 → Redis → RabbitMQ → Worker로 네트워크를 건너�
                    -- FTS5 tags 컬럼 재동기화
                    COMMIT;
 ```
+
+> **M2 인터림 (tagger 부재)**: 위 step 10~12는 tagger가 등록된 스테디 상태(M3 이후)를 그린다. M2 시점에는 tagger가 아직 없어(08 마일스톤) scrape 성공 트랜잭션이 `tag` 잡 enqueue와 `status='tagging'` 전이를 **생략**하고 `links.status`를 곧바로 `done`으로 올린다 (step 11a·12의 tagger 경로는 M3부터 활성). `thumb` 잡(step 11b)은 M2에서도 og:image가 있으면 그대로 enqueue된다. 즉 M2 스테디 상태의 링크 전이는 `pending → scraping → done`이며, `tagging`은 M3에서 도달한다.
 
 **소요 시간** (성능 목표 — p99 판정은 `just bench-http`, 검증 매트릭스는 [08-DEVELOPMENT-PLAN.md](08-DEVELOPMENT-PLAN.md)):
 - 저장 요청 → 201 응답: **p99 < 50ms** (v1 목표는 < 500ms — 네트워크 홉이 없어져 자릿수가 줄었다)

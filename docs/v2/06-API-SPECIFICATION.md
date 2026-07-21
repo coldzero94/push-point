@@ -1,6 +1,6 @@
 # API 명세서
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
 
 > 이 문서는 사람용 해설·예시다. **기계가 읽는 원본은 [api/openapi.yaml](../../api/openapi.yaml)**이며 백엔드·iOS 클라이언트 코드가 여기서 생성된다. 두 문서가 다르면 openapi.yaml이 우선하고, 스펙 변경 시 이 문서를 같은 커밋에서 갱신한다.
 
@@ -198,7 +198,7 @@ GET /api/v1/links/{id}
 ```
 
 - 목록 항목의 전체 필드에 `author`, `published_at`, `duration_sec`, `word_count`, `lang`, `error`가 추가된다. `published_at`·`duration_sec`·`word_count`는 값이 없으면 `null`, `author`·`lang`·`error`는 빈 문자열이다 (05 스키마의 NOT NULL DEFAULT '' 정의와 일치).
-- `jobs`는 이 링크에 연결된 잡의 상태 요약 `{scrape, tag, thumb: status}`다. 각 값은 `pending` | `running` | `done` | `failed`. 해당 kind의 잡이 아직 없으면 필드가 생략된다 — `scrape` 잡은 저장 트랜잭션에서 항상 함께 생성되므로 항상 존재하고, `tag`는 scrape 성공 후, `thumb`은 og:image가 있을 때만 생긴다 (M1에서는 `scrape`만 있다). 위 예시처럼 `thumb`이 `failed`여도 링크 `status`는 `done`일 수 있다 — 썸네일 잡은 best-effort이며 실패해도 링크 상태에 영향을 주지 않는다 (`thumb_url`만 `null`로 남는다).
+- `jobs`는 이 링크에 연결된 잡의 상태 요약 `{scrape, tag, thumb: status}`다. 각 값은 `pending` | `running` | `done` | `failed`. 해당 kind의 잡이 아직 없으면 필드가 생략된다 — `scrape` 잡은 저장 트랜잭션에서 항상 함께 생성되므로 항상 존재하고, `tag`는 scrape 성공 후, `thumb`은 og:image가 있을 때만 생긴다 (M1에서는 `scrape`만 있고, M2에서는 tagger가 아직 없어 scrape 성공 시 `tag` 잡을 만들지 않고 `links.status`가 `scraping`에서 곧바로 `done`이 된다 — `tag` 필드와 `tagging` 상태는 M3에서 tagger 핸들러가 등록돼야 도달한다). 위 예시처럼 `thumb`이 `failed`여도 링크 `status`는 `done`일 수 있다 — 썸네일 잡은 best-effort이며 실패해도 링크 상태에 영향을 주지 않는다 (`thumb_url`만 `null`로 남는다).
 
 **상태 코드**: 200 / 400(`invalid_input` — 정수가 아닌 id) / 404(`not_found`)
 

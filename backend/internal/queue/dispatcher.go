@@ -24,24 +24,39 @@ type DispatchQueue interface {
 	Release(ctx context.Context, id int64) error
 }
 
+// defaultMaxInFlight는 maxInFlight를 명시하지 않았을 때(<1)의 기본 워커 슬롯 수.
+// 스펙 §6 기본 구성(scrape 8 + thumb 2)과 일치한다.
+const defaultMaxInFlight = 10
+
 // Dispatcher는 notify 채널 + 1초 폴링 티커를 병행하며 Claim 루프를 돌리고,
 // 집은 잡을 kind별 핸들러에 전달한다.
 //
 // M1에는 등록된 핸들러가 없을 수 있다 — 미등록 kind는 SELECT 대상에서 제외되어
 // pending에 그대로 남고, M2에서 스크래퍼 핸들러가 등록되면 자연히 소비된다.
+//
+// claim은 워커 슬롯(slots) 수만큼으로 제한된다 — 슬롯 여유가 있을 때만 ClaimKinds
+// 하므로 DB의 running 잡 수 ≈ 실제 in-flight 워커 수가 된다. 슬롯 없이 무제한
+// claim하면 pending 잡 전량이 즉시 running·attempts+1이 되어, 반복 크래시 시
+// 실행되지도 못한 잡의 attempts가 소진돼 영구 failed로 떨어진다 (F2 방어).
 type Dispatcher struct {
 	q        DispatchQueue
 	log      *slog.Logger
 	handlers map[Kind]Handler
-	kinds    []Kind // 등록된 kind 목록 (claim 필터)
+	kinds    []Kind        // 등록된 kind 목록 (claim 필터)
+	slots    chan struct{} // 카운팅 세마포어: 용량 = maxInFlight (in-flight 워커 상한)
 }
 
-// NewDispatcher는 dispatcher를 만든다. Register는 Run 호출 전에 끝내야 한다.
-func NewDispatcher(q DispatchQueue, log *slog.Logger) *Dispatcher {
+// NewDispatcher는 dispatcher를 만든다. maxInFlight는 동시에 claim/처리할 잡 수 상한
+// (총 워커 수) — <1이면 defaultMaxInFlight를 쓴다. Register는 Run 호출 전에 끝내야 한다.
+func NewDispatcher(q DispatchQueue, log *slog.Logger, maxInFlight int) *Dispatcher {
+	if maxInFlight < 1 {
+		maxInFlight = defaultMaxInFlight
+	}
 	return &Dispatcher{
 		q:        q,
 		log:      log,
 		handlers: make(map[Kind]Handler),
+		slots:    make(chan struct{}, maxInFlight),
 	}
 }
 
@@ -82,23 +97,40 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-// drain은 집을 잡이 없어질 때까지 claim하고, 잡마다 goroutine으로 핸들러를 실행한다.
-// 동시성 상한은 핸들러 내부(semaphore 등)가 책임진다.
+// drain은 워커 슬롯 여유가 있는 동안만 잡을 claim하고, 잡마다 goroutine으로 핸들러를
+// 실행한다. 슬롯이 다 차면 즉시 반환하고, goroutine 완료가 슬롯을 반납하며 Wake로
+// dispatcher를 다시 깨워 남은 pending 잡을 이어서 claim한다. 이렇게 claim 자체를
+// in-flight 용량에 묶어 running 잡 수 ≈ 실제 처리 중 잡 수로 유지한다.
+// (핸들러 내부의 kind별 semaphore는 추가 방어로 유지되나, claim 상한은 이 슬롯이 건다.)
 func (d *Dispatcher) drain(ctx context.Context, g *errgroup.Group) {
 	for {
 		if ctx.Err() != nil {
 			return
 		}
+		// 슬롯 확보 시도 — 없으면 claim하지 않고 반환한다 (슬롯이 나면 완료 goroutine의
+		// Wake가 다시 이 루프를 돌린다). 논블로킹이라 여기서 대기하지 않는다.
+		select {
+		case d.slots <- struct{}{}:
+		default:
+			return // in-flight 상한 도달 — pending 잡은 그대로 두고 다음 기회에 claim
+		}
+
 		job, err := d.q.ClaimKinds(ctx, d.kinds)
 		if err != nil {
+			<-d.slots // 슬롯 반납
 			// 일시 오류(SQLITE_BUSY 등)일 수 있음 — 죽지 않고 다음 틱에 재시도.
 			d.log.Error("queue: claim 실패", "err", err)
 			return
 		}
 		if job == nil {
-			return // 등록된 kind의 pending 잡 없음
+			<-d.slots // 슬롯 반납
+			return    // 등록된 kind의 pending 잡 없음
 		}
 		g.Go(func() error {
+			defer func() {
+				<-d.slots  // 슬롯 반납
+				d.q.Wake() // 슬롯이 났으니 대기 중이던 pending 잡을 즉시 재개
+			}()
 			// 핸들러 실패는 잡 단위 Fail로 흡수되지만, 결과 기록이 재시도 후에도
 			// 실패하면 process가 에러를 반환한다 — errgroup을 통해 Run이 fail-stop된다.
 			return d.process(ctx, job)

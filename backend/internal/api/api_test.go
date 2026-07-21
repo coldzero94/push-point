@@ -306,6 +306,39 @@ func (f *fakeStore) Stats(ctx context.Context) (*store.Stats, error) {
 	return &store.Stats{TotalLinks: int64(len(f.links) - len(f.deleted))}, nil
 }
 
+// scrape/thumb 잡 핸들러용 메서드 — API 핸들러 테스트 경로에서는 호출되지 않아 최소 구현.
+func (f *fakeStore) GetLinkURL(ctx context.Context, linkID int64) (string, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	l, ok := f.links[linkID]
+	if !ok || f.deleted[linkID] {
+		return "", "", store.ErrNotFound
+	}
+	return l.URL, "", nil
+}
+
+func (f *fakeStore) ApplyScrape(ctx context.Context, linkID int64, m store.ScrapeResult) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	l, ok := f.links[linkID]
+	if !ok || f.deleted[linkID] {
+		return store.ErrNotFound
+	}
+	l.Title, l.Description, l.ContentType, l.Status = m.Title, m.Description, m.ContentType, "done"
+	return nil
+}
+
+func (f *fakeStore) SetThumbPath(ctx context.Context, linkID int64, relPath string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	l, ok := f.links[linkID]
+	if !ok || f.deleted[linkID] {
+		return store.ErrNotFound
+	}
+	l.ThumbPath = &relPath
+	return nil
+}
+
 func (f *fakeStore) Close() error { return nil }
 
 // ---- 테스트 하네스 ----
