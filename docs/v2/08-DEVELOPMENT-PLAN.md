@@ -122,7 +122,7 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 
 **Week 1**
 - Apple Developer Program 가입 ($99/년 — 무료 프로비저닝은 7일 만료라 매일 사용과 양립 불가)
-- ATS 결정: 서버 주소는 IP 형식(`http://100.x.y.z:8080`)만 사용 (IP는 ATS 면제). MagicDNS 이름을 쓰려면 `tailscale cert` HTTPS 필수
+- ATS 결정: 서버 주소는 IP 형식(`http://100.x.y.z:8420`)만 사용 (IP는 ATS 면제). MagicDNS 이름을 쓰려면 `tailscale cert` HTTPS 필수
 - `ios/` 워크스페이스에 Xcode 프로젝트 세팅, SwiftUI 앱 골격, API 클라이언트, API 키 Keychain 저장 (앱 그룹 공유)
 - API 클라이언트는 swift-openapi-generator로 `api/openapi.yaml`에서 생성 — API 타입 수작성 금지. SPM 플러그인 대신 CLI 실행 + 생성물 커밋(클린 빌드 페널티 회피). Swift allOf 생성물(value1/value2) 실측 후 스펙 allOf 해체 여부 결정
 

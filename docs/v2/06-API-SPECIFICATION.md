@@ -8,7 +8,7 @@ Push-Point v2의 HTTP API 전체 명세다. 서버는 단일 Go 바이너리(`pu
 
 ## 1. 기본 정보
 
-- **Base URL**: `http://localhost:8080` (`PUSHPOINT_ADDR`로 변경 가능, 기본 `:8080`)
+- **Base URL**: `http://localhost:8420` (`PUSHPOINT_ADDR`로 변경 가능, 기본 `:8420`)
 - **응답 형식**: JSON
 - **시간 표현**: 모든 시간 필드(`created_at`, `published_at` 등)는 **unix epoch 초 단위 정수**다. ISO 8601 문자열을 쓰지 않는다.
 
@@ -21,7 +21,7 @@ Authorization: Bearer {PUSHPOINT_API_KEY}
 ```
 
 ```bash
-curl -H "Authorization: Bearer dev-key" http://localhost:8080/api/v1/links
+curl -H "Authorization: Bearer dev-key" http://localhost:8420/api/v1/links
 ```
 
 `just dev`로 띄운 서버는 키가 `dev-key`로 설정된다. iOS 앱/Share Extension은 이 키를 Keychain(앱 그룹 공유)에 보관한다.
@@ -428,7 +428,7 @@ GET /thumbs/a3/a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8.
 Go 표준 `net/http/pprof`가 기본 탑재되어 있다. 성능 목표(저장 p99 < 50ms 등)를 검증하거나 병목을 추적할 때 사용한다.
 
 ```bash
-go tool pprof http://localhost:8080/debug/pprof/profile?seconds=10
+go tool pprof http://localhost:8420/debug/pprof/profile?seconds=10
 ```
 
 로컬 단일 사용자 서버이므로 프로덕션 노출 걱정 없이 항상 켜 둔다.

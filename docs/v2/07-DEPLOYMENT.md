@@ -37,11 +37,11 @@ just dev
 
 ```bash
 # 헬스체크 (인증 없음)
-curl http://localhost:8080/healthz
+curl http://localhost:8420/healthz
 # {"status":"ok"}
 
 # 링크 저장
-curl -X POST http://localhost:8080/api/v1/links \
+curl -X POST http://localhost:8420/api/v1/links \
   -H "Authorization: Bearer dev-key" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://go.dev/blog/wal"}'
@@ -49,8 +49,15 @@ curl -X POST http://localhost:8080/api/v1/links \
 
 # 몇 초 후 목록 조회 — 스크랩·태깅이 끝났으면 status가 done
 curl -H "Authorization: Bearer dev-key" \
-  "http://localhost:8080/api/v1/links?limit=5"
+  "http://localhost:8420/api/v1/links?limit=5"
+# keyset 커서 페이지네이션 — 응답의 next_cursor를 ?cursor= 로 넘긴다
+
+# 검색 — FTS5 trigram 전문 검색, bm25 랭킹
+curl -H "Authorization: Bearer dev-key" \
+  "http://localhost:8420/api/v1/search?q=kubernetes"
 ```
+
+`q`가 3자 이상이면 FTS5 trigram MATCH + bm25 랭킹(`"mode":"fts"`), 3자 미만이면 400이 아니라 LIKE 폴백으로 동작한다(`"mode":"like"`) — 상세는 [06-API-SPECIFICATION.md](06-API-SPECIFICATION.md).
 
 ---
 
@@ -60,11 +67,12 @@ curl -H "Authorization: Bearer dev-key" \
 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
-| `PUSHPOINT_ADDR` | `:8080` | HTTP 리슨 주소 |
+| `PUSHPOINT_ADDR` | `:8420` | HTTP 리슨 주소 |
 | `PUSHPOINT_DATA_DIR` | `./data` | SQLite DB·썸네일 저장 디렉터리 |
 | `PUSHPOINT_API_KEY` | (없음, 필수) | Bearer 인증 키. `just dev`는 `dev-key`로 설정 |
 | `PUSHPOINT_SCRAPE_CONCURRENCY` | `8` | 스크래퍼 워커 동시 실행 상한 |
 | `PUSHPOINT_LOG_LEVEL` | `info` | slog 로그 레벨 (`debug`/`info`/`warn`/`error`) |
+| `PUSHPOINT_ALLOW_PRIVATE_HOSTS` | `false` | `true`면 스크랩·썸네일의 사설 대역 차단(SSRF 가드)을 해제 — 로컬 fixture 테스트 전용 |
 
 실사용 구동 시에는 `PUSHPOINT_API_KEY`를 충분히 긴 랜덤 문자열로 교체할 것 (`openssl rand -hex 32` 등).
 
@@ -173,7 +181,7 @@ iOS 단축어(M1부터)와 Share Extension·앱(M4부터)이 집 Mac의 서버�
 
 1. Mac과 iPhone에 Tailscale 설치 후 같은 계정으로 로그인
 2. Mac의 Tailscale IP 확인: `tailscale ip -4` → `100.x.y.z`
-3. iOS 클라이언트(단축어·앱·Share Extension)의 서버 주소는 **IP 형식만** 사용: `http://100.x.y.z:8080`
+3. iOS 클라이언트(단축어·앱·Share Extension)의 서버 주소는 **IP 형식만** 사용: `http://100.x.y.z:8420`
 4. iOS 앱(M4+)에서 Tailscale **VPN On Demand**를 Wi-Fi/Cellular 모두 **Always**로 설정 — 필수 단계. 이걸 켜지 않으면 VPN이 내려간 상태에서 Share Extension의 POST가 실패한다.
 
 **ATS 노트 (서버 주소가 IP 형식이어야 하는 이유)**: iOS App Transport Security는 호스트네임에 대한 평문 HTTP를 차단하지만 IP 리터럴은 면제다. MagicDNS 이름(`mac.tailnet-xxx.ts.net`)을 쓰려면 `tailscale cert`로 HTTPS를 구성해야 한다 — **평문 HTTP + 호스트네임 조합은 금지**. ATS 예외를 넣는 경우에는 앱과 Share Extension **양쪽** Info.plist에 모두 넣어야 한다 (Extension은 별도 타깃이라 앱의 설정을 상속하지 않는다).
@@ -182,7 +190,7 @@ iOS 단축어(M1부터)와 Share Extension·앱(M4부터)이 집 Mac의 서버�
 
 ### 대안: LAN 고정 IP
 
-같은 Wi-Fi에서만 쓴다면 공유기에서 Mac에 DHCP 고정 IP(예: `192.168.0.10`)를 할당하고 iOS 앱에 `http://192.168.0.10:8080`을 설정한다. 셀룰러·외부 네트워크에서는 저장이 안 되는 한계가 있으므로 실사용에는 Tailscale을 권한다.
+같은 Wi-Fi에서만 쓴다면 공유기에서 Mac에 DHCP 고정 IP(예: `192.168.0.10`)를 할당하고 iOS 앱에 `http://192.168.0.10:8420`을 설정한다. 셀룰러·외부 네트워크에서는 저장이 안 되는 한계가 있으므로 실사용에는 Tailscale을 권한다.
 
 ---
 
@@ -194,7 +202,7 @@ M4 앱이 나오기 전까지의 **공식 캡처 경로**다. 단축어 앱으�
 
 1. 단축어 세부사항에서 **공유 시트에 표시** 활성화, 입력 유형은 URL
 2. **"URL 콘텐츠 가져오기"** 액션을 추가하고 다음처럼 설정:
-   - URL: `http://100.x.y.z:8080/api/v1/links` (Mac의 Tailscale IP)
+   - URL: `http://100.x.y.z:8420/api/v1/links` (Mac의 Tailscale IP)
    - 방법: POST
    - 헤더: `Authorization` = `Bearer {PUSHPOINT_API_KEY 값}`
    - 본문 요청: JSON, 필드 `url` = (매직 변수) **단축어 입력**
@@ -223,7 +231,7 @@ cd backend
 go run ./cmd/pushpoint import \
   -type bookmarks \
   -file ~/Downloads/bookmarks.html \
-  -addr http://localhost:8080 \
+  -addr http://localhost:8420 \
   -key dev-key
 ```
 
@@ -238,15 +246,15 @@ HTML 안의 모든 http(s) URL을 추출한다 (`javascript:` 북마클릿 등 �
 go run ./cmd/pushpoint import \
   -type takeout \
   -file ~/Takeout/YouTube\ and\ YouTube\ Music/history/watch-history.html \
-  -addr http://localhost:8080 -key dev-key
+  -addr http://localhost:8420 -key dev-key
 
 # watch-history.json — Takeout에서 JSON 형식을 선택한 경우 (자동 감지)
 go run ./cmd/pushpoint import -type takeout \
-  -file ~/Takeout/.../watch-history.json -addr http://localhost:8080 -key dev-key
+  -file ~/Takeout/.../watch-history.json -addr http://localhost:8420 -key dev-key
 
 # 형식 강제 (html | csv | json)
 go run ./cmd/pushpoint import -type takeout -format csv \
-  -file ~/Takeout/.../watch-history.csv -addr http://localhost:8080 -key dev-key
+  -file ~/Takeout/.../watch-history.csv -addr http://localhost:8420 -key dev-key
 ```
 
 형식과 무관하게 영상 watch URL(`youtube.com/watch?v=...`, `youtu.be/...`)만 추출하고 채널·검색 등 나머지 항목은 무시한다.
@@ -299,7 +307,7 @@ launchctl load ~/Library/LaunchAgents/ai.pushpoint.server.plist
 ### 헬스체크
 
 ```bash
-curl http://localhost:8080/healthz
+curl http://localhost:8420/healthz
 # {"status":"ok"}
 ```
 
@@ -311,13 +319,13 @@ curl http://localhost:8080/healthz
 
 ```bash
 # CPU 프로파일 30초 수집 후 인터랙티브 분석
-go tool pprof http://localhost:8080/debug/pprof/profile?seconds=30
+go tool pprof http://localhost:8420/debug/pprof/profile?seconds=30
 
 # 힙 스냅샷
-go tool pprof http://localhost:8080/debug/pprof/heap
+go tool pprof http://localhost:8420/debug/pprof/heap
 
 # goroutine 덤프 (워커 풀 상태 확인에 유용)
-curl http://localhost:8080/debug/pprof/goroutine?debug=1
+curl http://localhost:8420/debug/pprof/goroutine?debug=1
 ```
 
 ### 로그
@@ -340,6 +348,20 @@ just test-crash       # 빌드 → fixture 서버 → 저장 → kill -9 → 재
 ```
 
 p99 판정은 `just bench-http`가 담당한다 — go test 벤치는 평균만 내므로 p99 판정 수단이 아니다. 검색(1만 링크) < 30ms, 10만 건 목록 < 50ms 등 [02-TECH-SPEC.md](02-TECH-SPEC.md)의 목표치를 매 마일스톤마다 검증한다 (마일스톤별 검증 매트릭스는 [08-DEVELOPMENT-PLAN.md](08-DEVELOPMENT-PLAN.md)). 수치 없는 "빨라진 것 같다"는 인정하지 않는다.
+
+### 실측 기록
+
+측정 환경: Apple Silicon 로컬 개발 머신, 2026-07-20. 저장 p99는 `just bench-http`, 콜드 스타트는 `scripts/coldstart.sh` 출력이다. 목표 열은 [00-README.md](00-README.md)의 성능 목표 표와 같은 값이며, 실측 열은 마일스톤이 진행되면서 채워진다.
+
+| 지표 | 목표 | 실측 (2026-07-20) |
+|---|---|---|
+| 저장 API p99 | < 50ms | p50 0.244ms / p95 0.35ms / p99 0.981ms |
+| 저장 → 태그 완료 (비동기) | < 3s | — (태거는 M3) |
+| 검색 (FTS5, 1만 링크) | < 30ms | — |
+| 링크 10만 건에서 목록 스크롤 API | < 50ms | — |
+| 콜드 스타트 (바이너리 실행 → 서빙) | < 1s | 314~684ms |
+
+수치를 갱신할 때는 측정 일자와 측정에 쓴 커맨드를 함께 바꾼다 — 언제 어떤 경로로 잰 값인지가 빠지면 비교가 불가능해진다.
 
 ---
 

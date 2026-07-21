@@ -2,6 +2,13 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+// Ports are configurable so a busy port on the dev machine never blocks a run.
+// `just dev` picks the first free port from 8420 and passes it here as
+// PUSHPOINT_API_PORT; `just web-dev` detects the running backend the same way.
+const apiPort = process.env.PUSHPOINT_API_PORT ?? '8420'
+const apiTarget = `http://localhost:${apiPort}`
+const webPort = Number(process.env.PUSHPOINT_WEB_PORT ?? 8421)
+
 // Push-Point web — pure SPA, embedded into the Go binary in production.
 // https://vite.dev/config/
 export default defineConfig({
@@ -14,12 +21,15 @@ export default defineConfig({
   base: '/',
   plugins: [react(), tailwindcss()],
   server: {
-    // Dev (:5173) proxies the backend surface to the Go server (:8080) so the
+    // Dev (:8421 by default) proxies the backend surface to the Go server so the
     // client only ever uses relative paths — identical to prod embed (same-origin).
+    port: webPort,
+    // strictPort off: if 8421 is taken, Vite moves to the next free port itself.
+    strictPort: false,
     proxy: {
-      '/api': 'http://localhost:8080',
-      '/thumbs': 'http://localhost:8080',
-      '/healthz': 'http://localhost:8080',
+      '/api': apiTarget,
+      '/thumbs': apiTarget,
+      '/healthz': apiTarget,
     },
   },
   build: {

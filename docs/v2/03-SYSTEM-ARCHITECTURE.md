@@ -52,12 +52,15 @@ push-point/
 │   ├── cmd/pushpoint/main.go  # 단일 진입점
 │   ├── internal/
 │   │   ├── api/               # HTTP 핸들러 (chi)
-│   │   │   └── gen/           # 코드 생성물 (just gen, 커밋 대상)
+│   │   │   └── gen/           # oapi-codegen 생성물 (just gen, 커밋 대상)
+│   │   ├── config/            # PUSHPOINT_* 환경 변수 로딩
 │   │   ├── store/             # Store 인터페이스 + sqlite 구현
 │   │   ├── queue/             # Queue 인터페이스 + sqlite jobs 구현
 │   │   ├── scraper/           # fetch + goquery 파싱, singleflight
-│   │   ├── tagger/            # Tagger 인터페이스 + rules / onnx 구현
-│   │   └── thumbs/            # 썸네일 생성·저장
+│   │   ├── safedial/          # SSRF 가드 (사설 대역 다이얼 차단)
+│   │   ├── tagger/            # M3: Tagger 인터페이스 + rules / onnx 구현
+│   │   ├── thumbs/            # 썸네일 생성·저장
+│   │   └── web/               # SPA 서빙 (embed_frontend 태그 전용)
 │   ├── migrations/            # SQLite 마이그레이션 (golang-migrate, embed)
 │   └── go.mod                 # module github.com/coby/push-point/backend
 ├── nlu/                       # NLU 오프라인 자산 (런타임 코드 아님)
@@ -65,7 +68,7 @@ push-point/
 │   ├── golden/                # 태깅 품질 golden set (JSONL, 커밋 대상)
 │   └── models/                # M5: ONNX 변환 스크립트(Python)·모델 아티팩트
 ├── ios/                       # M4: SwiftUI 앱 + Share Extension
-├── frontend/                  # 웹 프론트 — 명시적 비목표(M6 이후 검토), 자리만 예약
+├── frontend/                  # 웹 SPA (Vite + React 19 + TS) — iOS와 대등한 full-feature 클라이언트
 ├── docs/
 │   ├── README.md              # v1 ↔ v2 문서 인덱스·비교
 │   ├── v1/                    # v1 기획서 아카이브 (수정 금지)

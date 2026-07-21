@@ -1,6 +1,6 @@
 # 기술 스택
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
 
 v2의 기술 선택 기준은 하나다. **단일 프로세스, 단일 바이너리로 개인 규모에서 최고의 체감 성능을 내는 것.** 분산 인프라로 얻던 것(내구성, 동시성, 검색)을 SQLite와 Go 표준 라이브러리 수준에서 다시 설계한다.
 
@@ -27,7 +27,7 @@ v2의 기술 선택 기준은 하나다. **단일 프로세스, 단일 바이너
 
 | 환경 변수 | 기본값 | 설명 |
 |---|---|---|
-| `PUSHPOINT_ADDR` | `:8080` | 리슨 주소 |
+| `PUSHPOINT_ADDR` | `:8420` | 리슨 주소 |
 | `PUSHPOINT_DATA_DIR` | `./data` | DB·썸네일 저장 위치 |
 | `PUSHPOINT_API_KEY` | (필수) | Bearer 인증 키. `just dev`는 `dev-key`로 설정 |
 | `PUSHPOINT_SCRAPE_CONCURRENCY` | `8` | 스크래퍼 동시성 상한 |
@@ -202,7 +202,7 @@ API는 contract-first다. `api/openapi.yaml`(OpenAPI 3.1)이 API의 기계 원�
 
 - **backend (M1+)**: [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) **v2.8.0 핀** — chi 서버 인터페이스 + 요청/응답 타입을 `backend/internal/api/gen/`에 생성한다. generate 세트는 `types,chi-server,strict-server,spec`. 생성물은 커밋 대상이고 `just gen`으로 재생성한다. v2.8.0은 OpenAPI 3.1 생성 실측 통과 버전이다 (2026-07-20).
 - **ios (M4)**: swift-openapi-generator — Apple 공식, URLSession 트랜스포트. API 타입 수작성 금지.
-- **frontend (예정)**: openapi-typescript — 웹 프론트는 명시적 비목표(M6 이후 검토)이므로 생성 대상만 예약해 둔다.
+- **frontend**: [openapi-typescript](https://openapi-ts.dev) 핀 버전 — `frontend/src/lib/api/schema.d.ts`를 생성한다(`just web-gen`, 생성물 커밋 대상). 드리프트 가드는 `just web-gen-check`이며 CI web job이 호출한다.
 - **드리프트 방지**: `just gen-check` — `just gen` 재실행 후 git diff가 남으면 실패한다. 스펙과 생성물이 어긋난 커밋을 차단하며, 검증 매트릭스의 M1 행이다 ([08-DEVELOPMENT-PLAN.md](08-DEVELOPMENT-PLAN.md) 4장).
 
 ## 10. 미래 교체 경로: 인터페이스 설계

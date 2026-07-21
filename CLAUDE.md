@@ -1,44 +1,44 @@
 # Push-Point
 
-개인용 링크 저장·자동 태깅 앱 — 단일 사용자, LLM 없는 경량 NLU가 기술적 차별점.
-현재 상태: 문서·계획 단계 (M1 전, Go 코드 미작성. `backend/go.mod`는 의존성 0으로 초기화됨).
+Personal link-saving and auto-tagging app — single user; the technical differentiator is a lightweight, LLM-free NLU.
+Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker pool, site adapters, thumbnails, import) are merged; the web client ships alongside them. Next: M3 rule-based tagging + search eval.
 
-## 워크스페이스 (모노레포)
+## Workspace (monorepo)
 
-- `api/` — API 기계 원본 `openapi.yaml` (OpenAPI 3.1) — 백엔드·클라이언트 코드 생성원 (`just gen`).
-- `backend/` — Go 단일 바이너리 (API + worker + NLU 런타임 추론). 모든 실행 코드는 여기.
-- `nlu/` — NLU 오프라인 **자산 전용**: dictionary/(태그 사전), golden/(평가셋), models/(ONNX 변환). 런타임 추론은 `backend/internal/tagger`(Go)이며, Python은 `nlu/models/`에서만 허용.
-- `ios/` — M4: SwiftUI 앱 + Share Extension. 아직 코드 없음.
-- `frontend/` — 웹 앱 (Vite+React+TS, `api/openapi.yaml` 계약 소비, iOS와 대등). 저장의 "공유 시트 2초 진입"만 iOS 고유, 나머지 기능은 동일.
-- `docs/v2/` = 단일 진실 원천, `docs/v1/` = v1 아카이브 (수정 금지), 비교는 `docs/README.md`.
-- `deploy/k8s-future/` — v1 k8s 매니페스트 보존 (미사용, 수정 금지).
+- `api/` — machine source of truth for the API, `openapi.yaml` (OpenAPI 3.1) — generates backend and client code (`just gen`).
+- `backend/` — Go single binary (API + worker + NLU runtime inference). All executable code lives here.
+- `nlu/` — NLU offline **assets only**: dictionary/ (tag dictionary), golden/ (eval set), models/ (ONNX conversion). Runtime inference is `backend/internal/tagger` (Go); Python is allowed only under `nlu/models/`.
+- `ios/` — M4: SwiftUI app + Share Extension. No code yet.
+- `frontend/` — web app (Vite + React + TS, consumes the `api/openapi.yaml` contract, peer of iOS). Only the "2-second share-sheet entry" for saving is iOS-specific; every other feature is identical.
+- `docs/v2/` = single source of truth, `docs/v1/` = v1 archive (do not modify), comparison in `docs/README.md`.
+- `deploy/k8s-future/` — preserved v1 k8s manifests (unused, do not modify).
 
-## 명령 (루트 justfile, Go 레시피는 backend/ 대상)
+## Commands (root justfile; Go recipes target backend/)
 
-- `just dev` — 로컬 실행 (PUSHPOINT_API_KEY=dev-key)
-- `just test` — 전체 테스트 (`cd backend && go test ./...`)
-- `just bench` — 마이크로벤치 (p99 판정 수단 아님 — bench-http가 담당)
-- `just bench-http` — 저장 API HTTP 경로 p99 게이트, p99 < 50ms 초과 시 exit 1 (M1+)
-- `just eval` — nlu/golden/ 태깅 top-3 정확도 측정 (M3+)
-- `just gen` — api/openapi.yaml → backend/internal/api/gen/ 생성 (oapi-codegen v2.8.0 핀, 생성물 커밋)
-- `just web-dev` — Vite dev 서버 :5173 (프록시로 /api·/thumbs·/healthz → :8080, 상대 경로 코드가 prod embed와 동일)
-- `just web-build` — frontend/dist/ 빌드 (dist/는 미커밋)
-- `just release` — 웹 빌드 + SPA를 embed한 단일 바이너리 (`backend/bin/pushpoint`, `-tags embed_frontend`)
-- `just web-gen` — api/openapi.yaml → frontend/src/lib/api/schema.d.ts 생성 (openapi-typescript 핀, 생성물 커밋)
-- 그 외 레시피(build/gen-check/web-gen-check/test-crash/seed/lint/fmt)는 `just` 실행으로 목록 확인
+- `just dev` — run locally (PUSHPOINT_API_KEY=dev-key)
+- `just test` — full test suite (`cd backend && go test ./...`)
+- `just bench` — microbenchmarks (not the p99 verdict — that is bench-http)
+- `just bench-http` — p99 < 50ms gate on the save API HTTP path; exits 1 when exceeded (M1+)
+- `just eval` — top-3 tagging accuracy on nlu/golden/ (M3+)
+- `just gen` — api/openapi.yaml → backend/internal/api/gen/ (oapi-codegen pinned to v2.8.0, generated output committed)
+- `just web-dev` — Vite dev server on :8421 (proxies /api, /thumbs, /healthz → :8420, so relative-path code matches the prod embed)
+- `just web-build` — build frontend/dist/ (dist/ is not committed)
+- `just release` — web build + single binary with the SPA embedded (`backend/bin/pushpoint`, `-tags embed_frontend`)
+- `just web-gen` — api/openapi.yaml → frontend/src/lib/api/schema.d.ts (openapi-typescript pinned, generated output committed)
+- For the remaining recipes (build/gen-check/web-gen-check/test-crash/seed/lint/fmt), run `just` to list them
 
-## 핵심 규칙
+## Core rules
 
-- `docs/`는 한국어로 쓴다 (코드·식별자·기술 용어는 영어). 루트 `README.md`는 영어 — 퍼블릭 GitHub 첫 화면이다.
-- 커밋 메시지는 Conventional Commits(`feat:`/`fix:`/`docs:`/`chore:` 등), 제목은 영어 한 줄.
-- 태스크 러너는 just (2026-07-20 평가 후 채택 — 재평가 트리거: frontend 착수·협업자 합류). API 계약 스택은 수작성 OpenAPI 3.1 + oapi-codegen v2.8.0 핀 + swift-openapi-generator (2026-07-20 심사 확정, 배경은 docs/v2/09-PLAN-REVIEW.md와 .claude/rules/api.md).
-- 설계 원본: 스키마 = `docs/v2/05-DATA-SCHEMA.md`, API = `api/openapi.yaml` (`docs/v2/06-API-SPECIFICATION.md`는 해설), 계획 = `docs/v2/08-DEVELOPMENT-PLAN.md`. 설계를 바꿀 땐 원본을 먼저 고치고 나머지를 따라가게 한다 (API는 `just gen`으로 생성물 재생성).
-- 측정 없는 "잘 되는 것 같다" 금지 — 성능·품질 주장은 `just bench-http`(p99 게이트) / `just bench` / `just eval` 수치로 뒷받침한다.
-- **완료 정의**: 구현 작업은 `just fmt`·`just lint`·`just test`·`just gen-check`(프론트 변경이면 `just web-gen-check`·`just web-build`도)를 전부 통과시킨 뒤에만 완료를 선언하고, 실행한 명령과 출력을 증거로 제시한다 (출력 없는 성공 주장 금지).
-- **스윕 규칙**: 여러 파일에 걸친 일괄 수정은 기억으로 담당을 배정하지 말고, `grep -l`/glob으로 대상 목록을 먼저 생성해 파일로 저장한 뒤 체크리스트로 소거한다. 완료 시 같은 검색을 재실행해 잔여 0을 확인한다.
-- v1 스택(PostgreSQL/Redis/MinIO/OpenAI/k8s/Gin/Ent)은 "v1→v2 대비" 맥락에서만 언급한다. 현재 아키텍처 설명에 등장 금지.
-- 계획 점검(2026-07-20) 권고 8건은 반영 완료 — 배경·근거는 `docs/v2/09-PLAN-REVIEW.md` 참조.
-- 웹 프론트엔드는 정식 편입(2026-07-21) — 비목표 폐기, iOS와 대등한 full-feature 클라이언트로 승격. 배경·근거는 `docs/v2/09-PLAN-REVIEW.md`, 세부 규칙은 `.claude/rules/frontend.md`.
-- **코드리뷰 게이트**: 구현 작업(마일스톤·기능 단위)이 끝나면 커밋 전에 `/pr-review-toolkit:review-pr`로 코드리뷰를 돌린다. high/medium 발견 사항을 수습한 뒤에 커밋·푸시하고, 의도적으로 넘기는 항목은 사유를 남긴다.
-- **머지 규칙**: main 직접 push 금지 (GitHub 룰셋 `main-protection`이 강제 — PR 필수, `ci` 체크 통과 필수, force-push·삭제 차단). 흐름: 브랜치 → 커밋·푸시 → PR → CI 녹색 + 코드리뷰 게이트 → 머지. CI가 main에서 깨지면 다른 작업보다 먼저 수습한다.
-- 영역별 세부 규칙은 `.claude/rules/`에 경로 스코프로 분리돼 있다 (backend·nlu·ios·frontend·docs·api).
+- Write `docs/` in Korean — they are planning documents the author reads (code, identifiers, and technical terms stay English). The root `README.md` is English because it is the public GitHub landing page, and agent-facing files (`CLAUDE.md`, `.claude/rules/`) are English too. This policy lives here; other files point at it rather than restating it.
+- Commit messages follow Conventional Commits (`feat:`/`fix:`/`docs:`/`chore:` etc.); the subject is a single English line.
+- The task runner is just (adopted after the 2026-07-20 evaluation — re-evaluation triggers: starting frontend work, a collaborator joining). The API contract stack is hand-written OpenAPI 3.1 + oapi-codegen pinned to v2.8.0 + swift-openapi-generator (settled in the 2026-07-20 review; background in docs/v2/09-PLAN-REVIEW.md and .claude/rules/api.md).
+- Design sources of truth: schema = `docs/v2/05-DATA-SCHEMA.md`, API = `api/openapi.yaml` (`docs/v2/06-API-SPECIFICATION.md` is commentary), plan = `docs/v2/08-DEVELOPMENT-PLAN.md`. To change a design, edit the source first and let the rest follow (for the API, regenerate with `just gen`).
+- No unmeasured "seems to work" — back performance and quality claims with numbers from `just bench-http` (p99 gate), `just bench`, or `just eval`.
+- **Definition of done**: declare implementation work complete only after `just fmt`, `just lint`, `just test`, and `just gen-check` all pass (plus `just web-gen-check` and `just web-build` for frontend changes), and present the commands you ran and their output as evidence (no success claims without output).
+- **Sweep rule**: for edits spanning many files, do not assign targets from memory — first build the target list with `grep -l`/glob, save it to a file, and work it off as a checklist. When done, re-run the same search and confirm zero remaining.
+- Mention the v1 stack (PostgreSQL/Redis/MinIO/OpenAI/k8s/Gin/Ent) only in "v1 vs v2" context. It must not appear in descriptions of the current architecture.
+- The 8 recommendations from the plan review (2026-07-20) are already applied — see `docs/v2/09-PLAN-REVIEW.md` for background and rationale.
+- The web frontend is officially in scope as of 2026-07-21 — the non-goal is retired and it is promoted to a full-feature client on par with iOS. Background in `docs/v2/09-PLAN-REVIEW.md`, detailed rules in `.claude/rules/frontend.md`.
+- **Code review gate**: when a unit of implementation work (milestone or feature) is finished, run `/pr-review-toolkit:review-pr` before committing. Fix high/medium findings before commit and push, and record the reason for anything deliberately deferred.
+- **Merge rule**: never push directly to main (enforced by the GitHub ruleset `main-protection` — PR required, `ci` check required, force-push and deletion blocked). Flow: branch → commit and push → PR → green CI + code review gate → merge. If CI breaks on main, fix it before anything else.
+- Per-area detailed rules are split into `.claude/rules/` by path scope (backend, nlu, ios, frontend, docs, api).

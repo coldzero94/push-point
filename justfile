@@ -8,7 +8,20 @@ default:
 
 # 로컬 실행 — API 서버 + 워커 단일 프로세스 (PUSHPOINT_API_KEY=dev-key)
 dev:
-    @if [ -d backend/cmd/pushpoint ]; then cd backend && PUSHPOINT_API_KEY=dev-key go run ./cmd/pushpoint; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -d backend/cmd/pushpoint ]; then echo "backend/cmd/pushpoint가 없습니다."; exit 1; fi
+    base="${PUSHPOINT_PORT:-8420}"
+    for i in $(seq 0 20); do
+      p=$((base + i))
+      if ! lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
+        [ "$i" -eq 0 ] || echo "포트 $base 사용 중 → $p 로 실행합니다 (웹은 just web-dev가 자동 감지)"
+        echo "http://127.0.0.1:$p"
+        cd backend
+        exec env PUSHPOINT_ADDR="127.0.0.1:$p" PUSHPOINT_API_KEY="${PUSHPOINT_API_KEY:-dev-key}" go run ./cmd/pushpoint
+      fi
+    done
+    echo "빈 포트를 찾지 못했습니다 ($base~$((base + 20))). PUSHPOINT_PORT로 다른 대역을 지정하세요."; exit 1
 
 # backend/bin/pushpoint 단일 바이너리 빌드
 build:
@@ -57,11 +70,27 @@ eval:
 web-install:
     @if [ -f frontend/package.json ]; then cd frontend && npm ci; else echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; fi
 
-# Vite dev 서버 :5173 (프록시로 /api·/thumbs·/healthz → Go :8080)
+# Vite dev 서버 :8421 (프록시로 /api·/thumbs·/healthz → Go :8420, 실행 중인 포트 자동 감지)
 web-dev:
-    @if [ ! -f frontend/package.json ]; then echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; \
-    elif [ ! -d frontend/node_modules ]; then echo "frontend/node_modules가 없습니다. 먼저: just web-install"; \
-    else cd frontend && npm run dev; fi
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f frontend/package.json ]; then echo "frontend/package.json이 없습니다 (frontend 스캐폴드 전)."; exit 1; fi
+    if [ ! -d frontend/node_modules ]; then echo "frontend/node_modules가 없습니다. 먼저: just web-install"; exit 1; fi
+    api="${PUSHPOINT_API_PORT:-}"
+    if [ -z "$api" ]; then
+      for i in $(seq 0 20); do
+        p=$((8420 + i))
+        if curl -sf -m 0.3 "http://127.0.0.1:$p/healthz" >/dev/null 2>&1; then api="$p"; break; fi
+      done
+    fi
+    if [ -z "$api" ]; then
+      api=8420
+      echo "실행 중인 백엔드를 못 찾았습니다 — 프록시를 :$api 로 둡니다 (먼저 just dev 를 띄우세요)"
+    else
+      echo "백엔드 감지: :$api → 프록시 연결"
+    fi
+    cd frontend
+    exec env PUSHPOINT_API_PORT="$api" npm run dev
 
 # 게이트 레시피(CI가 호출)이므로 전제가 없으면 조용히 통과하지 않고 exit 1 한다.
 # api/openapi.yaml → frontend/src/lib/api/schema.d.ts 계약 타입 생성 (핀 버전, @latest 금지). 생성물 커밋 대상
