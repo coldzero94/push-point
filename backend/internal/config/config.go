@@ -15,6 +15,10 @@ type Config struct {
 	APIKey            string     // PUSHPOINT_API_KEY (필수)
 	ScrapeConcurrency int        // PUSHPOINT_SCRAPE_CONCURRENCY (기본 8)
 	LogLevel          slog.Level // PUSHPOINT_LOG_LEVEL (debug|info|warn|error, 기본 info)
+	// AllowPrivateHosts는 PUSHPOINT_ALLOW_PRIVATE_HOSTS (기본 false). true면 스크랩·썸네일
+	// 다운로드의 SSRF 가드(사설/루프백/링크로컬 대상 거부)를 끈다 — 로컬 fixture·개발 전용
+	// (예: scripts/test_crash.sh가 127.0.0.1 fixture 서버를 스크랩). 운영 기본은 가드 활성.
+	AllowPrivateHosts bool
 }
 
 // Load는 환경 변수에서 설정을 읽는다. PUSHPOINT_API_KEY가 없으면 에러.
@@ -42,6 +46,13 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("config: PUSHPOINT_LOG_LEVEL=%q 파싱 실패: %w", v, err)
 		}
 		cfg.LogLevel = lvl
+	}
+	if v := os.Getenv("PUSHPOINT_ALLOW_PRIVATE_HOSTS"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: PUSHPOINT_ALLOW_PRIVATE_HOSTS=%q 는 불리언이어야 함 (true|false|1|0)", v)
+		}
+		cfg.AllowPrivateHosts = b
 	}
 	return cfg, nil
 }

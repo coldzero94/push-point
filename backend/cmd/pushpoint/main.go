@@ -28,7 +28,9 @@ import (
 	"github.com/coby/push-point/backend/internal/api"
 	"github.com/coby/push-point/backend/internal/config"
 	"github.com/coby/push-point/backend/internal/queue"
+	"github.com/coby/push-point/backend/internal/scraper"
 	"github.com/coby/push-point/backend/internal/store"
+	"github.com/coby/push-point/backend/internal/thumbs"
 )
 
 func main() {
@@ -46,11 +48,17 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "import":
+			if err := runImport(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "import 실패:", err)
+				os.Exit(1)
+			}
+			return
 		case "eval":
 			fmt.Println("eval: M3에서 구현 예정 — golden set(nlu/golden/) 태깅 정확도 측정")
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|eval])\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval])\n", os.Args[1])
 			os.Exit(2)
 		}
 	}
@@ -77,10 +85,29 @@ func serve() error {
 	q := queue.NewSQLite(db.Writer)
 	st := store.New(db, q)
 
+	// M2 워커: 사이트 어댑터를 등록한 scraper Pool(singleflight·도메인 rate limit)과
+	// 디스크 썸네일 저장소. 둘 다 인터페이스 뒤에 있어 dispatcher 핸들러가 소비한다.
+	// 기본은 SSRF 가드 dial(사설/루프백/링크로컬 대상 거부) — 사용자 링크가 내부망으로
+	// 못 나가게 막는다. AllowPrivateHosts면 가드 없는 클라이언트를 주입한다
+	// (로컬 fixture·개발 전용 — 예: scripts/test_crash.sh의 127.0.0.1 fixture 스크랩).
+	var scOpts []scraper.Option
+	var tsOpts []thumbs.Option
+	if cfg.AllowPrivateHosts {
+		logger.Warn("SSRF 가드 비활성 — 사설/루프백 대상 허용 (개발/로컬 fixture 전용)")
+		scOpts = append(scOpts, scraper.WithHTTPClient(&http.Client{}))
+		tsOpts = append(tsOpts, thumbs.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}))
+	}
+	sc := scraper.New(scOpts...)
+	ts := thumbs.NewDiskStore(cfg.DataDir, tsOpts...)
+
 	// dispatcher: Run 내부에서 running→pending 크래시 복구 후 claim 루프.
-	// M1은 등록된 잡 핸들러가 없다 — pending 잡은 그대로 남고 M2에서
-	// scraper/tagger/thumb 핸들러가 등록되면 소비된다.
-	disp := queue.NewDispatcher(q, logger)
+	// scrape/thumb 핸들러를 Run 전에 등록한다 — 등록된 kind만 claim 대상이 된다.
+	// tag 핸들러는 M3 — KindTag 잡은 이 단계에서 enqueue되지 않으므로 미등록으로 둔다.
+	// maxInFlight = 총 워커 수(scrape + thumb) — claim을 실제 처리 용량에 묶어
+	// 무제한 running 전이(반복 크래시 시 미실행 잡 attempts 소진)를 막는다.
+	disp := queue.NewDispatcher(q, logger, cfg.ScrapeConcurrency+thumbConcurrency)
+	disp.Register(queue.KindScrape, newScrapeHandler(sc, st, cfg.ScrapeConcurrency, logger))
+	disp.Register(queue.KindThumb, newThumbHandler(sc, ts, st, logger))
 	dispCtx, dispCancel := context.WithCancel(context.Background())
 	defer dispCancel()
 	dispDone := make(chan error, 1)

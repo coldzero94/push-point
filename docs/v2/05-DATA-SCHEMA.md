@@ -1,6 +1,6 @@
 # 데이터 스키마
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
 
 v2의 저장소는 SQLite 단일 파일(`data/pushpoint.db`)이다. v1의 PostgreSQL 스키마(users, notes, sync_logs, user_stats, stored_images, 트리거)는 전부 폐기했다. 단일 사용자이므로 `users`가 필요 없고, 메모(v1의 `notes` 테이블)는 `links.note` 컬럼으로 흡수됐다. 큐(v1 Redis Streams)는 `jobs` 테이블이, 오브젝트 스토리지(v1 MinIO)는 `data/thumbs/` 디렉터리가 대체한다.
 
@@ -235,6 +235,8 @@ pending ──▶ scraping ──▶ tagging ──▶ done
 - `tagging`: scrape 성공, tag 잡 처리 중
 - `done`: 태깅까지 완료
 - `failed`: 어느 단계든 잡이 `max_attempts`를 소진하면 링크도 `failed`로 전이하고 `error`에 사유 기록. `POST /api/v1/links/{id}/retry`로 재-enqueue 가능
+
+> **M2 인터림 (tagger 부재)**: 위 전이도는 tagger가 등록된 스테디 상태(M3 이후)를 그린다. M2 시점에는 tagger가 아직 없어(08 마일스톤 참조) scrape 성공 시 `tag` 잡을 만들지 않고 `links.status`가 `scraping`에서 곧바로 `done`으로 전이한다 — 즉 M2에서 `done`은 "태깅까지 완료"가 아니라 "스크랩 완료"를 뜻한다. `tagging` 상태와 `jobs.tag`는 M3에서 tagger 핸들러가 등록돼야 비로소 도달 가능하다. (06-API-SPEC의 `jobs` 요약이 밝히는 "M1에서는 `scrape`만 있다"와 같은 계열의 인터림 명시.)
 
 ### jobs.status
 

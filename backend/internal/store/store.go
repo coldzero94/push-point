@@ -84,6 +84,21 @@ type Tag struct {
 	CreatedAt int64
 }
 
+// ScrapeResult는 scrape 잡 핸들러가 links에 반영하는 스크랩 결과다.
+// scraper.Metadata를 store가 아는 필드로 매핑한 값 — 순환 import를 피하려 store가 자체 정의한다.
+// (site_name 등 links 컬럼이 없는 필드는 여기 포함하지 않는다. thumb 잡 enqueue 여부는 HasImage로만 판단.)
+type ScrapeResult struct {
+	Title       string // links.title
+	Description string // links.description
+	Author      string // links.author
+	ContentType string // links.content_type — 'video'|'article'|'post'|'other' 중 하나여야 함 (CHECK 제약)
+	Lang        string // links.lang
+	PublishedAt *int64 // links.published_at (nil이면 NULL)
+	DurationSec *int64 // links.duration_sec (nil이면 NULL)
+	WordCount   *int64 // links.word_count (nil이면 NULL)
+	HasImage    bool   // og:image 존재 여부 — true면 ApplyScrape가 같은 트랜잭션에서 thumb 잡 enqueue
+}
+
 // SearchMode는 검색 경로. q 3자 이상 → FTS5, 미만 → LIKE 폴백.
 type SearchMode string
 
@@ -130,6 +145,22 @@ type Store interface {
 
 	// GetLink는 상세 조회. 소프트 삭제됐거나 없으면 ErrNotFound.
 	GetLink(ctx context.Context, id int64) (*LinkDetail, error)
+
+	// GetLinkURL은 scrape/thumb 잡 핸들러가 link_id로부터 원본 URL과 url_hash를 얻는다.
+	// urlHash는 썸네일 경로 규칙(data/thumbs/{hash[:2]}/{hash}.jpg)에 쓰인다.
+	// 소프트 삭제됐거나 없으면 ErrNotFound.
+	GetLinkURL(ctx context.Context, linkID int64) (url, urlHash string, err error)
+
+	// ApplyScrape는 scrape 결과를 한 writer 트랜잭션으로 반영한다:
+	// links 메타데이터 UPDATE + status='done' + FTS 재색인, 그리고 m.HasImage면
+	// 같은 트랜잭션에서 thumb 잡을 EnqueueTx한다. 커밋 성공 후 (thumb enqueue 시) Wake.
+	// tag 핸들러는 M3 — 이 단계에서 tag 잡은 enqueue하지 않는다.
+	// 링크가 없거나 소프트 삭제됐으면 ErrNotFound.
+	ApplyScrape(ctx context.Context, linkID int64, m ScrapeResult) error
+
+	// SetThumbPath는 thumb 잡 핸들러가 성공 시 호출 — links.thumb_path에 상대 경로를 기록한다.
+	// best-effort 경로라 실패해도 링크 상태는 불변(호출자가 판단). 링크 부재/삭제면 ErrNotFound.
+	SetThumbPath(ctx context.Context, linkID int64, relPath string) error
 
 	// ListLinks는 keyset 커서 목록. tag는 태그 이름 필터, status는 links.status 필터
 	// (각각 빈 문자열이면 미적용). cursor는 이전 응답의 nextCursor (첫 페이지는 "").
