@@ -10,7 +10,7 @@ import (
 
 // Config는 프로세스 전역 설정. Load 한 번으로 채워지며 이후 읽기 전용.
 type Config struct {
-	Addr              string     // PUSHPOINT_ADDR (기본 ":8080")
+	Addr              string     // PUSHPOINT_ADDR (기본 ":8420")
 	DataDir           string     // PUSHPOINT_DATA_DIR (기본 "./data") — DB·썸네일 루트
 	APIKey            string     // PUSHPOINT_API_KEY (필수)
 	ScrapeConcurrency int        // PUSHPOINT_SCRAPE_CONCURRENCY (기본 8)
@@ -24,7 +24,7 @@ type Config struct {
 // Load는 환경 변수에서 설정을 읽는다. PUSHPOINT_API_KEY가 없으면 에러.
 func Load() (Config, error) {
 	cfg := Config{
-		Addr:              getenv("PUSHPOINT_ADDR", ":8080"),
+		Addr:              getenv("PUSHPOINT_ADDR", ":8420"),
 		DataDir:           getenv("PUSHPOINT_DATA_DIR", "./data"),
 		APIKey:            os.Getenv("PUSHPOINT_API_KEY"),
 		ScrapeConcurrency: 8,

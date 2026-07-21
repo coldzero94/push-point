@@ -2550,7 +2550,7 @@ var swaggerSpec = []string{
 	"YGQDQfBTbE3Cu6bHZIn8Tg4F5vBteFXE0XNJOef/f9HEVePITFBKsSxssOf+41r0zIfKmZkbd4Yyf5B8",
 	"s0I9KtV7faLN8sm9Hslmzk4Pxc7HL+D3Zt5XPjjtZza3/96Yxp96c++dz1y/zub02+PxaQCV6UHk6xSe",
 	"7fYLYsjnOK4qkyKF1Bnav1K/l+i8zg8tMm4n36kBfACieBbgLcTcaL3ADuggcQ7umaa70fraDXZMJjZu",
-	"OQoL78JCM/RwJALvdMzppjX8QfSDKPAYMX+fc+iGOKcTkyPc4G5OaAB5dcDDpVcHrnty/z8rbd70eXxQ",
+	"OQoL78JCM/RwJALvdMzppjX8wfmhKPAYMX+fc+iGOKcTkyPc4G5OaAB5dcDDpVcHrnty/z8rbd70eXxQ",
 	"/NpuMsDo+k+h/B6H1Dmt5hg/FfmYQE9O3JOiDXr2w/MjvgKxwPzkL/J4WlX9JBx8v87O+PVmbmT+LwAA",
 	"//8=",
 }

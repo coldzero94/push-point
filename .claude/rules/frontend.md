@@ -22,7 +22,7 @@ paths:
 
 ## 경로·인증·배포
 
-- **오리진 상대 경로만 쓴다** — 절대 URL·호스트 하드코딩 금지(= `http://localhost:8080/...` 류 금지)이지, 문서 상대(`./`) 강제가 아니다. 경로는 `/`로 시작하는 오리진 기준: `/api/v1/...`·`/thumbs/...`·`/healthz`만 호출하고, Vite `base`도 `'/'`로 둔다(`'./'`는 `/links/123` 딥링크에서 자산이 `/links/assets/...`로 풀려 SPA 폴백 index.html이 반환되고 MIME 거부로 부팅이 깨진다). dev(Vite 프록시 :5173 → Go :8080)와 prod(embed same-origin)에서 같은 코드가 동작하는 근거다.
+- **오리진 상대 경로만 쓴다** — 절대 URL·호스트 하드코딩 금지(= `http://localhost:8420/...` 류 금지)이지, 문서 상대(`./`) 강제가 아니다. 경로는 `/`로 시작하는 오리진 기준: `/api/v1/...`·`/thumbs/...`·`/healthz`만 호출하고, Vite `base`도 `'/'`로 둔다(`'./'`는 `/links/123` 딥링크에서 자산이 `/links/assets/...`로 풀려 SPA 폴백 index.html이 반환되고 MIME 거부로 부팅이 깨진다). dev(Vite 프록시 :8421 → Go :8420)와 prod(embed same-origin)에서 같은 코드가 동작하는 근거다.
 - **인증**: API 키는 설정 화면에서 입력받아 localStorage에 저장하고 `Authorization: Bearer`로 붙인다(iOS 패리티). 새 인증 면제를 추가하지 말고, 서버측 loopback 우회·인증 완화도 요구하지 않는다(api.md 규칙 — 면제는 healthz·thumbs 2개뿐).
 - **`dist/`는 미커밋**(빌드 아티팩트 — CI가 `just web-build`로 생성). 프로덕션은 `dist/`를 `//go:embed all:dist` + `http.FileServerFS`로 서빙하되, embed 서빙 코드는 빌드 태그 `embed_frontend` 뒤에 둔다 — dist/ 없으면 컴파일 실패하므로 백엔드 전용 `just build`·CI는 태그 없이 그린 유지, 릴리스만 `web-build && go build -tags embed_frontend`.
 - 표시 폴백은 iOS와 동일 규율: 서버가 `title`을 빈 문자열로 주면(og·title 부재) `domain`(그다음 `url`)을 대신 표시한다 — 빈 셀 방지는 클라이언트 책임.

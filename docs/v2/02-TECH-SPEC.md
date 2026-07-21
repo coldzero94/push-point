@@ -27,7 +27,7 @@ v2의 기술 선택 기준은 하나다. **단일 프로세스, 단일 바이너
 
 | 환경 변수 | 기본값 | 설명 |
 |---|---|---|
-| `PUSHPOINT_ADDR` | `:8080` | 리슨 주소 |
+| `PUSHPOINT_ADDR` | `:8420` | 리슨 주소 |
 | `PUSHPOINT_DATA_DIR` | `./data` | DB·썸네일 저장 위치 |
 | `PUSHPOINT_API_KEY` | (필수) | Bearer 인증 키. `just dev`는 `dev-key`로 설정 |
 | `PUSHPOINT_SCRAPE_CONCURRENCY` | `8` | 스크래퍼 동시성 상한 |

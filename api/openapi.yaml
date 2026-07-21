@@ -10,7 +10,7 @@ info:
     시간 필드는 전부 unix epoch 초 단위 정수다. `GET /debug/pprof/*`(Go 표준 프로파일링)는 서버가 서빙하지만 계약 대상이 아니다.
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8420
 
 security:
   - bearerAuth: []

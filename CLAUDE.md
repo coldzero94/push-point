@@ -21,7 +21,7 @@
 - `just bench-http` — 저장 API HTTP 경로 p99 게이트, p99 < 50ms 초과 시 exit 1 (M1+)
 - `just eval` — nlu/golden/ 태깅 top-3 정확도 측정 (M3+)
 - `just gen` — api/openapi.yaml → backend/internal/api/gen/ 생성 (oapi-codegen v2.8.0 핀, 생성물 커밋)
-- `just web-dev` — Vite dev 서버 :5173 (프록시로 /api·/thumbs·/healthz → :8080, 상대 경로 코드가 prod embed와 동일)
+- `just web-dev` — Vite dev 서버 :8421 (프록시로 /api·/thumbs·/healthz → :8420, 상대 경로 코드가 prod embed와 동일)
 - `just web-build` — frontend/dist/ 빌드 (dist/는 미커밋)
 - `just release` — 웹 빌드 + SPA를 embed한 단일 바이너리 (`backend/bin/pushpoint`, `-tags embed_frontend`)
 - `just web-gen` — api/openapi.yaml → frontend/src/lib/api/schema.d.ts 생성 (openapi-typescript 핀, 생성물 커밋)

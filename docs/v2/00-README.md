@@ -41,7 +41,7 @@ just dev
 링크 저장:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/links \
+curl -X POST http://localhost:8420/api/v1/links \
   -H "Authorization: Bearer dev-key" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "note": "나중에 보기"}'
@@ -52,7 +52,7 @@ curl -X POST http://localhost:8080/api/v1/links \
 
 ```bash
 curl -H "Authorization: Bearer dev-key" \
-  "http://localhost:8080/api/v1/links?limit=20"
+  "http://localhost:8420/api/v1/links?limit=20"
 ```
 
 ## 아키텍처 개요

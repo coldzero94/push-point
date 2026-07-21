@@ -34,13 +34,13 @@ Requirements: Go 1.25+, [just](https://just.systems) (`brew install just`).
 ```bash
 just dev
 # cd backend && PUSHPOINT_API_KEY=dev-key go run ./cmd/pushpoint
-# cold start < 1s, serving at http://localhost:8080
+# cold start < 1s, serving at http://localhost:8420
 ```
 
 Save a link:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/links \
+curl -X POST http://localhost:8420/api/v1/links \
   -H "Authorization: Bearer dev-key" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/article", "note": "read later"}'
@@ -51,7 +51,7 @@ curl -X POST http://localhost:8080/api/v1/links \
 List links:
 
 ```bash
-curl "http://localhost:8080/api/v1/links?limit=20" \
+curl "http://localhost:8420/api/v1/links?limit=20" \
   -H "Authorization: Bearer dev-key"
 # keyset cursor pagination — pass the response's next_cursor as ?cursor=
 ```
@@ -59,7 +59,7 @@ curl "http://localhost:8080/api/v1/links?limit=20" \
 Search:
 
 ```bash
-curl "http://localhost:8080/api/v1/search?q=kubernetes" \
+curl "http://localhost:8420/api/v1/search?q=kubernetes" \
   -H "Authorization: Bearer dev-key"
 # FTS5 trigram full-text search (query >= 3 chars), bm25 ranking
 ```

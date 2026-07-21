@@ -53,7 +53,7 @@ Go/backend와 동일하게 루트 `justfile`에서 실행한다. 웹 레시피�
 
 | 명령 | 하는 일 |
 |---|---|
-| `just web-dev` | Vite dev 서버(:5173) — `/api`·`/thumbs`·`/healthz`는 프록시로 Go(:8080)에 전달 |
+| `just web-dev` | Vite dev 서버(:8421) — `/api`·`/thumbs`·`/healthz`는 프록시로 Go(:8420)에 전달 |
 | `just web-gen` | `api/openapi.yaml` → `src/lib/api/schema.d.ts` 타입 생성 (핀 버전) |
 | `just web-gen-check` | `web-gen` 후 `git diff --exit-code` (드리프트 게이트, CI) |
 | `just web-build` | 프로덕션 번들 → `frontend/dist/` (embed 대상) |
@@ -69,7 +69,7 @@ Go/backend와 동일하게 루트 `justfile`에서 실행한다. 웹 레시피�
 - **빌드 태그 `embed_frontend`**: `//go:embed dist`는 `dist/`가 없으면 **컴파일 실패**하므로
   embed 서빙 코드를 `//go:build embed_frontend` 뒤에 둔다. 백엔드 전용 `just build`·CI는
   태그 없이 그린을 유지하고, 릴리스만 `web-build && go build -tags embed_frontend`로 묶는다.
-- **개발**: Vite dev 서버(:5173) + `server.proxy`로 `/api`·`/thumbs`·`/healthz`를 Go(:8080)에
+- **개발**: Vite dev 서버(:8421) + `server.proxy`로 `/api`·`/thumbs`·`/healthz`를 Go(:8420)에
   넘긴다. 클라이언트는 **상대 경로만** 쓰므로 dev(프록시)·prod(embed same-origin) 코드가 동일하다.
 - **인증**: API 키를 설정 화면에서 입력받아 localStorage에 저장하고 `Authorization: Bearer`로
   붙인다(iOS 패리티 — 새 인증 면제를 추가하지 않는다). 서버측 loopback 우회 인증 완화는 **금지**
