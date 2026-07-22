@@ -80,6 +80,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
     post:
       operationId: createLink
       tags: [links]
@@ -136,6 +138,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/links/{id}:
     parameters:
@@ -158,6 +162,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
     patch:
       operationId: updateLink
       tags: [links]
@@ -186,6 +192,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
     delete:
       operationId: deleteLink
       tags: [links]
@@ -200,6 +208,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/links/{id}/retry:
     post:
@@ -233,13 +243,18 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/tags:
     get:
       operationId: listTags
       tags: [tags]
       summary: 태그 사전 조회
-      description: 통제된 태그 사전 전체 + 사용 수(`link_count`, 삭제되지 않은 링크 기준).
+      description: >-
+        통제된 태그 사전 전체 + 사용 수(`link_count`, 삭제되지 않은 링크 기준).
+        `facet`은 여기에만 실린다 — `LinkTag`에는 없으므로 클라이언트가 이 응답을 `Map<tagId, facet>`으로
+        캐시해 목록 행의 칩 색을 해석한다 (링크당 태그 수만큼 페이로드가 늘어나는 것을 피한다).
       responses:
         "200":
           description: 태그 사전
@@ -251,11 +266,15 @@ paths:
                   $ref: "#/components/schemas/Tag"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
     post:
       operationId: createTag
       tags: [tags]
       summary: 태그 생성
-      description: "`name`은 대소문자 무시 UNIQUE — 중복이면 400."
+      description: >-
+        `name`은 대소문자 무시 UNIQUE — 중복이면 400.
+        `facet`은 optional이며 생략하면 `neutral`이다 (클라이언트가 칩 색을 고르는 유일한 입력).
       requestBody:
         required: true
         content:
@@ -275,6 +294,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/tags/{id}:
     parameters:
@@ -284,8 +305,9 @@ paths:
       tags: [tags]
       summary: 태그 수정
       description: >
-        `name`, `aliases` 모두 optional. `aliases`는 규칙 기반 태거의 매칭 대상 —
+        `name`, `aliases`, `facet` 모두 optional (전달한 필드만 교체). `aliases`는 규칙 기반 태거의 매칭 대상 —
         alias를 잘 채우는 것이 태깅 정확도를 올리는 가장 싼 방법이다.
+        `facet`은 태그 분류 축이며, 이 값을 바꾸면 모든 클라이언트에서 그 태그의 칩 색이 바뀐다.
       requestBody:
         required: true
         content:
@@ -305,6 +327,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
     delete:
       operationId: deleteTag
       tags: [tags]
@@ -319,6 +343,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/search:
     get:
@@ -370,6 +396,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/v1/stats:
     get:
@@ -386,8 +414,8 @@ paths:
                 $ref: "#/components/schemas/Stats"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /thumbs/{dir}/{file}:
     get:
@@ -427,6 +455,8 @@ paths:
                 contentMediaType: image/jpeg
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
 components:
   securitySchemes:
@@ -503,6 +533,19 @@ components:
             error:
               code: not_found
               message: link not found
+    InternalError:
+      description: >-
+        서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다.
+        `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다).
+        `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: internal
+              message: internal server error
 
   schemas:
     EpochSeconds:
@@ -527,6 +570,15 @@ components:
       type: string
       description: 잡 상태
       enum: [pending, running, done, failed]
+
+    TagFacet:
+      type: string
+      description: >-
+        태그 분류 축. 클라이언트는 이 값만으로 칩 색 토큰을 고른다 (색 값 자체는 계약에 없다 —
+        라이트/다크 2벌이라 표현은 각 클라이언트가 소유한다). 사전에 없는 새 태그는 neutral로 태어난다.
+        생략 시 동작은 오퍼레이션마다 다르다 — `createTag`는 `neutral`로 생성하고, `updateTag`는 기존 값을 유지한다.
+        (그래서 이 스키마에는 `default`를 두지 않는다. 두면 PATCH에서 "생략 = neutral"로 잘못 읽힌다.)
+      enum: [craft, media, life, neutral]
 
     LinkTag:
       type: object
@@ -681,7 +733,7 @@ components:
     Tag:
       type: object
       description: 태그 사전 항목 + 사용 수
-      required: [id, name, aliases, link_count]
+      required: [id, name, aliases, link_count, facet]
       properties:
         id:
           type: integer
@@ -696,6 +748,8 @@ components:
         link_count:
           type: integer
           description: 이 태그가 붙은 (삭제되지 않은) 링크 수
+        facet:
+          $ref: "#/components/schemas/TagFacet"
 
     TagInput:
       type: object
@@ -707,6 +761,8 @@ components:
           type: array
           items:
             type: string
+        facet:
+          $ref: "#/components/schemas/TagFacet"
 
     Stats:
       type: object

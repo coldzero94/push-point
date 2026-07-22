@@ -182,12 +182,33 @@ func toAPITag(t *store.Tag) gen.Tag {
 	if aliases == nil {
 		aliases = []string{}
 	}
+	facet := gen.TagFacet(t.Facet)
+	if !facet.Valid() {
+		// 저장된 값이 enum 밖일 수 없지만(tags.facet CHECK), 계약 밖 값을 응답에
+		// 흘리는 것보다 default로 접는 쪽이 안전하다.
+		facet = gen.Neutral
+	}
 	return gen.Tag{
 		Id:        int(t.ID),
 		Name:      t.Name,
 		Aliases:   aliases,
+		Facet:     facet,
 		LinkCount: int(t.LinkCount),
 	}
+}
+
+// facetPtr는 요청 바디의 optional facet을 store 인자(*string)로 바꾼다.
+// nil이면 nil (생성=계약 default neutral, 수정=기존 값 유지), enum 밖 값이면 ok=false → 400.
+// JSON 디코더는 enum을 검증하지 않으므로 여기가 CHECK 제약 위반(=500)을 400으로 바꾸는 지점이다.
+func facetPtr(f *gen.TagFacet) (*string, bool) {
+	if f == nil {
+		return nil, true
+	}
+	if !f.Valid() {
+		return nil, false
+	}
+	v := string(*f)
+	return &v, true
 }
 
 // ---- 오퍼레이션 구현 (14개) ----
@@ -420,7 +441,7 @@ func (s *Server) ListTags(ctx context.Context, request gen.ListTagsRequestObject
 	return out, nil
 }
 
-// CreateTag — 201. 이름 중복(NOCASE)은 400.
+// CreateTag — 201. 이름 중복(NOCASE)은 400. facet 생략 시 neutral.
 func (s *Server) CreateTag(ctx context.Context, request gen.CreateTagRequestObject) (gen.CreateTagResponseObject, error) {
 	if request.Body == nil || strings.TrimSpace(request.Body.Name) == "" {
 		return gen.CreateTag400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, "name is required"))}, nil
@@ -429,7 +450,15 @@ func (s *Server) CreateTag(ctx context.Context, request gen.CreateTagRequestObje
 	if request.Body.Aliases != nil {
 		aliases = *request.Body.Aliases
 	}
-	t, err := s.store.CreateTag(ctx, strings.TrimSpace(request.Body.Name), aliases)
+	fp, ok := facetPtr(request.Body.Facet)
+	if !ok {
+		return gen.CreateTag400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, "invalid facet"))}, nil
+	}
+	facet := "" // 생략 = 계약 default (store가 neutral로 접는다)
+	if fp != nil {
+		facet = *fp
+	}
+	t, err := s.store.CreateTag(ctx, strings.TrimSpace(request.Body.Name), aliases, facet)
 	if err != nil {
 		if errors.Is(err, store.ErrDuplicateTag) {
 			return gen.CreateTag400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, "duplicate tag name"))}, nil
@@ -439,7 +468,7 @@ func (s *Server) CreateTag(ctx context.Context, request gen.CreateTagRequestObje
 	return gen.CreateTag201JSONResponse(toAPITag(t)), nil
 }
 
-// UpdateTag — name/aliases 각각 optional.
+// UpdateTag — name/aliases/facet 각각 optional (전달한 필드만 교체).
 func (s *Server) UpdateTag(ctx context.Context, request gen.UpdateTagRequestObject) (gen.UpdateTagResponseObject, error) {
 	if request.Body == nil {
 		return gen.UpdateTag400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, "body is required"))}, nil
@@ -451,7 +480,11 @@ func (s *Server) UpdateTag(ctx context.Context, request gen.UpdateTagRequestObje
 			aliases = []string{}
 		}
 	}
-	t, err := s.store.UpdateTag(ctx, int64(request.Id), request.Body.Name, aliases)
+	facet, ok := facetPtr(request.Body.Facet)
+	if !ok {
+		return gen.UpdateTag400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, "invalid facet"))}, nil
+	}
+	t, err := s.store.UpdateTag(ctx, int64(request.Id), request.Body.Name, aliases, facet)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):

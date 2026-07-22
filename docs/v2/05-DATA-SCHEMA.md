@@ -1,6 +1,6 @@
 # 데이터 스키마
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-22
 
 v2의 저장소는 SQLite 단일 파일(`data/pushpoint.db`)이다. v1의 PostgreSQL 스키마(users, notes, sync_logs, user_stats, stored_images, 트리거)는 전부 폐기했다. 단일 사용자이므로 `users`가 필요 없고, 메모(v1의 `notes` 테이블)는 `links.note` 컬럼으로 흡수됐다. 큐(v1 Redis Streams)는 `jobs` 테이블이, 오브젝트 스토리지(v1 MinIO)는 `data/thumbs/` 디렉터리가 대체한다.
 
@@ -77,7 +77,9 @@ CREATE TABLE tags (                            -- 통제된 태그 사전 (초�
   id         INTEGER PRIMARY KEY,
   name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
   aliases    TEXT NOT NULL DEFAULT '[]',       -- JSON 배열: 동의어/영문·한글 표기
-  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  facet      TEXT NOT NULL DEFAULT 'neutral'   -- 0003에서 ALTER ADD COLUMN (그래서 맨 뒤)
+    CHECK (facet IN ('craft','media','life','neutral'))
 );
 
 CREATE TABLE link_tags (
@@ -158,8 +160,9 @@ CREATE VIRTUAL TABLE links_fts USING fts5(
 |---|---|
 | `name` | 태그 이름. `COLLATE NOCASE`로 대소문자 무시 유니크 |
 | `aliases` | JSON 배열 문자열. 동의어·영문/한글 표기 — Phase A 문자열 매칭의 재료 |
+| `facet` | 분류 축. `craft`(만드는 데 직접 쓰는 레퍼런스) / `media`(형식 자체가 정보) / `life`(일 바깥과 나 자신) / `neutral`(미분류, 기본값). CHECK 값 집합은 `api/openapi.yaml`의 `TagFacet` enum과 같아야 하며 `scripts/lint_enums.sh`가 대조한다 |
 
-v1의 `category`/`color`/`icon`/`usage_count` 컬럼은 폐기. 사용 수는 집계 컬럼 대신 쿼리로 구한다 (§6).
+v1의 `category`/`icon`/`usage_count` 컬럼은 폐기. 사용 수는 집계 컬럼 대신 쿼리로 구한다 (§6). v1의 `color`도 폐기했다 — **DB에 색을 저장하지 않는다.** 저장하는 것은 의미(`facet`)뿐이고, 그 facet을 어떤 색으로 그릴지는 각 클라이언트가 자기 토큰 체계로 정한다 (색은 라이트/다크 2벌이라 DB 컬럼 하나로 표현할 수 없고, 저장하는 순간 표현이 서버로 역전된다).
 
 **link_tags**
 
@@ -360,7 +363,7 @@ RETURNING id, kind, link_id, attempts;
 ### 태그별 카운트 (`GET /api/v1/tags`)
 
 ```sql
-SELECT t.id, t.name, t.aliases, COUNT(l.id) AS link_count
+SELECT t.id, t.name, t.aliases, t.facet, COUNT(l.id) AS link_count
 FROM tags t
 LEFT JOIN link_tags lt ON lt.tag_id = t.id
 LEFT JOIN links l      ON l.id = lt.link_id AND l.deleted_at IS NULL
@@ -403,6 +406,8 @@ INSERT INTO tags (name, aliases) VALUES
 ```
 
 `aliases`가 Phase A 문자열·동의어 매칭의 재료이므로, 영문/한글 표기와 흔한 동의어를 함께 넣는 것이 태깅 품질에 직결된다.
+
+시드 30개의 `facet`은 `0003_tag_facet.up.sql`이 UPDATE 3문으로 배정한다 — craft 18개(`dev`, `golang`, `kubernetes`, `ios`, `swift`, `python`, `rust`, `javascript`, `frontend`, `backend`, `database`, `devops`, `security`, `opensource`, `ai`, `llm`, `data`, `design`), media 5개(`article`, `video`, `tutorial`, `book`, `podcast`), life 7개(`news`, `science`, `finance`, `career`, `productivity`, `travel`, `life`). 세 문장이 시드 30개를 남김 없이 덮으므로 `neutral`로 남는 시드는 없고, `neutral`은 이후 사용자가 새로 만든 태그가 태어나는 자리다.
 
 ---
 

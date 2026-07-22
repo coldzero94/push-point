@@ -1,6 +1,6 @@
 # Push-Point 문서
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-22
 
 **Push-Point**는 유튜브 영상이나 웹 아티클을 공유하면 자동으로 태그가 붙고, 태그·검색으로 다시 찾아볼 수 있는 개인용 링크 아카이브다.
 
@@ -27,6 +27,8 @@ v2의 핵심 가치는 네 가지다.
 | [07-DEPLOYMENT.md](07-DEPLOYMENT.md) | 실행·운영 방법, 환경 변수, 백업, `deploy/k8s-future/` 보존 정책 |
 | [08-DEVELOPMENT-PLAN.md](08-DEVELOPMENT-PLAN.md) | 마일스톤 M1~M6 (6개월), 각 단계 완료 기준 |
 | [09-PLAN-REVIEW.md](09-PLAN-REVIEW.md) | 계획 점검 결과 (2026-07-20) — 권고 8건 v2.1 반영 완료 |
+| [10-DESIGN-SYSTEM.md](10-DESIGN-SYSTEM.md) | 디자인 시스템 — 토큰(색·타이포·간격·모션), 컴포넌트 명세, 접근성 기준, 웹↔iOS 대응표 |
+| [11-WEB-UX-SPEC.md](11-WEB-UX-SPEC.md) | 웹 UX 명세 — 화면 7개의 레이아웃·상태·반응형, 계약 필드 매핑, 키보드 단축키, 구현 우선순위 |
 
 ## 빠른 시작
 

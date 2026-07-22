@@ -37,10 +37,19 @@ func decodeAliases(raw string) ([]string, error) {
 	return a, nil
 }
 
+// normalizeFacet은 빈 facet을 계약 default(neutral)로 접는다. 값 검증은 하지 않는다 —
+// 잘못된 값은 tags.facet CHECK 제약이 막고(0003), API 계층이 gen.TagFacet.Valid()로 400을 낸다.
+func normalizeFacet(facet string) string {
+	if facet == "" {
+		return FacetNeutral
+	}
+	return facet
+}
+
 // ListTags는 태그 사전 전체 + 부착된 미삭제 링크 수 (link_count 내림차순).
 func (s *sqliteStore) ListTags(ctx context.Context) ([]Tag, error) {
 	rows, err := s.db.Reader.QueryContext(ctx, `
-		SELECT t.id, t.name, t.aliases, t.created_at, COUNT(l.id) AS link_count
+		SELECT t.id, t.name, t.aliases, t.facet, t.created_at, COUNT(l.id) AS link_count
 		FROM tags t
 		LEFT JOIN link_tags lt ON lt.tag_id = t.id
 		LEFT JOIN links l      ON l.id = lt.link_id AND l.deleted_at IS NULL
@@ -56,7 +65,7 @@ func (s *sqliteStore) ListTags(ctx context.Context) ([]Tag, error) {
 			t   Tag
 			raw string
 		)
-		if err := rows.Scan(&t.ID, &t.Name, &raw, &t.CreatedAt, &t.LinkCount); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &raw, &t.Facet, &t.CreatedAt, &t.LinkCount); err != nil {
 			return nil, fmt.Errorf("store: 태그 스캔 실패: %w", err)
 		}
 		if t.Aliases, err = decodeAliases(raw); err != nil {
@@ -71,12 +80,13 @@ func (s *sqliteStore) ListTags(ctx context.Context) ([]Tag, error) {
 }
 
 // CreateTag는 태그를 추가한다. 이름 중복(NOCASE)이면 ErrDuplicateTag.
-func (s *sqliteStore) CreateTag(ctx context.Context, name string, aliases []string) (*Tag, error) {
+// facet이 빈 문자열이면 FacetNeutral로 저장한다 (계약의 default).
+func (s *sqliteStore) CreateTag(ctx context.Context, name string, aliases []string, facet string) (*Tag, error) {
 	raw, err := encodeAliases(aliases)
 	if err != nil {
 		return nil, err
 	}
-	t := Tag{Name: name}
+	t := Tag{Name: name, Facet: normalizeFacet(facet)}
 	if t.Aliases, err = decodeAliases(raw); err != nil {
 		return nil, err
 	}
@@ -91,8 +101,8 @@ func (s *sqliteStore) CreateTag(ctx context.Context, name string, aliases []stri
 			return fmt.Errorf("store: 태그 중복 확인 실패: %w", err)
 		}
 		if err := tx.QueryRowContext(ctx,
-			`INSERT INTO tags (name, aliases) VALUES (?, ?) RETURNING id, created_at`,
-			name, raw).Scan(&t.ID, &t.CreatedAt); err != nil {
+			`INSERT INTO tags (name, aliases, facet) VALUES (?, ?, ?) RETURNING id, created_at`,
+			name, raw, t.Facet).Scan(&t.ID, &t.CreatedAt); err != nil {
 			return fmt.Errorf("store: tags INSERT 실패: %w", err)
 		}
 		return nil
@@ -103,18 +113,18 @@ func (s *sqliteStore) CreateTag(ctx context.Context, name string, aliases []stri
 	return &t, nil // 방금 만든 태그 — LinkCount는 0
 }
 
-// UpdateTag는 이름/별칭을 수정한다. name/aliases 각각 nil이면 유지.
+// UpdateTag는 이름/별칭/facet을 수정한다. name/aliases/facet 각각 nil이면 유지.
 // 이름이 바뀌면 부착 링크들의 FTS tags 텍스트를 같은 트랜잭션에서 재색인.
-func (s *sqliteStore) UpdateTag(ctx context.Context, id int64, name *string, aliases []string) (*Tag, error) {
+func (s *sqliteStore) UpdateTag(ctx context.Context, id int64, name *string, aliases []string, facet *string) (*Tag, error) {
 	var t Tag
 	err := s.withWriteTx(ctx, func(tx *sql.Tx) error {
 		var (
-			curName, curAliases string
-			createdAt           int64
+			curName, curAliases, curFacet string
+			createdAt                     int64
 		)
 		err := tx.QueryRowContext(ctx,
-			`SELECT name, aliases, created_at FROM tags WHERE id = ?`, id,
-		).Scan(&curName, &curAliases, &createdAt)
+			`SELECT name, aliases, facet, created_at FROM tags WHERE id = ?`, id,
+		).Scan(&curName, &curAliases, &curFacet, &createdAt)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -142,8 +152,13 @@ func (s *sqliteStore) UpdateTag(ctx context.Context, id int64, name *string, ali
 				return err
 			}
 		}
+		newFacet := curFacet
+		if facet != nil {
+			newFacet = normalizeFacet(*facet)
+		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tags SET name = ?, aliases = ? WHERE id = ?`, newName, newAliases, id); err != nil {
+			`UPDATE tags SET name = ?, aliases = ?, facet = ? WHERE id = ?`,
+			newName, newAliases, newFacet, id); err != nil {
 			return fmt.Errorf("store: tags UPDATE 실패: %w", err)
 		}
 		if renamed {
@@ -151,7 +166,7 @@ func (s *sqliteStore) UpdateTag(ctx context.Context, id int64, name *string, ali
 				return err
 			}
 		}
-		t = Tag{ID: id, Name: newName, CreatedAt: createdAt}
+		t = Tag{ID: id, Name: newName, Facet: newFacet, CreatedAt: createdAt}
 		if t.Aliases, err = decodeAliases(newAliases); err != nil {
 			return err
 		}

@@ -1,6 +1,6 @@
 # API 명세서
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-22
 
 > 이 문서는 사람용 해설·예시다. **기계가 읽는 원본은 [api/openapi.yaml](../../api/openapi.yaml)**이며 백엔드·iOS 클라이언트 코드가 여기서 생성된다. 두 문서가 다르면 openapi.yaml이 우선하고, 스펙 변경 시 이 문서를 같은 커밋에서 갱신한다.
 
@@ -47,6 +47,8 @@ curl -H "Authorization: Bearer dev-key" http://localhost:8420/api/v1/links
 | `internal` | 500 | 서버 내부 오류 |
 
 에러 코드는 이 4개가 전부다. 단일 사용자이므로 `forbidden`, 큐가 인프로세스이므로 `rate_limit` 같은 코드는 존재하지 않는다.
+
+**모든 오퍼레이션에 공통으로 붙는 응답이 둘 있다.** 인증이 필요한 모든 엔드포인트는 401 `unauthorized`를 낼 수 있고(면제는 `GET /healthz`와 `GET /thumbs/{dir}/{file}` 둘뿐), 500 `internal`은 `GET /healthz` **하나만** 면제된다 — healthz 핸들러는 조건 없는 단일 반환이라 실패 경로 자체가 없다. 썸네일 서빙은 인증은 면제지만 `os.Open`/`Stat`이 ENOENT 아닌 이유로 실패하면 500을 내므로 500 면제가 아니다(권한 없는 파일에 대해 실측 확인). 계약(`api/openapi.yaml`)에도 `Unauthorized` / `InternalError` 응답 컴포넌트 참조로 이 경계 그대로 선언돼 있다. 아래 각 엔드포인트의 "상태 코드" 줄은 이 둘을 매번 반복하지 않는다. 500은 핸들러가 처리하지 못한 에러의 공통 종착점이며, 서버는 이때도 같은 `{error:{code,message}}` 형식을 지킨다(HTML이나 빈 본문을 내보내지 않는다).
 
 ## 2. 커서 페이지네이션 규약
 
@@ -261,6 +263,21 @@ POST /api/v1/links/{id}/retry
 
 태그는 자유 문자열이 아니라 **통제된 사전**(초기 30~50개 시드, 사용자 수정 가능)이다. NLU 태거는 이 사전에 대한 분류만 수행하므로, 사전 관리 API가 곧 태깅 품질 관리 도구다.
 
+**facet — 태그의 분류 축**
+
+각 태그는 `facet`을 하나 갖는다: `craft` / `media` / `life` / `neutral` (기본값 `neutral`).
+
+| facet | 의미 | 시드 배정 |
+|---|---|---|
+| `craft` | 내가 만드는 것에 직접 쓰는 레퍼런스 | 18개 (`dev`, `golang`, `ios`, `ai`, `design` 등) |
+| `media` | 형식 자체가 정보인 태그 — 다시 열 때의 시간 비용을 알려준다 | 5개 (`article`, `video`, `tutorial`, `book`, `podcast`) |
+| `life` | 일 바깥과 나 자신 | 7개 (`news`, `science`, `finance`, `career`, `productivity`, `travel`, `life`) |
+| `neutral` | 아직 분류되지 않음 | 시드 30개에는 없음 — 새로 만든 태그가 여기서 태어난다 |
+
+**서버는 "어느 facet인가"(데이터)만 소유하고, "그 facet이 무슨 색인가"(표현)는 각 클라이언트가 소유한다.** 계약에 색 값(hex)을 넣지 않는 이유는 색이 라이트/다크 2벌인데 계약은 1벌만 줄 수 있고, 그렇게 하면 토큰 체계를 서버가 아는 역전이 생기기 때문이다. 웹과 iOS는 같은 원본(`Tag.facet`)에서 각자의 플랫폼 토큰으로 매핑한다.
+
+`facet`은 **`Tag`에만 있고 `LinkTag`(링크에 부착된 태그)에는 없다.** 목록 화면은 필터 바를 위해 이미 `GET /api/v1/tags` 전량을 들고 있으므로 `Map<tagId, facet>`으로 해석하면 되고, 링크 10만 건 목표에서 `LinkTag`마다 facet 문자열을 실으면 페이로드가 링크당 태그 수만큼 늘어난다. 캐시에 없는 태그는 `neutral`로 렌더하는 것이 정확한 폴백이다.
+
 ### 5.1 태그 사전 조회
 
 ```
@@ -270,12 +287,12 @@ GET /api/v1/tags
 **Response** (200 OK):
 ```json
 [
-  {"id": 3, "name": "dev", "aliases": ["개발", "프로그래밍", "coding"], "link_count": 42},
-  {"id": 7, "name": "video", "aliases": ["영상"], "link_count": 28}
+  {"id": 3, "name": "dev", "aliases": ["개발", "프로그래밍", "coding"], "link_count": 42, "facet": "craft"},
+  {"id": 7, "name": "video", "aliases": ["영상"], "link_count": 28, "facet": "media"}
 ]
 ```
 
-`link_count`는 해당 태그가 붙은 (삭제되지 않은) 링크 수.
+`link_count`는 해당 태그가 붙은 (삭제되지 않은) 링크 수. `facet`은 required — 클라이언트는 이 응답을 태그 색 해석의 유일한 원본으로 삼는다.
 
 ### 5.2 태그 생성
 
@@ -287,9 +304,12 @@ POST /api/v1/tags
 ```json
 {
   "name": "ml",
-  "aliases": ["머신러닝", "machine learning"]
+  "aliases": ["머신러닝", "machine learning"],
+  "facet": "craft"
 }
 ```
+
+`facet`은 optional이며 생략하면 `neutral`로 저장된다.
 
 **Response** (201 Created):
 ```json
@@ -297,11 +317,12 @@ POST /api/v1/tags
   "id": 15,
   "name": "ml",
   "aliases": ["머신러닝", "machine learning"],
-  "link_count": 0
+  "link_count": 0,
+  "facet": "craft"
 }
 ```
 
-**상태 코드**: 201 / 400(이름 중복 — `name`은 대소문자 무시 UNIQUE)
+**상태 코드**: 201 / 400(이름 중복 — `name`은 대소문자 무시 UNIQUE, 또는 enum 밖 `facet`)
 
 ### 5.3 태그 수정
 
@@ -313,15 +334,16 @@ PATCH /api/v1/tags/{id}
 ```json
 {
   "name": "ml",
-  "aliases": ["머신러닝", "machine learning", "딥러닝"]
+  "aliases": ["머신러닝", "machine learning", "딥러닝"],
+  "facet": "craft"
 }
 ```
 
-`name`, `aliases` 모두 optional. `aliases`는 동의어·영문/한글 표기를 담는 배열로, 규칙 기반 태거의 매칭 대상이다 — alias를 잘 채우는 것이 태깅 정확도를 올리는 가장 싼 방법이다.
+`name`, `aliases`, `facet` 모두 optional이고 전달한 필드만 교체된다. `aliases`는 동의어·영문/한글 표기를 담는 배열로, 규칙 기반 태거의 매칭 대상이다 — alias를 잘 채우는 것이 태깅 정확도를 올리는 가장 싼 방법이다. `facet`을 바꾸면 모든 클라이언트에서 그 태그의 칩 색이 함께 바뀐다.
 
 **Response** (200 OK): 수정된 태그(5.2 응답과 동일 형태).
 
-**상태 코드**: 200 / 400 / 404
+**상태 코드**: 200 / 400(이름 중복, enum 밖 `facet`) / 404
 
 ### 5.4 태그 삭제
 
@@ -407,6 +429,8 @@ FTS 모드의 커서는 bm25 rank 기반 keyset이므로, 페이지 사이에 �
 
 `by_day`는 최근 30일 일별 저장 수.
 
+**상태 코드**: 200 — 404는 없다. 집계 전용 엔드포인트라 "없음" 상태가 존재하지 않고, 빈 DB에서도 `total_links: 0` + 빈 배열로 200을 낸다.
+
 ## 8. 썸네일 정적 서빙
 
 ### GET /thumbs/{dir}/{file}
@@ -419,7 +443,7 @@ GET /thumbs/a3/a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8a3f1b2c4d5e6f7a8.
 
 이 엔드포인트는 **인증이 면제된다** — Tailscale이 네트워크 경계를 이루고, iOS `AsyncImage`가 커스텀 헤더를 지원하지 않기 때문이다. 썸네일은 단일 사이즈(최대 폭 640px, JPEG q80) 하나뿐이므로 v1처럼 사이즈 변형을 경로로 고르는 개념이 없다.
 
-**상태 코드**: 200(`image/jpeg`) / 404
+**상태 코드**: 200(`image/jpeg`) / 404 / 500(파일은 있으나 열기·`stat`에 실패 — 인증만 면제일 뿐 500 면제는 아니다)
 
 ## 9. 프로파일링
 

@@ -41,14 +41,14 @@ func newFakeStore() *fakeStore {
 		deleted: make(map[int64]bool),
 		tags:    make(map[int64]*store.Tag),
 	}
-	f.mustAddTag("dev")
-	f.mustAddTag("golang")
+	f.mustAddTag("dev", store.FacetCraft)
+	f.mustAddTag("golang", store.FacetCraft)
 	return f
 }
 
-func (f *fakeStore) mustAddTag(name string) {
+func (f *fakeStore) mustAddTag(name, facet string) {
 	f.nextTag++
-	f.tags[f.nextTag] = &store.Tag{ID: f.nextTag, Name: name, Aliases: []string{}}
+	f.tags[f.nextTag] = &store.Tag{ID: f.nextTag, Name: name, Aliases: []string{}, Facet: facet}
 }
 
 // addLink는 테스트 픽스처 주입용 (Store 계약 밖).
@@ -231,7 +231,7 @@ func (f *fakeStore) ListTags(ctx context.Context) ([]store.Tag, error) {
 	return out, nil
 }
 
-func (f *fakeStore) CreateTag(ctx context.Context, name string, aliases []string) (*store.Tag, error) {
+func (f *fakeStore) CreateTag(ctx context.Context, name string, aliases []string, facet string) (*store.Tag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, t := range f.tags {
@@ -239,14 +239,17 @@ func (f *fakeStore) CreateTag(ctx context.Context, name string, aliases []string
 			return nil, store.ErrDuplicateTag
 		}
 	}
+	if facet == "" {
+		facet = store.FacetNeutral // 계약 default — sqliteStore와 같은 규칙
+	}
 	f.nextTag++
-	t := &store.Tag{ID: f.nextTag, Name: name, Aliases: aliases}
+	t := &store.Tag{ID: f.nextTag, Name: name, Aliases: aliases, Facet: facet}
 	f.tags[t.ID] = t
 	cp := *t
 	return &cp, nil
 }
 
-func (f *fakeStore) UpdateTag(ctx context.Context, id int64, name *string, aliases []string) (*store.Tag, error) {
+func (f *fakeStore) UpdateTag(ctx context.Context, id int64, name *string, aliases []string, facet *string) (*store.Tag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	t, ok := f.tags[id]
@@ -258,6 +261,14 @@ func (f *fakeStore) UpdateTag(ctx context.Context, id int64, name *string, alias
 	}
 	if aliases != nil {
 		t.Aliases = aliases
+	}
+	if facet != nil {
+		// sqliteStore.UpdateTag의 normalizeFacet과 같은 규칙 — 빈 문자열은 neutral로 접는다.
+		if *facet == "" {
+			t.Facet = store.FacetNeutral
+		} else {
+			t.Facet = *facet
+		}
 	}
 	cp := *t
 	return &cp, nil
@@ -953,5 +964,97 @@ func TestTagsCRUD(t *testing.T) {
 	rec = do(t, h, http.MethodDelete, fmt.Sprintf("/api/v1/tags/%d", tag.ID), "", testKey)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("재삭제 status = %d, want 404", rec.Code)
+	}
+}
+
+// apiTag는 태그 응답 디코드용 — facet이 계약상 required라 값 타입으로 받는다
+// (누락되면 빈 문자열이 되어 단언에서 걸린다).
+type apiTag struct {
+	ID      int64    `json:"id"`
+	Name    string   `json:"name"`
+	Aliases []string `json:"aliases"`
+	Facet   string   `json:"facet"`
+}
+
+// TestTagFacet은 계약(TagFacet: craft|media|life|neutral, default neutral)의
+// HTTP 표면을 검증한다 — 생략 시 neutral, 생성 시 지정, 목록 포함, enum 밖 값은 400.
+func TestTagFacet(t *testing.T) {
+	_, h, _ := newTestRouter(t)
+
+	// facet 생략 → 계약 default neutral
+	rec := do(t, h, http.MethodPost, "/api/v1/tags", `{"name":"신규태그"}`, testKey)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d (body=%q)", rec.Code, rec.Body.String())
+	}
+	var created apiTag
+	decodeJSON(t, rec, &created)
+	if created.Facet != "neutral" {
+		t.Fatalf("facet 생략 시 = %q, want neutral", created.Facet)
+	}
+
+	// 생성 시 facet 지정
+	rec = do(t, h, http.MethodPost, "/api/v1/tags", `{"name":"팟캐스트","facet":"media"}`, testKey)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("facet 지정 create status = %d (body=%q)", rec.Code, rec.Body.String())
+	}
+	var media apiTag
+	decodeJSON(t, rec, &media)
+	if media.Facet != "media" {
+		t.Fatalf("생성 시 지정 facet = %q, want media", media.Facet)
+	}
+
+	// enum 밖 값 → 400 invalid_input (CHECK 제약이 500을 내기 전에 핸들러가 막는다)
+	rec = do(t, h, http.MethodPost, "/api/v1/tags", `{"name":"엉터리","facet":"bogus"}`, testKey)
+	if rec.Code != http.StatusBadRequest || errCode(t, rec) != "invalid_input" {
+		t.Fatalf("잘못된 facet: status=%d body=%q, want 400 invalid_input", rec.Code, rec.Body.String())
+	}
+
+	// PATCH로 facet 교체
+	rec = do(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/tags/%d", media.ID), `{"facet":"life"}`, testKey)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("facet 수정 status = %d (body=%q)", rec.Code, rec.Body.String())
+	}
+	var updated apiTag
+	decodeJSON(t, rec, &updated)
+	if updated.Facet != "life" {
+		t.Fatalf("수정 후 facet = %q, want life", updated.Facet)
+	}
+
+	// facet 생략 PATCH → 기존 값 유지 (aliases만 교체)
+	rec = do(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/tags/%d", media.ID), `{"aliases":["오디오"]}`, testKey)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("aliases 수정 status = %d (body=%q)", rec.Code, rec.Body.String())
+	}
+	decodeJSON(t, rec, &updated)
+	if updated.Facet != "life" {
+		t.Fatalf("facet 생략 수정 후 = %q, want life 유지", updated.Facet)
+	}
+
+	// PATCH도 enum 밖 값은 400
+	rec = do(t, h, http.MethodPatch, fmt.Sprintf("/api/v1/tags/%d", media.ID), `{"facet":"rainbow"}`, testKey)
+	if rec.Code != http.StatusBadRequest || errCode(t, rec) != "invalid_input" {
+		t.Fatalf("잘못된 facet 수정: status=%d body=%q, want 400 invalid_input", rec.Code, rec.Body.String())
+	}
+
+	// 목록에 facet이 실린다 — 클라이언트는 이 응답만으로 Map<tagId, facet>을 만든다
+	rec = do(t, h, http.MethodGet, "/api/v1/tags", "", testKey)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status = %d (body=%q)", rec.Code, rec.Body.String())
+	}
+	var list []apiTag
+	decodeJSON(t, rec, &list)
+	if len(list) == 0 {
+		t.Fatal("태그 목록이 비었다")
+	}
+	valid := map[string]bool{"craft": true, "media": true, "life": true, "neutral": true}
+	got := map[string]string{}
+	for _, tg := range list {
+		if !valid[tg.Facet] {
+			t.Fatalf("목록의 facet = %q (tag=%q), want enum 값", tg.Facet, tg.Name)
+		}
+		got[tg.Name] = tg.Facet
+	}
+	if got["dev"] != "craft" || got["신규태그"] != "neutral" || got["팟캐스트"] != "life" {
+		t.Fatalf("목록 facet = %+v", got)
 	}
 }
