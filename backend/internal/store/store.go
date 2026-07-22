@@ -75,12 +75,23 @@ type LinkDetail struct {
 	Jobs        JobSummary
 }
 
+// facet 값 — tags.facet CHECK 제약(migrations/0003_tag_facet.up.sql)과
+// api/openapi.yaml의 TagFacet enum이 같은 집합이어야 한다 (scripts/lint_enums.sh가 검사).
+// facet은 색이 아니라 분류 축이다 — 어떤 색으로 그릴지는 각 클라이언트가 정한다.
+const (
+	FacetCraft   = "craft"
+	FacetMedia   = "media"
+	FacetLife    = "life"
+	FacetNeutral = "neutral" // 계약상 default — 사전에 없는 새 태그는 여기서 태어난다
+)
+
 // Tag는 태그 사전 항목. Aliases는 aliases JSON 컬럼을 디코드한 값.
 type Tag struct {
 	ID        int64
 	Name      string
 	Aliases   []string
-	LinkCount int64 // 부착된 (미삭제) 링크 수 — ListTags/CreateTag 응답용
+	Facet     string // FacetCraft | FacetMedia | FacetLife | FacetNeutral
+	LinkCount int64  // 부착된 (미삭제) 링크 수 — ListTags/CreateTag 응답용
 	CreatedAt int64
 }
 
@@ -186,10 +197,11 @@ type Store interface {
 	ListTags(ctx context.Context) ([]Tag, error)
 
 	// CreateTag는 태그를 추가한다. 이름 중복(NOCASE)이면 ErrDuplicateTag.
-	CreateTag(ctx context.Context, name string, aliases []string) (*Tag, error)
+	// facet이 빈 문자열이면 FacetNeutral로 저장한다 (계약의 default).
+	CreateTag(ctx context.Context, name string, aliases []string, facet string) (*Tag, error)
 
-	// UpdateTag는 이름/별칭을 수정한다. name/aliases 각각 nil이면 유지.
-	UpdateTag(ctx context.Context, id int64, name *string, aliases []string) (*Tag, error)
+	// UpdateTag는 이름/별칭/facet을 수정한다. name/aliases/facet 각각 nil이면 유지.
+	UpdateTag(ctx context.Context, id int64, name *string, aliases []string, facet *string) (*Tag, error)
 
 	// DeleteTag는 사전에서 제거한다 (link_tags 등은 FK CASCADE).
 	DeleteTag(ctx context.Context, id int64) error

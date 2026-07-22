@@ -1,6 +1,6 @@
 # Push-Point 문서 인덱스 (v1 ↔ v2)
 
-> Push-Point v2 — 마지막 업데이트: 2026-07-21
+> Push-Point v2 — 마지막 업데이트: 2026-07-22
 
 ## 안내
 
@@ -21,6 +21,8 @@
 | 07 배포 | [v1](v1/07-K8S-SETTINGS.md) | [v2](v2/07-DEPLOYMENT.md) | Minikube k8s 배포 YAML → 로컬 실행·운영 (Go 1.25 + just가 전부), k8s 매니페스트는 `deploy/k8s-future/`에 보존 |
 | 08 개발 계획 | [v1](v1/08-DEVLOPMENT-PLAN.md) | [v2](v2/08-DEVELOPMENT-PLAN.md) | 8-10주 4 Phase (OpenAI 연동·k8s 배포 포함) → 6개월 M1~M6, golden set 정확도·벤치 등 측정 가능한 DoD |
 | 09 계획 점검 | — (v2 전용) | [v2](v2/09-PLAN-REVIEW.md) | 2026-07-20 적대적 점검 결과: 팩트체크 요약 + 보류 중인 수정 권고 8건 |
+| 10 디자인 시스템 | — (v2 전용) | [v2](v2/10-DESIGN-SYSTEM.md) | v1에는 디자인 명세가 없었음 → 웹·iOS가 공유하는 토큰/컴포넌트/모션/접근성 단일 원본 |
+| 11 웹 UX 명세 | — (v2 전용) | [v2](v2/11-WEB-UX-SPEC.md) | v1에는 클라이언트 UX 명세가 없었음 → 웹 화면 7개의 레이아웃·계약 필드 매핑·단축키·구현 우선순위 |
 
 v1의 07·08은 옛 파일명(`07-K8S-SETTINGS.md`, `08-DEVLOPMENT-PLAN.md` — 오타 포함) 그대로다.
 
@@ -41,3 +43,4 @@ v1의 07·08은 옛 파일명(`07-K8S-SETTINGS.md`, `08-DEVLOPMENT-PLAN.md` — 
 - 처음이면: [v2/00-README.md](v2/00-README.md) → [v2/08-DEVELOPMENT-PLAN.md](v2/08-DEVELOPMENT-PLAN.md) → [v2/03-SYSTEM-ARCHITECTURE.md](v2/03-SYSTEM-ARCHITECTURE.md)
 - 구현하려면: [v2/02-TECH-SPEC.md](v2/02-TECH-SPEC.md) → [v2/05-DATA-SCHEMA.md](v2/05-DATA-SCHEMA.md) → [v2/06-API-SPECIFICATION.md](v2/06-API-SPECIFICATION.md) → [v2/04-DATA-FLOW.md](v2/04-DATA-FLOW.md)
 - v1에서 무엇이 왜 바뀌었는지 궁금하면: 위의 전환 요약 표 → [v2/01-PROJECT-OVERVIEW.md](v2/01-PROJECT-OVERVIEW.md) → [v2/07-DEPLOYMENT.md](v2/07-DEPLOYMENT.md)
+- 클라이언트(웹·iOS)를 만들려면: [v2/10-DESIGN-SYSTEM.md](v2/10-DESIGN-SYSTEM.md) → [v2/11-WEB-UX-SPEC.md](v2/11-WEB-UX-SPEC.md) → [v2/06-API-SPECIFICATION.md](v2/06-API-SPECIFICATION.md)

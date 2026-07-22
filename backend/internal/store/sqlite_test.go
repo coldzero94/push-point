@@ -561,10 +561,10 @@ func TestTags_CRUD(t *testing.T) {
 	}
 
 	// NOCASE 중복 — seed의 dev와 대소문자만 다름
-	if _, err := s.CreateTag(ctx, "DEV", nil); !errors.Is(err, ErrDuplicateTag) {
+	if _, err := s.CreateTag(ctx, "DEV", nil, ""); !errors.Is(err, ErrDuplicateTag) {
 		t.Fatalf("NOCASE 중복 생성 = %v, want ErrDuplicateTag", err)
 	}
-	created, err := s.CreateTag(ctx, "테스트태그", []string{"testtag"})
+	created, err := s.CreateTag(ctx, "테스트태그", []string{"testtag"}, "")
 	if err != nil {
 		t.Fatalf("CreateTag 실패: %v", err)
 	}
@@ -573,11 +573,11 @@ func TestTags_CRUD(t *testing.T) {
 	}
 
 	// 개명 중복 검사
-	if _, err := s.UpdateTag(ctx, created.ID, ptr("golang"), nil); !errors.Is(err, ErrDuplicateTag) {
+	if _, err := s.UpdateTag(ctx, created.ID, ptr("golang"), nil, nil); !errors.Is(err, ErrDuplicateTag) {
 		t.Fatalf("중복 개명 = %v, want ErrDuplicateTag", err)
 	}
 	// aliases만 교체 (name nil → 유지)
-	upd, err := s.UpdateTag(ctx, created.ID, nil, []string{"a", "b"})
+	upd, err := s.UpdateTag(ctx, created.ID, nil, []string{"a", "b"}, nil)
 	if err != nil {
 		t.Fatalf("UpdateTag 실패: %v", err)
 	}
@@ -585,7 +585,7 @@ func TestTags_CRUD(t *testing.T) {
 		t.Fatalf("수정 결과 = %+v", upd)
 	}
 	// 미존재 태그
-	if _, err := s.UpdateTag(ctx, 99999, nil, nil); !errors.Is(err, ErrNotFound) {
+	if _, err := s.UpdateTag(ctx, 99999, nil, nil, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("미존재 수정 = %v, want ErrNotFound", err)
 	}
 
@@ -598,12 +598,105 @@ func TestTags_CRUD(t *testing.T) {
 	}
 }
 
+// TestTags_Facet은 0003 마이그레이션의 facet 컬럼을 검증한다:
+// 시드 30개 배정(craft 18 / media 5 / life 7), 신규 태그 기본값 neutral,
+// 생성 시 지정, 수정 시 교체·유지, CHECK 제약(enum 밖 값 거부).
+func TestTags_Facet(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	ctx := context.Background()
+
+	// 시드 배정 — 0003의 UPDATE 3문이 30개를 전부 덮는다 (neutral로 남는 시드는 없다)
+	tags, err := s.ListTags(ctx)
+	if err != nil {
+		t.Fatalf("ListTags 실패: %v", err)
+	}
+	byFacet := map[string]int{}
+	byName := map[string]string{}
+	for _, tg := range tags {
+		byFacet[tg.Facet]++
+		byName[tg.Name] = tg.Facet
+	}
+	want := map[string]int{FacetCraft: 18, FacetMedia: 5, FacetLife: 7}
+	for f, n := range want {
+		if byFacet[f] != n {
+			t.Errorf("시드 facet %s = %d개, want %d개", f, byFacet[f], n)
+		}
+	}
+	if byFacet[FacetNeutral] != 0 {
+		t.Errorf("시드 neutral = %d개, want 0개 (30개 전부 배정)", byFacet[FacetNeutral])
+	}
+	for name, f := range map[string]string{
+		"golang": FacetCraft, "design": FacetCraft,
+		"podcast": FacetMedia, "video": FacetMedia,
+		"travel": FacetLife, "life": FacetLife,
+	} {
+		if byName[name] != f {
+			t.Errorf("시드 %q facet = %q, want %q", name, byName[name], f)
+		}
+	}
+
+	// 신규 태그 기본값 = neutral (사전에 없는 태그는 색 없이 태어난다)
+	def, err := s.CreateTag(ctx, "새태그", nil, "")
+	if err != nil {
+		t.Fatalf("CreateTag 실패: %v", err)
+	}
+	if def.Facet != FacetNeutral {
+		t.Fatalf("기본 facet = %q, want %q", def.Facet, FacetNeutral)
+	}
+
+	// 생성 시 지정
+	got, err := s.CreateTag(ctx, "지정태그", nil, FacetMedia)
+	if err != nil {
+		t.Fatalf("CreateTag(facet) 실패: %v", err)
+	}
+	if got.Facet != FacetMedia {
+		t.Fatalf("생성 시 지정 facet = %q, want %q", got.Facet, FacetMedia)
+	}
+
+	// 목록에도 그대로 실린다 (조회 경로 커버)
+	tags, err = s.ListTags(ctx)
+	if err != nil {
+		t.Fatalf("ListTags 실패: %v", err)
+	}
+	byName = map[string]string{}
+	for _, tg := range tags {
+		byName[tg.Name] = tg.Facet
+	}
+	if byName["새태그"] != FacetNeutral || byName["지정태그"] != FacetMedia {
+		t.Fatalf("목록 facet = 새태그:%q 지정태그:%q", byName["새태그"], byName["지정태그"])
+	}
+
+	// 수정 — facet nil이면 유지, 값이 있으면 교체
+	upd, err := s.UpdateTag(ctx, got.ID, nil, []string{"오디오"}, nil)
+	if err != nil {
+		t.Fatalf("UpdateTag 실패: %v", err)
+	}
+	if upd.Facet != FacetMedia {
+		t.Fatalf("facet nil 수정 후 = %q, want %q 유지", upd.Facet, FacetMedia)
+	}
+	upd, err = s.UpdateTag(ctx, got.ID, nil, nil, ptr(FacetLife))
+	if err != nil {
+		t.Fatalf("UpdateTag(facet) 실패: %v", err)
+	}
+	if upd.Facet != FacetLife {
+		t.Fatalf("facet 교체 후 = %q, want %q", upd.Facet, FacetLife)
+	}
+
+	// CHECK 제약 — enum 밖 값은 DB가 막는다 (API 계층 검증의 백스톱)
+	if _, err := s.CreateTag(ctx, "엉터리", nil, "rainbow"); err == nil {
+		t.Fatal("enum 밖 facet 생성이 성공했다 — CHECK 제약 미동작")
+	}
+	if _, err := s.UpdateTag(ctx, got.ID, nil, nil, ptr("rainbow")); err == nil {
+		t.Fatal("enum 밖 facet 수정이 성공했다 — CHECK 제약 미동작")
+	}
+}
+
 func TestTagRenameAndDelete_ReindexFTS(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
 	id, _, _, _ := s.SaveLink(ctx, "https://t.com/1", "")
-	created, err := s.CreateTag(ctx, "옛이름", nil)
+	created, err := s.CreateTag(ctx, "옛이름", nil, "")
 	if err != nil {
 		t.Fatalf("CreateTag 실패: %v", err)
 	}
@@ -612,7 +705,7 @@ func TestTagRenameAndDelete_ReindexFTS(t *testing.T) {
 	}
 
 	// 개명 → 부착 링크의 FTS tags 텍스트가 새 이름으로 재색인
-	if _, err := s.UpdateTag(ctx, created.ID, ptr("새이름표"), nil); err != nil {
+	if _, err := s.UpdateTag(ctx, created.ID, ptr("새이름표"), nil, nil); err != nil {
 		t.Fatalf("UpdateTag 실패: %v", err)
 	}
 	items, _, _, err := s.Search(ctx, "새이름표", "", nil, nil, "", 20)

@@ -108,13 +108,13 @@ export interface paths {
         };
         /**
          * 태그 사전 조회
-         * @description 통제된 태그 사전 전체 + 사용 수(`link_count`, 삭제되지 않은 링크 기준).
+         * @description 통제된 태그 사전 전체 + 사용 수(`link_count`, 삭제되지 않은 링크 기준). `facet`은 여기에만 실린다 — `LinkTag`에는 없으므로 클라이언트가 이 응답을 `Map<tagId, facet>`으로 캐시해 목록 행의 칩 색을 해석한다 (링크당 태그 수만큼 페이로드가 늘어나는 것을 피한다).
          */
         get: operations["listTags"];
         put?: never;
         /**
          * 태그 생성
-         * @description `name`은 대소문자 무시 UNIQUE — 중복이면 400.
+         * @description `name`은 대소문자 무시 UNIQUE — 중복이면 400. `facet`은 optional이며 생략하면 `neutral`이다 (클라이언트가 칩 색을 고르는 유일한 입력).
          */
         post: operations["createTag"];
         delete?: never;
@@ -145,7 +145,7 @@ export interface paths {
         head?: never;
         /**
          * 태그 수정
-         * @description `name`, `aliases` 모두 optional. `aliases`는 규칙 기반 태거의 매칭 대상 — alias를 잘 채우는 것이 태깅 정확도를 올리는 가장 싼 방법이다.
+         * @description `name`, `aliases`, `facet` 모두 optional (전달한 필드만 교체). `aliases`는 규칙 기반 태거의 매칭 대상 — alias를 잘 채우는 것이 태깅 정확도를 올리는 가장 싼 방법이다. `facet`은 태그 분류 축이며, 이 값을 바꾸면 모든 클라이언트에서 그 태그의 칩 색이 바뀐다.
          */
         patch: operations["updateTag"];
         trace?: never;
@@ -233,6 +233,11 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "pending" | "running" | "done" | "failed";
+        /**
+         * @description 태그 분류 축. 클라이언트는 이 값만으로 칩 색 토큰을 고른다 (색 값 자체는 계약에 없다 — 라이트/다크 2벌이라 표현은 각 클라이언트가 소유한다). 사전에 없는 새 태그는 neutral로 태어난다. 생략 시 동작은 오퍼레이션마다 다르다 — `createTag`는 `neutral`로 생성하고, `updateTag`는 기존 값을 유지한다. (그래서 이 스키마에는 `default`를 두지 않는다. 두면 PATCH에서 "생략 = neutral"로 잘못 읽힌다.)
+         * @enum {string}
+         */
+        TagFacet: "craft" | "media" | "life" | "neutral";
         /** @description 링크에 부착된 태그 (부착 출처·신뢰도 포함) */
         LinkTag: {
             id: number;
@@ -321,11 +326,13 @@ export interface components {
             aliases: string[];
             /** @description 이 태그가 붙은 (삭제되지 않은) 링크 수 */
             link_count: number;
+            facet: components["schemas"]["TagFacet"];
         };
         /** @description 태그 생성/수정 요청 (생성 시 name 필수) */
         TagInput: {
             name?: string;
             aliases?: string[];
+            facet?: components["schemas"]["TagFacet"];
         };
         /** @description 통계 응답 (iOS 위젯용 — 위젯 활용은 M6) */
         Stats: {
@@ -397,6 +404,23 @@ export interface components {
                  *       "error": {
                  *         "code": "not_found",
                  *         "message": "link not found"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다. */
+        InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "internal",
+                 *         "message": "internal server error"
                  *       }
                  *     }
                  */
@@ -479,6 +503,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
         };
     };
     createLink: {
@@ -535,6 +560,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
         };
     };
     getLink: {
@@ -561,6 +587,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     deleteLink: {
@@ -585,6 +612,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     updateLink: {
@@ -615,6 +643,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     retryLink: {
@@ -650,6 +679,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     listTags: {
@@ -671,6 +701,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
         };
     };
     createTag: {
@@ -697,6 +728,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
         };
     };
     deleteTag: {
@@ -721,6 +753,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     updateTag: {
@@ -751,6 +784,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     search: {
@@ -786,6 +820,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
         };
     };
     getStats: {
@@ -807,7 +842,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     getThumb: {
@@ -840,6 +875,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
 }

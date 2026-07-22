@@ -1,0 +1,1321 @@
+# 디자인 시스템 (Design System)
+
+> Push-Point v2 — 마지막 업데이트: 2026-07-22
+
+이 문서는 Push-Point의 **시각·상호작용 단일 진실 원천**이다. 웹(`frontend/`)과 iOS(`ios/`, M4)가 같은 원본에서 나오도록, 토큰 값·컴포넌트 명세·모션 수치·접근성 기준·플랫폼 대응표를 구현 가능한 수준으로 고정한다.
+
+- 이 문서가 소스, `frontend/tailwind.css`의 `@theme` 블록이 파생물이다. 값을 바꾸려면 이 문서를 먼저 고친다.
+- 토큰 원본을 `design/tokens/` + 생성 파이프라인으로 승격하는 시점은 **M4(iOS) 착수 시점**이다. 소비자가 웹 하나뿐인 지금 생성기를 먼저 만드는 것은 조기 최적화다. 대신 의미 토큰 이름을 **플랫폼 중립**으로 지어(`surface`/`elevated`/`fg-1..3`/`accent`/`danger`) 승격 시 이름이 바뀌지 않게 한다.
+- 관련 문서: 화면·상호작용 명세는 [11-WEB-UX-SPEC.md](11-WEB-UX-SPEC.md), 제품 정체성은 [01-PROJECT-OVERVIEW.md](01-PROJECT-OVERVIEW.md), 화면이 다루는 데이터의 계약은 [05-DATA-SCHEMA.md](05-DATA-SCHEMA.md)와 `api/openapi.yaml`, 프론트엔드 스택 규칙은 `.claude/rules/frontend.md`.
+
+**10과 11의 소유 경계(중복 금지 규칙).** 같은 값을 두 문서에 적지 않는다. 상대 영역은 값을 복제하지 말고 절 번호로 참조한다.
+
+| 이 문서(10)가 원본 | 11-WEB-UX-SPEC.md가 원본 |
+|---|---|
+| 색·타이포·간격·반경·z 사다리, 모션 duration/easing 토큰 | 화면별 레이아웃·필드 매핑·상태·반응형 |
+| 컴포넌트 치수와 변형, 행 치수·브레이크포인트 | **키보드 단축키 표**(§1.2) |
+| **토스트 시각 명세**(위치·개수·지속·색, §4.10) | **토스트를 언제 띄우는가** + 에러 코드 → UI 매핑(§1.4) |
+| 접근성 기준(대비·포커스·모션·히트 영역) | 구현 우선순위(P0~P3)와 계약 공백 목록(§10) |
+| iOS 대응표(§8) | 웹 화면의 동선과 문구 배치 |
+
+## 1. 디자인 원칙
+
+### 1.1 컨셉
+
+> **"기계가 분류한 결과를 사람이 훑는 계기판. 색조는 무엇에 관한 것인지를, 채움은 누가 손댔는지를 말한다."**
+
+Push-Point의 정체성은 "링크를 예쁘게 모으는 곳"이 아니라 **LLM 없이 돌아가는 분류기**다(통제된 사전 30~50개 분류, 저장 후 3초 내 완료, 데이터가 밖으로 나가지 않음). 그래서 화면의 주인공은 썸네일도 콘텐츠도 아니라 **기계의 출력(제목/도메인/태그/상태)과 사람의 개입(수동 태그/메모/필터)의 대비**다. 이 대비를 색조와 채움, 그리고 서체로 코드화하는 것이 이 앱의 디자인이다.
+
+설계 다이얼: 표현 변주(variance) 4 / 모션 강도 3 / 시각 밀도 7. 랜딩이 아니라 도구이므로 비대칭 레이아웃과 스크롤 연출로 목록 스캔 속도를 깎지 않는다. 남는 표현 예산 전부를 **타입 정밀도 + 색 규칙 3개 + 상태 표현**에 쓴다.
+
+### 1.2 지배 규칙 3개 (R1/R2/R3)
+
+| 규칙 | 내용 | 구현상 의미 |
+|---|---|---|
+| **R1. 색조는 정체성, 채움은 개입** | **hue**는 "무엇에 관한 것인가"만 인코딩한다 — 태그 facet 3개(craft 168 / media 112 / life 318)와 브랜드 hue 168뿐이다. **채움 단계(fill level)** 가 "누가 손댔고 지금 켜져 있는가"를 인코딩한다(0=기계 출력 투명 / 1=사람이 붙임·컨트롤 tint / 2=사용자가 선택함 solid). 상태(진행·실패·경고)는 태그 팔레트의 hue를 절대 쓰지 않고 예약된 hue + 형태 + 문장으로만 표현한다 | hue 예약표(§2.1.4)를 벗어난 색이 토큰으로 들어오면 리뷰 반려. facet별 `on-color`는 만들지 않는다(§2.1.3 칩 내부 대비표) |
+| **R2. 기계 데이터는 mono** | 도메인, URL, 저장 시각, 카운트, 신뢰도, 검색 rank는 고정폭. 사람이 쓴 것(제목 표시, 메모)은 sans | `--font-mono` 적용 대상이 계약에 실재하는 필드 단위로 고정(§2.2.4) |
+| **R3. 상태는 배지가 아니라 획** | 행 leading edge의 2px 레일 하나가 진행/실패/선택을 표현. 완료 상태는 아무 표시도 하지 않는다 | `StatusBadge` 5색 매핑 폐기, `StatusRail`로 대체(§4.7). **칩이 유채색이 되어도 상태는 여전히 무채 레일 하나다 — R3가 R1 개정의 전제다** |
+
+**R1 개정 경위(2026-07-22).** 개정 전 R1은 "색은 사람의 흔적"이었고 hue가 개입 여부를 인코딩했다. 개정은 그 **목적을 버리지 않고 채널만 바꾼다** — 사람의 흔적은 이제 채움이 진다. 개정 전보다 강해지는 점: manual 표시가 **모든 facet에서 동일한 형태**로 나타나므로 색맹 조건에서도 살아남는다(hue는 살아남지 못했다). 배경과 확정값은 §2.1.4 · §5.
+
+### 1.3 배제 목록 (하지 않을 것)
+
+- **마케팅 히어로, 스크롤텔링, 패럴랙스, 마퀴, 스크롤 큐** — 도구에 랜딩 문법을 얹지 않는다.
+- **카드 그리드 / 무드보드 / masonry** — 썸네일은 구조적으로 비거나 실패한다(`thumb: failed` + `status: done`은 정상 조합). 이미지 격자는 회색 박스 밭이 된다.
+- **리더뷰** — 스키마에 본문이 없다. primary 액션은 영원히 "원문 열기"다.
+- **뷰 스위처, 밀도 토글, 테마 프리셋 갤러리** — 단일 사용자에게 선택지는 기능이 아니라 세금이다. 밀도는 뷰포트가 결정한다.
+- **그라데이션, 글로우, 뉴모피즘, 유리 카드** — 유리(backdrop blur)는 상단 바와 커맨드 팔레트 딱 2곳.
+- **이모지** — 라벨/빈 상태/버튼 어디에도 없다. 아이콘은 lucide(웹) / SF Symbols(iOS)만, strokeWidth 1.5, 16·20px 두 사이즈.
+- **온보딩 투어, 빈 상태 마스코트, 숫자 카운트업, 3-컬럼 기능 카드.**
+- **태그 색상 해시 + 태그별 사용자 지정 색** — §5.4에서 해시(사전이 바뀌면 전량 재배치 + 의미와 색이 무관)와 개별 지정(GitHub 라벨·Notion select의 실패 사례)의 금지 근거를 명시한다.
+- **shadcn/ui 도입** — 접근성 동작이 필요한 프리미티브(`@radix-ui/react-*` 4~5개)만 직접 의존성으로 넣고 컴포넌트는 우리가 소유한다. 이 토큰 체계가 shadcn 기본값(slate 중성 + 단일 8px radius + 무채도 primary)을 90% 덮어쓰므로 남는 것이 파일 구조뿐이기 때문이다.
+
+### 1.4 시그니처 요소 2개
+
+**S1. 상태 레일** — 각 행 leading edge의 2px 세로 획 하나가 상태 배지·상태 점·선택 체크박스·포커스 표시를 전부 대체한다. 기억에 남는 이유는 장식이 아니라 **제거**다. 정상 상태에는 아무 표시도 없으므로, 화면에 남은 획은 전부 "지금 뭔가 일어나고 있거나 잘못됐다"는 뜻이다.
+
+**S2. 채워지는 행(the fill)** — 저장 제출 즉시 목록 최상단에 행이 생긴다. 이때 실값은 도메인 하나뿐이고 제목/태그/썸네일 자리는 최종 치수 그대로의 스켈레톤이다. 워커가 끝나는 순서대로 제목 → 태그 → 썸네일이 제자리에서 채워진다(그 행만 교체, 목록 전체 리렌더 금지). 앱에서 유일하게 연출된 모션이며, 제품의 핵심 주장(3초 내 자동 분류)을 문장이 아니라 동작으로 증명한다.
+
+**절제 규칙:** S1·S2 외에 "기억에 남는 디테일"을 추가하지 않는다. 세 번째 시그니처를 넣는 순간 둘 다 죽는다. **칩 채움 3단(§4.3)은 S1·S2와 경쟁하는 세 번째 시그니처가 아니다** — 새 형태가 아니라 이미 있는 칩의 상태 축이다.
+
+## 2. 디자인 토큰
+
+### 2.1 색
+
+#### 2.1.1 중성 계조 (12단, 원시 팔레트)
+
+Hue 225 근처의 아주 낮은 채도. 완전 무채색은 한글 본문에서 차갑게 죽고, 채도가 높은 파란 중성은 "핀테크"로 읽힌다. 그 사이. **순수 `#000`/`#fff`는 쓰지 않는다.**
+
+| 토큰 | 값 | 고정 역할 |
+|---|---|---|
+| `--ink-0` | `#FCFDFE` | 라이트 표면(행/입력/패널) |
+| `--ink-50` | `#F4F6F8` | 라이트 페이지 바닥 |
+| `--ink-100` | `#EAEDF1` | 라이트 hover |
+| `--ink-200` | `#DBDFE6` | 라이트 보더(강) |
+| `--ink-300` | `#C2C8D2` | 비활성 텍스트 / 구분선(강) |
+| `--ink-400` | `#9099A6` | 라이트 3차 텍스트, **다크 진행 레일** |
+| `--ink-500` | `#6B7482` | 다크 3차 텍스트(근사값 `#6E7889` 사용) |
+| `--ink-600` | `#515A67` | 라이트 2차 텍스트, **라이트 진행 레일** |
+| `--ink-700` | `#3A424E` | 다크 보더(강) |
+| `--ink-800` | `#262D37` | 다크 표면 상단 단계 — **의미 토큰에 직접 매핑되지 않는다**(다크 `--bg-selected`는 브랜드 tint `#0F2C22`다). 램프 연속성 유지용 |
+| `--ink-900` | `#171C23` | 라이트 1차 텍스트 |
+| `--ink-950` | `#0D1116` | 다크 페이지 바닥 |
+
+원시 팔레트는 **의미 토큰 정의부에서만** 참조한다. 컴포넌트 코드에서 `--ink-*`를 직접 쓰면 lint 실패다.
+
+#### 2.1.2 의미 토큰 (라이트/다크 실제 값)
+
+| 토큰 | 라이트 | 다크 | 용도 |
+|---|---|---|---|
+| `--bg-canvas` | `#F4F6F8` | `#0D1116` | 페이지 바닥 |
+| `--bg-surface` | `#FCFDFE` | `#141920` | 행·입력·툴바 표면 |
+| `--bg-hover` | `#EAEDF1` | `#1A2029` | hover, 썸네일 폴백 배경 |
+| `--bg-elevated` | `#FCFDFE` | `#1B222B` | 인스펙터·팝오버·시트·팔레트 |
+| `--bg-selected` | `#E1F9EF` | `#0F2C22` | 선택된 행 배경(= `--accent-tint`) |
+| `--fg-1` | `#171C23` | `#E8ECF1` | 1차 텍스트(제목, 본문) |
+| `--fg-2` | `#515A67` | `#A8B1BE` | 2차 텍스트(설명, 라벨) |
+| `--fg-3` | `#9099A6` | `#6E7889` | 3차 텍스트(도메인·시각) — **보조 메타 전용** |
+| `--fg-inverse` | `#FCFDFE` | `#06120E` | 액센트/딥 배경 위 텍스트 |
+| `--line-1` | `rgb(13 17 22 / .08)` | `rgb(255 255 255 / .08)` | **장식 헤어라인 전용** — 행 구분선, 카드 링 |
+| `--line-2` | `rgb(13 17 22 / .14)` | `rgb(255 255 255 / .14)` | **장식 헤어라인 전용** — 섹션 구분, 패널 외곽 |
+| `--line-control` | `#767F8C` | `#767F8C` | **컨트롤 경계 전용** — 입력·셀렉트·**필터 바 칩**·secondary 버튼 보더(표시 칩 제외, §4.3) |
+| `--rail-progress` | `var(--ink-600)` | `var(--ink-400)` | 진행 중(pending/scraping/tagging) 상태 레일 |
+| `--accent` | `#197459` | `#2EB88F` | 포커스 링, primary 버튼, 선택된 행 레일, 선택된 `craft` 칩 채움 |
+| `--accent-hover` | `#096149` | `#37CFA1` | 액센트 요소 hover |
+| `--accent-tint` | `#E1F9EF` | `#0F2C22` | 선택된 행 배경 전용(= `--bg-selected`). **manual 칩에는 쓰지 않는다** — manual은 그 태그 자신의 facet tint다(§5.2) |
+| `--on-accent` | `#FCFDFE` | `#06120E` | 액센트 채움 위 텍스트 |
+| `--danger` | `#B4232B` | `#F2706B` | `status: failed`, 4xx/5xx, 삭제 확인 |
+| `--danger-tint` | `#FCEBEA` | `#2A1518` | 실패 배너 배경 |
+| `--warn` | `#8A5300` | `#E3A445` | 중복 저장, 사전에 없는 태그, API 키 미설정 |
+| `--warn-tint` | `#FDF3E2` | `#2A2013` | 경고 배너 배경 |
+
+**태그 facet 팔레트 (신규 토큰 6개 — 전략은 §5).** 색은 개별 태그가 아니라 **facet 3개 + 무채색 1개**가 갖는다.
+
+```
+hue lock:  craft 168  /  media 112  /  life 318
+           hex 반올림 drift: ink 기준 ≤ 0.6°  /  tint 포함 ≤ 1.6°
+           (실측 최대 — ink: craft L 0.55° · tint: media L 1.52°. C 0.028~0.040 tint라 시각 영향 없음)
+```
+
+| facet | 의미 | ink (Light) | tint (Light) | ink (Dark) | tint (Dark) |
+|---|---|---|---|---|---|
+| `craft` | 만드는 것 (브랜드) | **`#004E39`**<br>`oklch(37.63% 0.0767 167.45)` | **`#E1F9EF`**<br>`oklch(96.19% 0.0284 168.81)` | **`#84E4C1`**<br>`oklch(84.97% 0.1047 168.31)` | **`#0F2C22`**<br>`oklch(26.73% 0.0400 168.06)` |
+| `media` | 형식 (읽기/보기/듣기) | **`#54570B`**<br>`oklch(43.98% 0.0921 112.04)` | **`#F2F5E0`**<br>`oklch(96.2% 0.028 112)` | **`#BFC573`**<br>`oklch(80.04% 0.1055 112.17)` | **`#262810`**<br>`oklch(26.8% 0.040 112)` |
+| `life` | 일 바깥 | **`#4B2656`**<br>`oklch(33.98% 0.0915 318.04)` | **`#FBEDFF`**<br>`oklch(96.2% 0.028 318)` | **`#EEBBFE`**<br>`oklch(85.92% 0.1057 317.98)` | **`#2E2033`**<br>`oklch(26.8% 0.040 318)` |
+| `neutral` | 분류 없음 | `--fg-2` `#515A67` | `--bg-hover` `#EAEDF1` | `--fg-2` `#A8B1BE` | `--bg-hover` `#1A2029` |
+
+토큰 이름은 `--tag-craft-ink` / `--tag-craft-tint` / `--tag-media-ink` / `--tag-media-tint` / `--tag-life-ink` / `--tag-life-tint` 6개다. **`neutral`은 새 토큰을 만들지 않고 기존 토큰을 재사용한다** — 무채색이 "색이 없는 상태"라는 사실을 토큰 이름이 그대로 말한다.
+
+**L이 슬롯마다 다른 것이 의도다**(라이트 0.340~0.440, 다크 0.800~0.860). 등명도로 맞추는 순간 CVD 분리가 붕괴한다 — L은 protan/deutan에서 살아남는 유일한 채널이다. 반대로 **C는 전 hue 공통 상한**(라이트 0.092, 다크 0.106 — §2.1.4 채도 예산표와 같은 값이다. 실측 최대는 라이트 `media` 0.0921, 다크 `life` 0.1057)으로 묶어 특정 hue만 더 크게 소리치는 것을 막는다.
+
+#### 2.1.3 대비 (빌드 게이트 대상)
+
+아래 수치는 WCAG 2.x sRGB 상대휘도 공식으로 **실제 계산한 값**이다(소수 둘째 자리 반올림). 토큰 값을 고치면 이 표도 같은 계산으로 다시 채운다 — 어림값을 적지 않는다.
+
+**텍스트 (기준 4.5:1)**
+
+| 조합 | 라이트 | 다크 | 판정 |
+|---|---|---|---|
+| `fg-1` on `bg-canvas` | 15.80 | 15.96 | AAA |
+| `fg-1` on `bg-surface` | 16.81 | 14.88 | AAA |
+| `fg-2` on `bg-canvas` | 6.44 | 8.75 | AA / AAA |
+| `fg-2` on `bg-surface` | 6.85 | 8.15 | **AA**(라이트는 7:1 미달) / AAA |
+| `fg-3` on `bg-canvas` (13px 메타) | **2.66** | 4.25 | **미달 — 아래 예외 규칙** |
+| `fg-3` on `bg-surface` (13px 메타) | **2.83** | 3.96 | **미달 — 아래 예외 규칙** |
+| `accent` 텍스트 on `bg-canvas` | **5.26** | **7.55** | AA |
+| `accent` 텍스트 on `bg-surface` | **5.60** | **7.03** | AA |
+| `on-accent` on `accent` (primary 버튼) | **5.60** | **7.60** | AA |
+| `on-accent` on `accent-hover` (primary hover) | **7.32** | **9.63** | AAA |
+| `danger` on `bg-canvas` | 6.03 | 6.59 | AA |
+| `danger` on `danger-tint` | 5.66 | 5.99 | AA |
+| `warn` on `bg-canvas` | 5.84 | 8.71 | AA |
+| `warn` on `warn-tint` | 5.76 | 7.35 | AA |
+
+**비텍스트 (기준 3:1 — 상태·컨트롤 경계만, §7.1)**
+
+| 조합 | 라이트 | 다크 | 판정 |
+|---|---|---|---|
+| `line-control` on `bg-surface` | 3.98 | 4.36 | 통과 |
+| `line-control` on `bg-hover` (입력 hover) | 3.45 | 4.04 | 통과 (전 배경 최저 3.45 / 3.96) |
+| `rail-progress` 펄스 하한 `opacity .7` on `bg-surface` | 3.38 | 3.68 | 통과 (전 배경 최저 3.13 / 3.44) |
+| `rail-progress` 불투명 on `bg-surface` | 6.85 | 6.13 | 통과 |
+| `danger` 레일 on `bg-surface` | 6.41 | 6.14 | 통과 |
+| `accent` 레일 on `bg-selected` | **5.16** | **5.96** | 통과 |
+| 포커스 링 `accent` on `bg-surface` | **5.60** | **7.03** | 통과 |
+| 포커스 링 `accent` on `bg-hover` | **4.85** | **6.53** | 통과 |
+| `line-1` / `line-2` (알파 합성 후) | 1.18 / 1.35 | 1.21 / 1.47 | **게이트 대상 아님 — 장식 헤어라인 예외(§7.1)** |
+
+기존 값 대비 브랜드 램프는 **대비가 전부 개선된다**: `on-accent` on `accent` 5.22→**5.60**, `accent` on `bg-canvas` 4.91→**5.26**(AA 여유 확보). 다크는 7.58→7.60 / 7.52→7.55로 사실상 동일하다.
+
+**`fg-3` 예외의 근거와 범위.** 라이트에서 2.66~2.83으로 비텍스트 하한 3:1에도 미치지 못한다. 그럼에도 값을 유지하는 이유는 측정 때문이다 — 라이트의 모든 배경(canvas/surface/hover)에서 4.5:1을 넘기려면 `#666E7B`급이 필요한데, 그러면 `--fg-2`(`#515A67`, 6.44~6.85)와 사실상 구분되지 않아 3단 색 위계가 2단으로 붕괴한다(`--ink-500` `#6B7482`도 canvas 4.36 / hover 4.02로 미달이다). 대신 **사용 범위를 좁히는 것으로 갚는다**:
+
+- **다른 곳에 중복된 정보에만** 쓴다: `domain`(인스펙터의 `url`에 원문이 있음), 상대 시각(`title` 속성에 절대 시각), placeholder(라벨이 별도로 있음), 비활성 텍스트.
+- 단독으로 의미를 지는 텍스트, 인터랙티브 요소의 라벨, **보더·아이콘·레일 등 비텍스트 요소**에는 금지한다(3:1 미만이므로 비텍스트 기준의 근거로도 쓸 수 없다). lint로 강제한다.
+- 이 예외는 WCAG 1.4.3 위반임을 인정하고 기록한다. 도메인·시각을 단독 정보로 승격해야 할 일이 생기면 그 필드를 `--fg-2`로 올린다(예외 확대가 아니라 사용처 이동).
+
+**태그 칩 대비 — 칩 잉크 × 모든 배경 (게이트 4.5:1)**
+
+| facet | canvas | surface | hover | selected | ‖ canvas-D | surface-D | hover-D | elevated-D | selected-D |
+|---|---|---|---|---|---|---|---|---|---|
+| craft | 9.02 | 9.60 | 8.32 | 8.84 | ‖ 12.49 | 11.64 | 10.80 | 10.57 | 9.87 |
+| media | 7.06 | 7.51 | 6.51 | 6.92 | ‖ 10.33 | 9.62 | 8.93 | 8.74 | 8.16 |
+| life | 11.33 | 12.05 | 10.45 | 11.10 | ‖ 11.88 | 11.07 | 10.27 | 10.05 | 9.39 |
+| neutral | 6.44 | 6.85 | 5.94 | 6.32 | ‖ 8.75 | 8.15 | 7.56 | 7.40 | 6.91 |
+
+**최저 5.94:1 — 전 조합 AA 통과, 대부분 AAA.** 오늘의 미선택 칩 텍스트(`--fg-2`, 6.44~6.85)보다 fill 0 칩이 더 잘 보인다.
+
+**태그 칩 대비 — 칩 내부 (fill 1 / fill 2)**
+
+| facet | ink/tint L | ink/tint D | tint/surface L | tint/surface D | solid fill L | solid fill D |
+|---|---|---|---|---|---|---|
+| craft | 8.84 | 9.87 | 1.09 | 1.18 | 9.60 | 11.64 |
+| media | 6.89 | 8.22 | 1.09 | 1.17 | 7.51 | 9.62 |
+| life | 10.91 | 9.61 | 1.11 | 1.15 | 12.05 | 11.07 |
+| neutral | 5.94 | 7.56 | 1.15 | 1.08 | 6.85 | 8.15 |
+
+solid fill = `--bg-surface` 텍스트 × facet `ink` 배경. **facet별 `on-color`가 필요 없다** — 위 열이 전부 4.5를 넘으므로 `--bg-surface` 하나면 된다(R1 개정: 선택은 hue를 바꾸지 않고 채움만 올린다). `tint/surface`가 1.1 안팎인 것은 정상이다 — tint는 정보를 지지 않고 "사람이 붙였다"만 말하며, 정보는 잉크가 진다.
+
+**색맹 검증 (Viénot-Brettel-Mollon 1999, OKLab ΔE×100, neutral 포함 all-pairs)**
+
+LIGHT
+
+| 쌍 | normal | protan | deutan |
+|---|---|---|---|
+| craft × media | 10.19 | 7.49 | 9.95 |
+| craft × life | 16.68 | 13.38 | 7.90 |
+| craft × neutral | 11.94 | 8.20 | 9.47 |
+| media × life | 20.50 | 20.78 | 17.73 |
+| media × neutral | 11.54 | 11.67 | 11.85 |
+| life × neutral | 14.96 | 16.16 | 12.58 |
+| **최악** | **10.19** | **7.49** | |
+
+DARK
+
+| 쌍 | normal | protan | deutan |
+|---|---|---|---|
+| craft × media | 11.06 | 10.86 | 10.03 |
+| craft × life | 20.33 | 13.07 | 8.37 |
+| craft × neutral | 14.10 | 13.76 | 9.99 |
+| media × life | 21.41 | 18.99 | 18.11 |
+| media × neutral | 13.08 | 13.00 | 13.26 |
+| life × neutral | 14.06 | 9.71 | 11.48 |
+| **최악** | **11.06** | **8.37** | |
+
+**판정: 라이트/다크 모두 CVD 최악 ΔE ≥ 7.49로 "칩은 항상 이름을 달고 다닌다" 전제 하의 허용선(≥6)을 넘고 목표선(≥8)에 근접한다.** deuteranomaly가 최다 유형(남성 약 6%)이라 protan/deutan 최솟값으로 판정했다. 게이트는 §9의 색맹 게이트가 자동으로 검사한다.
+
+**미해결 위험 2건 (명시적으로 기록한다).**
+
+| 조합 | normal ΔE | CVD ΔE | 완화 |
+|---|---|---|---|
+| `media` ink × `--warn` (라이트) | 9.57 | **1.53** | warn은 절대 24px 칩으로 렌더되지 않는다(18px `notice` 배지 / 2px 토스트 마커 / 배너). 항상 문장을 동반한다(§4.10). 배지 내용은 태그 이름이 아니라 완결 문장이다 |
+| `craft` ink × `--danger` (라이트) | 27.61 | **1.75** | **기존 시스템에 이미 있는 성질이다**(이전 값 `#0B7A5B` × `#B4232B`도 동일). §2.1.4(b)가 "facet ink와 danger·warn을 같은 컴포넌트에서 나란히 채움색으로 쓰지 않는다"로, §4.7이 "실패 = 레일 + 텍스트 + 아이콘 3중"으로 이미 막고 있다 |
+
+나머지는 전부 안전하다: `life` × danger 12.30~21.74, `life` × warn 19.43~23.01, `neutral` × danger 9.73~11.86.
+
+#### 2.1.4 브랜드 hue 규칙
+
+브랜드 액센트는 **딥 에버그린 1색, hue 168 고정**(`#197459` / `#2EB88F`)이다. **hue를 168로 못 박고 L·C만 슬롯별로 지정한다.**
+
+| 토큰 | Light | Light OKLCH | Dark | Dark OKLCH |
+|---|---|---|---|---|
+| `--accent` | `#197459` | `oklch(50.04% 0.0931 167.97)` | `#2EB88F` | `oklch(70.07% 0.1300 167.99)` |
+| `--accent-hover` | `#096149` | `oklch(43.89% 0.0859 168.00)` | `#37CFA1` | `oklch(76.54% 0.1415 167.76)` |
+| `--accent-tint` = `--bg-selected` | `#E1F9EF` | `oklch(96.19% 0.0284 168.81)` | `#0F2C22` | `oklch(26.73% 0.0400 168.06)` |
+| `--on-accent` | `#FCFDFE` | (무채) | `#06120E` | `oklch(16.9% 0.020 171)` |
+
+hex 반올림에 의한 hue drift는 최대 **0.81°** 다.
+
+- 초록인 이유: (a) 브랜드 hue가 상태 hue와 충돌하면 안 되는데, 상태 hue를 red/amber 둘로 줄이면 초록이 빈다(danger 24.3 / warn 66.9 기준 이격 143.7° / 101.1°). (b) "보관됨/확인됨"이라는 아카이브 서사와 맞는다. (c) 버튼 대비가 라이트 5.60 / 다크 7.60(§2.1.3 실측)으로 양쪽 모드에서 살아남고, 채도를 낮춘 에버그린이라 네온으로 보이지 않는다. (d) **sRGB 게멋 천장이 L 0.52에서 hue 168 = 0.105, 보라 대역 = 0.269~0.289로 2.6~2.8배 좁다 — 네온이 되고 싶어도 될 수 없다.** 규칙으로 지키는 절제보다 물리로 강제되는 절제가 강하다.
+- 반려한 **액센트 후보** 대안: 바이올렛·인디고(생성 도구의 기본값이자 특정 제품의 지문), 코발트 블루(개발도구 기본값이자 OS 포커스 링과 충돌), 마젠타·로즈(색맹 조건에서 danger와 붙음), 시안(다크에서 터미널로 읽힘). **태그 팔레트에서도 파랑 대역(205~275)은 배제한다** — §2.1.1의 중성 램프가 hue 257이라 파랑 패밀리를 넣으면 `neutral` 칩과 CVD ΔE 2.93~5.15로 붙는다(실측).
+- **브랜드 hue(168)의 solid를 쓰는 곳은 정확히 4곳:** ① 포커스 링 ② primary 버튼 ③ 선택된 행의 레일 ④ 선택된 `craft` 칩의 채움. `--accent-tint`는 **선택된 행 배경 전용**이다. **⑤ manual 태그 칩은 이 목록에서 빠진다** — manual은 이제 그 태그 자신의 facet tint를 쓴다(§5.2). 그 외 사용은 리뷰에서 반려한다.
+- **색맹 위험 관리:** 완화 규칙 2개를 강제한다. (a) 상태는 절대 색 단독으로 표현하지 않는다 — 레일 + 텍스트 라벨 + 아이콘 3중. (b) **태그 facet ink 3색과 danger·warn을 같은 컴포넌트 안에서 나란히 채움색으로 쓰지 않는다**(재시도 버튼은 무채색 outline). 근거는 §2.1.3의 미해결 위험 2건 실측(`media`×warn CVD ΔE 1.53, `craft`×danger 1.75)이다.
+
+**hue 예약표 — 이 표 밖의 hue가 토큰으로 들어오면 리뷰 반려한다.**
+
+| 대역 | 상태 | 근거 |
+|---|---|---|
+| `[4, 44]` | **금지** | `--danger` 24.3 ±20° |
+| `[49, 85]` | **금지** | `--warn` 라이트 66.9 ±18° = [48.9, 84.9]. 다크 `--warn` 74.3도 이 대역 안이다 |
+| `[133, 203]` | **브랜드 예약** | 브랜드 168 ±35°. 브랜드가 곧 최대 태그 패밀리(`craft`)이므로 그 주변은 "또 다른 초록"이 된다 |
+| `[205, 275]` | **금지** | 중성 램프 hue(§2.1.1, `--fg-2` = `oklch(46.5% 0.024 257.5)`). 파란 태그는 "패밀리 없음"과 경쟁한다 |
+| `[275, 300]` | **금지** | AI 바이올렛(편집 판단 — §1.3 배제 목록) |
+| `112` / `318` | **태그 가용** | 남은 두 대역 `[85, 133]` ∪ `[300, 360]`에서 각 1개 |
+
+**채도 예산 (토큰 레벨 강제 규칙).**
+
+| 요소 | 최대 chroma (Light / Dark) |
+|---|---|
+| 본문·제목·메타 텍스트, 카드 배경, 보더 | **0.024** (중성 램프 상한) |
+| 칩 tint 배경 | **0.028 / 0.040** |
+| 칩 ink 텍스트, 선택 칩 채움 | **0.092 / 0.106** |
+| `--accent` solid, `--accent-hover` | **0.094 / 0.142** |
+| `--danger` / `--warn` | 기존값 유지 (0.180 / 0.109) — 단 **크기 ≤ 2px 레일 또는 18px 배지** |
+
+이 표의 실제 효과: **화면에서 C ≥ 0.11을 쓸 수 있는 것은 브랜드 액센트(화면당 primary 1개 + 포커스 링 1개)와 다크 모드 칩 잉크뿐이다.** 40개 칩이 깔려도 유채 픽셀은 **글자 획에만** 존재한다(fill 0 = 배경 없음, fill 1 = C 0.028 배경). 무지개 방지의 실행 수단은 hue 개수가 아니라 이 표다.
+
+#### 2.1.5 의미색: hue 2개로 끝 (성공·정보는 색이 없다)
+
+| 의미 | 색 | 사용처 |
+|---|---|---|
+| 성공 | **색 없음 — 무채색**(성공 전용 hue를 만들지 않는다) | 성공 토스트(§4.10), 연결 확인 OK 문장. 액센트를 성공 표시로 재사용하지 않는다 — 브랜드 solid 사용처는 §2.1.4의 4곳뿐이다 |
+| 경고 | `--warn` | 중복 저장(기존 항목 반환), 사전에 없는 태그 입력, API 키 미설정 배너 |
+| 실패 | `--danger` | `status: failed`, 4xx/5xx, 삭제 확인 |
+
+정보성 파랑(info)은 **만들지 않는다.** 정보는 중성색과 문장으로 전달한다. 파랑을 추가하면 액센트가 둘이 되고, **동시에 중성 램프(hue 257)·`neutral` 칩과 CVD에서 충돌한다**(실측 ΔE 2.93~5.15 — §2.1.4 hue 예약표). **진행 상태(pending/scraping/tagging)에는 색을 쓰지 않는다**(무채색 레일 펄스). **완료(done)에는 아무 표시도 하지 않는다.**
+
+#### 2.1.6 다크 모드 구현
+
+- 웹 테마 토글은 **light / dark / system 3-state**다. `system`이 UI에서 도달 불가능한 현재 상태는 버그로 취급한다.
+- **선택(preference)과 결과(resolved)를 분리한다.** 3-state 선택값은 `localStorage`에만 있고, `<html>`에는 **해결된 결과 클래스 하나(`.light` 또는 `.dark`)가 항상 붙는다**. `system`일 때 클래스를 비워 두면 `:root`의 라이트 값이 그대로 적용되어 OS 다크에서 틀린다.
+- **`color-scheme`은 3-state를 그대로 따라간다**: `:root { color-scheme: light dark }`(JS 이전 기본값) / `.light { color-scheme: light }` / `.dark { color-scheme: dark }`. `.light` 규칙이 없으면 OS 다크 + 사용자가 라이트를 고른 경로에서 스크롤바·폼 컨트롤·`input` 기본 배경만 다크로 남는다.
+- **첫 페인트 플래시 방지는 CSS가 아니라 인라인 스크립트가 한다.** `index.html`의 `<head>`에 렌더 차단 스크립트를 두어 스타일시트가 적용되기 전에 클래스를 심는다(§3 하단 코드). CSS에 `@media (prefers-color-scheme: dark)` 블록을 두지 않는 이유는, 3-state에서 클래스가 미디어 쿼리를 항상 이겨야 하는데 두 경로를 함께 두면 `:root:not(.light)` 류의 가드가 필요해져 토큰 정의부가 두 벌로 갈라지기 때문이다. `data-loading` 봉인은 전이만 막을 뿐 이 플래시를 막지 못한다.
+- **facet 토큰도 hue를 고정하고 L·C를 슬롯별로 지정한다.** "다크에서 채도 −20%" 같은 전역 감쇠 공식을 쓰지 않는다 — 이 hue들의 실측 감쇠비는 0.092→0.106(상승)까지 가고, `--accent`도 0.093→0.130으로 올라간다. sRGB 게멋 천장이 다크 L에서 더 높기 때문이며, 전역 공식은 이 hue에서 틀린다.
+- `light-dark()` CSS 함수는 아직 쓰지 않는다(2026-07 기준 baseline 미도달 + 수동 토글을 커버하지 못함).
+- **다크 썸네일 보정:** 흰 배경 OG 이미지가 발광하므로 `filter: brightness(.92)` + `box-shadow: inset 0 0 0 1px var(--line-1)`.
+
+### 2.2 타이포그래피
+
+#### 2.2.1 폰트 스택
+
+```css
+--font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo",
+             "Pretendard Variable", Pretendard, system-ui, "Segoe UI", "Malgun Gothic", sans-serif;
+--font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+```
+
+**웹폰트를 로드하지 않는다.** Pretendard는 비-Apple 환경 폴백 전용으로만 self-host하고, `unicode-range`를 한글+라틴으로 제한한다(Apple 기기에서는 앞선 폰트가 글리프를 커버하므로 실제로 다운로드되지 않는다).
+
+근거: (a) 사용자는 Mac/iPhone 단일 사용자이고, `-apple-system` + `Apple SD Gothic Neo`면 한글/라틴이 모두 SF 계열 광학 크기로 렌더된다 — **M4 SwiftUI 앱과 글자 인상이 자동으로 같아진다.** 커스텀 폰트를 쓰는 순간 웹과 iOS가 갈라지고 iOS는 Dynamic Type을 잃는다. (b) FOUT/FOIT 0, 요청 0, 단일 바이너리 embed 용량 증가 0. 차별화는 폰트 파일이 아니라 아래 트래킹 곡선과 mono 분리에서 만든다.
+
+#### 2.2.2 타입 스케일 (6단, rem/px 고정 — `clamp()` 금지)
+
+폰트 크기에 `clamp()`나 `vw`를 쓰지 않는다. **타입은 이산 계단, 유동은 여백만.**
+
+| 토큰 | size / line-height | weight | letter-spacing | 용도 |
+|---|---|---|---|---|
+| `label` | 12px / 16px | 500 | `-0.006em` | 태그 칩, 상태 텍스트, 카운트, 소형 버튼 |
+| `meta` | 13px / 18px | 400 | `-0.012em` | 도메인, 저장 시각, 보조 설명 (mono 변형 존재) |
+| `body` | 15px / 24px | 400 | `-0.010em` | 설명, 메모, 입력 필드 |
+| `title` | 15px / 20px | 600 | `-0.016em` | 링크 제목(목록 행) |
+| `head` | 20px / 26px | 600 | `-0.002em` | 화면 제목, 인스펙터 제목 |
+| `display` | 32px / 36px | 600 | **`+0.004em`** | 통계 숫자, 상세 화면 제목 |
+
+**트래킹 곡선은 Apple SF의 광학 곡선을 따른다.** SF Pro Text는 크기가 커질수록 더 음수(12px −0.010 → 17px −0.022)이고, 21px부터 Display 패밀리로 넘어가며 양수에서 시작해(21px +0.011) 40px에서 0을 통과한다. 32px의 **양수 트래킹**은 오타가 아니라 이 곡선이다. 렌더링 폰트가 실제로 SF이므로 광학적으로 옳다. "제목은 무조건 tracking-tighter"는 SF가 아닌 폰트를 전제한 관습이다.
+
+**한글 예외 1개:** 한글이 지배적인 본문 블록(설명·메모)은 **−0.010em을 상한**으로 둔다. 곡선의 −0.022em를 한글에 적용하면 자소가 붙는다.
+
+#### 2.2.3 굵기
+
+**400 / 500 / 600 세 개만. 700 이상 금지, 300 이하 금지. 가변 폰트 실수 weight(510/590) 금지**(시스템 폰트에서 플랫폼별 스냅이 일어나 예측 불가).
+
+| weight | 용도 |
+|---|---|
+| 400 | 본문, 설명, 메타 |
+| 500 | 라벨, 칩, 활성 내비게이션 |
+| 600 | 링크 제목, 화면 제목, primary 버튼 |
+
+위계는 굵기가 아니라 **색 4단(fg-1/2/3/accent)과 크기**로 만든다. 굵기로 소리치기 시작하면 밀도 7의 목록에서 전부 굵어진다.
+
+#### 2.2.4 숫자와 mono 적용 대상 (R2)
+
+- 목록·통계·카운트·시각: `font-variant-numeric: tabular-nums`. 스크롤 시 숫자 폭이 흔들리지 않는다.
+- `--font-mono` 적용 필드(계약에 실재하는 필드만 — `api/openapi.yaml` 기준): `domain`, `url`, `created_at`·`published_at` 표시, `confidence`, `rank`(검색 bm25), `Tag.link_count`, `Stats`의 숫자.
+- `--font-sans` 유지: `title`, `description`, `note`, `author`, 태그 이름, 모든 UI 라벨.
+- 계약에 없는 값을 mono 대상으로 적지 않는다. `updated_at`, 요청 ID, 에러 ID는 **계약에 없다**(`Error`는 `code`/`message` 둘뿐). 나중에 스키마가 늘면 그때 이 목록에 추가한다.
+- 존재 여부가 불확실한 stylistic set(`ss01`, `cv01` 등)은 선언하지 않는다. SF에서 동작을 보장할 수 없다.
+- `-webkit-font-smoothing: antialiased`를 쓰지 않는다(텍스트를 얇게 만들어 저대비를 유발).
+
+### 2.3 간격
+
+**12스텝. 패딩·마진·갭에 이 12개 밖의 값이 나타나면 lint 실패다**(아래 레이아웃 상수 토큰은 별도 목록이며, 그것도 이름으로만 참조한다).
+
+| 토큰 | 값 | 주 용도 |
+|---|---|---|
+| `space-2` | 2px | 레일 두께, 아이콘-텍스트 미세 보정 |
+| `space-4` | 4px | 칩 내부 세로 패딩, 아이콘 갭 |
+| `space-6` | 6px | 칩 사이 갭, 인라인 메타 구분 |
+| `space-8` | 8px | 칩 가로 패딩, 버튼 내부 세로 패딩 |
+| `space-12` | 12px | 행 내부 요소 갭(**레일↔썸네일 포함**), 입력 가로 패딩 |
+| `space-16` | 16px | 행 우측 패딩, 모바일 거터 |
+| `space-20` | 20px | 인스펙터 내부 패딩 |
+| `space-24` | 24px | 목록↔인스펙터 갭, 툴바 블록 간격 |
+| `space-32` | 32px | 데스크톱 거터, 섹션 간격 |
+| `space-40` | 40px | 화면 상단 여백 |
+| `space-56` | 56px | 빈 상태 블록 상하 여백 |
+| `space-80` | 80px | 화면 하단 안전 여백 |
+
+작은 쪽은 촘촘(2~8), 큰 쪽은 급격히 벌어진다(32~80). UI 밀도용(2~24)과 섹션 리듬용(32~80)을 한 스케일 안에서 분리한 형태다.
+
+레이아웃 상수는 12스텝 간격 스케일 밖의 값이므로 **전부 명명 토큰으로 승격**한다. 익명 임의값(`h-[76px]`, `w-[380px]`)은 lint 실패다 — `h-(--size-row)`, `w-(--w-inspector)`처럼 토큰을 참조한다(§3, §9).
+
+| 토큰 | 값 | 용도 |
+|---|---|---|
+| `--w-page` | 1152px | 페이지 최대 폭 |
+| `--w-content` | 768px | 목록 콘텐츠 폭(인스펙터 닫힘). **브레이크포인트가 아니라 폭 상수다** |
+| `--w-inspector` | 380px | 인스펙터 폭(≥1024) |
+| `--w-list-min` | 480px | 목록 최소 폭(인스펙터 열림) |
+| `--w-search-input` | 480px | 검색 입력 최대 폭(≥1024, 11 §4(6)) |
+| `--w-form` | 560px | 단일 컬럼 폼 최대 폭(설정 화면, 11 §8(6)) |
+| `--size-row` | 76px | 행 높이(**≥560**) |
+| `--size-row-sm` | 88px | 행 높이(`<560`, 터치) |
+| `--size-thumb` | 56px | 썸네일(≥560) |
+| `--size-thumb-sm` | 44px | 썸네일(`<560`) |
+| `--size-header` | 52px | 헤더 높이(sticky, glass) |
+| `--size-toolbar` | 44px | 툴바 높이(sticky, 불투명) |
+| `--size-rail` | 2px | 상태 레일 두께(= `space-2`). **행·인스펙터·토스트 마커 공통 — 레일 두께 토큰은 이것 하나뿐이다**(§4.7) |
+| `--size-spark-min` | 3px | 통계 30일 스트립 한 칸 최소 폭(11 §8(6)). **12스텝 간격 스케일의 명시적 예외** — 간격이 아니라 치수다 |
+| `--gutter` | `max(env(safe-area-inset-left), clamp(16px, 2.5vw, 32px))` | 좌우 거터 |
+
+**브레이크포인트 4개: `<560` / `560~1023` / `≥1024` / `≥1280`.** 이 체계에 없는 값(특히 Tailwind 기본 `md` = 768px)을 미디어 쿼리에 쓰지 않는다 — §3에서 기본 브레이크포인트 스케일을 지우고 `sm:560 / lg:1024 / xl:1280` 3개만 남겨 **컴파일 단계에서 `md:`가 존재하지 않게** 만든다. 행 높이 전환점도 560px 하나뿐이다(`<560` → `--size-row-sm`, `≥560` → `--size-row`).
+
+행 안의 태그 칩 개수는 **컨테이너 쿼리(`@container`)** 로 제어한다 — 행의 가용 폭은 인스펙터 개폐에 따라 달라지므로 뷰포트 폭으로 판단하면 틀린다. `100dvh` 사용, `100vh` 금지.
+
+### 2.4 반경
+
+**단일 `--radius` 금지. 요소별 semantic 이름으로 고정한다.**
+
+| 토큰 | 값 | 적용 |
+|---|---|---|
+| `radius-chip` | 999px | 태그 칩, 필터 칩, 상태 pill |
+| `radius-control` | 6px | 버튼, 입력, 셀렉트, 아이콘 버튼 |
+| `radius-thumb` | 6px | 썸네일, 썸네일 폴백 |
+| `radius-row` | 8px | 행 hover/선택 배경 |
+| `radius-panel` | 12px | 인스펙터, 팝오버, 커맨드 팔레트, 토스트 |
+| `radius-sheet` | 16px | bottom sheet (상단 모서리만) |
+
+### 2.5 그림자와 레이어
+
+```css
+--ring:     0 0 0 1px var(--line-1);
+--sh-panel: var(--ring), 0 8px 24px -8px rgb(13 17 22 / .18), 0 2px 6px -2px rgb(13 17 22 / .10);
+--sh-sheet: var(--ring), 0 -8px 32px -12px rgb(13 17 22 / .22);
+/* dark: 그림자 알파를 각각 .55 / .35로 증폭 */
+```
+
+- 얕은 다층 + 1px 헤어라인 링. **행에는 그림자를 쓰지 않는다**(수백 개가 깔리는 화면에서 페인트 비용과 시각 소음).
+- 유리(`backdrop-filter: blur(12px) saturate(1.6)`)는 **상단 바와 커맨드 팔레트 2곳뿐**이며, `@supports not (backdrop-filter: blur(1px))`에서 **더 불투명하게** 만든다(역방향 점진 향상).
+
+z-index 사다리 — **이 7개 밖의 z-index 금지:**
+
+| 이름 | 값 |
+|---|---|
+| `z-header` | 100 |
+| `z-popover` | 600 |
+| `z-palette` | 650 |
+| `z-overlay` | 699 |
+| `z-sheet` | 700 |
+| `z-toast` | 800 |
+| `z-tooltip` | 1100 |
+
+### 2.6 모션 토큰
+
+```css
+--dur-out:   120ms;   /* hover 이탈, 퇴장(팔레트·토스트·행 제거) */
+--dur-1:     160ms;   /* 팔레트·컴포저 진입 */
+--dur-2:     180ms;   /* 값 교체, 칩 추가/제거, 상태 전환 */
+--dur-close: 200ms;   /* 인스펙터·시트 닫기 (열기보다 빠르다) */
+--dur-flip:  220ms;   /* 목록 FLIP transform 보정 */
+--dur-3:     260ms;   /* 인스펙터·시트·팔레트 열림 */
+--dur-pulse: 2400ms;  /* 진행 레일 — 앱 내 유일한 무한 루프 */
+--ease-ui:    cubic-bezier(0.4, 0, 0.6, 1);         /* UI 표준 곡선 */
+--ease-enter: cubic-bezier(0.25, 0.46, 0.45, 0.94); /* 진입·퇴장 */
+```
+
+- **hover 진입은 0ms(즉시), 이탈은 `--dur-out`.** 비대칭이다. 도구에서 hover가 천천히 켜지면 굼뜨게 느껴지고, 즉시 꺼지면 커서가 지나갈 때 깜빡인다.
+- **스프링/오버슈트 전면 금지.** 계기판에서 튕김은 정밀함을 깎는다. 이 금지는 iOS에도 그대로 적용된다(§8.2 — `.spring`을 쓸 경우 `dampingFraction: 1.0` 임계 감쇠 고정).
+- **허용 duration 집합은 위 7개 토큰이 전부다**(120 / 160 / 180 / 200 / 220 / 260 / 2400ms). CSS에 duration 리터럴을 직접 쓰면 반려하고 토큰만 참조한다. **유일한 예외는 JS 타이머로 도는 토스트 지속 시간 2개**(4000ms / 8000ms, §4.10) — CSS 전이가 아니므로 토큰화하지 않고 §4.10 표를 원본으로 둔다.
+- 이 규칙의 대상은 **전이·애니메이션 duration**이다. **지연 임계값은 duration이 아니다** — 스켈레톤 억제 200ms(§4.9), 툴팁 표시 지연 400ms(§4.11), 검색 디바운스 120ms(§4.2), 토스트 지속(§4.10)은 각자 정의된 절이 원본이며 이 집합에 넣지 않는다.
+- lint는 이 목록을 하드코딩하지 말고 `@theme`에 선언된 `--dur-*` 토큰을 읽어 생성한다(§9).
+
+## 3. Tailwind v4 `@theme` 매핑
+
+`frontend/tailwind.css` 전문. **블록 순서 자체가 명세다** — 아래 두 규칙을 어기면 빌드는 성공하고 화면만 조용히 깨진다.
+
+1. **리셋 블록(`--네임스페이스-*: initial`)이 모든 정의 블록보다 먼저 온다.** v4는 `@theme`를 소스 순서대로 병합하고 `initial`은 그 시점까지 등록된 키를 전부 지운다. 리셋을 `@theme inline` 뒤에 두면 의미 색 유틸리티가 **하나도** 생성되지 않는다(§9 스모크 체크가 이 순서를 검사한다). **토큰을 추가할 때도 이 순서를 먼저 확인한다 — 새 블록은 항상 리셋 블록보다 뒤다.**
+2. **의미 색은 반드시 `@theme inline`이다.** 비-inline `@theme`은 `:root`에서 값이 한 번 치환되어 `.dark` 오버라이드가 유틸리티에 반영되지 않는다. **facet 토큰(`--color-tag-*`)에도 그대로 적용된다.**
+
+```css
+/* Tailwind CSS v4 — CSS-first config. Imported from src/main.tsx. */
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── 0. 리셋 — 반드시 모든 정의 블록(@theme inline 포함)보다 먼저 ──────
+   v4는 @theme 을 소스 순서대로 병합하고 `--네임스페이스-*: initial` 은
+   그 시점까지 등록된 키를 전부 지운다. 이 블록이 아래로 내려가면
+   의미 색 유틸(bg-canvas / text-fg-1 / bg-accent …)이 0개 생성된다. */
+@theme {
+  --color-*: initial;
+  --spacing-*: initial;
+  --spacing: initial;
+  --radius-*: initial;
+  --text-*: initial;
+  --font-*: initial;
+  --ease-*: initial;
+  --container-*: initial;
+  --breakpoint-*: initial;
+}
+
+/* ── 1. 원시 팔레트 + 의미 토큰 (라이트/다크) ───────────────────────── */
+@layer base {
+  :root {
+    color-scheme: light dark;      /* 인라인 스크립트가 클래스를 심기 전의 기본값 */
+
+    /* ink scale (의미 토큰 정의부에서만 참조) */
+    --ink-0:#FCFDFE;  --ink-50:#F4F6F8;  --ink-100:#EAEDF1; --ink-200:#DBDFE6;
+    --ink-300:#C2C8D2; --ink-400:#9099A6; --ink-500:#6B7482; --ink-600:#515A67;
+    --ink-700:#3A424E; --ink-800:#262D37; --ink-900:#171C23; --ink-950:#0D1116;
+
+    /* semantic — light */
+    --bg-canvas:var(--ink-50); --bg-surface:var(--ink-0); --bg-hover:var(--ink-100);
+    --bg-elevated:var(--ink-0); --bg-selected:#E1F9EF;
+    --fg-1:var(--ink-900); --fg-2:var(--ink-600); --fg-3:var(--ink-400); --fg-inverse:var(--ink-0);
+    --line-1:rgb(13 17 22 / .08); --line-2:rgb(13 17 22 / .14);
+    --line-control:#767F8C;           /* 컨트롤 경계 전용 — 배경 전 조합 3:1 이상 */
+    --rail-progress:var(--ink-600);   /* 진행 레일 (펄스 하한에서도 3:1) */
+    --accent:#197459; --accent-hover:#096149; --accent-tint:#E1F9EF; --on-accent:#FCFDFE;
+    --danger:#B4232B; --danger-tint:#FCEBEA;
+    --warn:#8A5300;   --warn-tint:#FDF3E2;
+
+    /* tag facet — hue lock 168 / 112 / 318. neutral 은 토큰을 만들지 않는다(fg-2 + bg-hover) */
+    --tag-craft-ink:#004E39; --tag-craft-tint:#E1F9EF;
+    --tag-media-ink:#54570B; --tag-media-tint:#F2F5E0;
+    --tag-life-ink:#4B2656;  --tag-life-tint:#FBEDFF;
+
+    /* elevation */
+    --ring: 0 0 0 1px var(--line-1);
+    --sh-panel: var(--ring), 0 8px 24px -8px rgb(13 17 22 / .18),
+                             0 2px 6px  -2px rgb(13 17 22 / .10);
+    --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(13 17 22 / .22);
+  }
+
+  /* 3-state 테마: <html>에는 해결된 결과 클래스가 항상 하나 붙는다.
+     .light 규칙이 없으면 OS 다크 + 사용자가 라이트를 고른 경로에서
+     스크롤바·폼 컨트롤만 다크로 남는다. */
+  .light { color-scheme: light; }
+
+  .dark {
+    color-scheme: dark;
+    --bg-canvas:var(--ink-950); --bg-surface:#141920; --bg-hover:#1A2029;
+    --bg-elevated:#1B222B; --bg-selected:#0F2C22;
+    --fg-1:#E8ECF1; --fg-2:#A8B1BE; --fg-3:#6E7889; --fg-inverse:#06120E;
+    --line-1:rgb(255 255 255 / .08); --line-2:rgb(255 255 255 / .14);
+    --line-control:#767F8C;           /* 라이트와 동일 값으로 양쪽 3:1을 만족한다 */
+    --rail-progress:var(--ink-400);
+    --accent:#2EB88F; --accent-hover:#37CFA1; --accent-tint:#0F2C22; --on-accent:#06120E;
+    --danger:#F2706B; --danger-tint:#2A1518;
+    --warn:#E3A445;   --warn-tint:#2A2013;
+
+    /* tag facet — hue 고정, L·C만 슬롯별. "다크에서 채도 −20%" 전역 공식을 쓰지 않는다 */
+    --tag-craft-ink:#84E4C1; --tag-craft-tint:#0F2C22;
+    --tag-media-ink:#BFC573; --tag-media-tint:#262810;
+    --tag-life-ink:#EEBBFE;  --tag-life-tint:#2E2033;
+    --sh-panel: var(--ring), 0 8px 24px -8px rgb(0 0 0 / .55),
+                             0 2px 6px  -2px rgb(0 0 0 / .35);
+    --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(0 0 0 / .55);
+  }
+}
+
+/* ── 2. 유틸리티 매핑 ──────────────────────────────────────────────── */
+@theme inline {
+  /* color: inline이어야 .dark 오버라이드가 유틸리티에 전달된다 */
+  --color-canvas:      var(--bg-canvas);
+  --color-surface:     var(--bg-surface);
+  --color-hover:       var(--bg-hover);
+  --color-elevated:    var(--bg-elevated);
+  --color-selected:    var(--bg-selected);
+  --color-fg-1:        var(--fg-1);
+  --color-fg-2:        var(--fg-2);
+  --color-fg-3:        var(--fg-3);
+  --color-fg-inverse:  var(--fg-inverse);
+  --color-line-1:      var(--line-1);
+  --color-line-2:      var(--line-2);
+  --color-line-control:var(--line-control);
+  --color-rail-progress:var(--rail-progress);
+  --color-accent:      var(--accent);
+  --color-accent-hover:var(--accent-hover);
+  --color-accent-tint: var(--accent-tint);
+  --color-on-accent:   var(--on-accent);
+  --color-danger:      var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-warn:        var(--warn);
+  --color-warn-tint:   var(--warn-tint);
+
+  /* tag facet — 여기도 inline 이어야 .dark 오버라이드가 유틸리티에 전달된다.
+     neutral 은 매핑하지 않는다 — 클라이언트가 fg-2 / hover 를 그대로 쓴다(§5.2) */
+  --color-tag-craft-ink: var(--tag-craft-ink);   --color-tag-craft-tint: var(--tag-craft-tint);
+  --color-tag-media-ink: var(--tag-media-ink);   --color-tag-media-tint: var(--tag-media-tint);
+  --color-tag-life-ink:  var(--tag-life-ink);    --color-tag-life-tint:  var(--tag-life-tint);
+
+  --shadow-panel: var(--sh-panel);
+  --shadow-sheet: var(--sh-sheet);
+  --shadow-ring:  var(--ring);
+}
+
+/* ── 3. 모드 무관 스케일 ───────────────────────────────────────────── */
+/* static: v4는 참조되지 않은 theme 변수를 :root에서 제거한다. 레이아웃 상수와
+   duration·z 토큰은 lint와 JS가 읽어야 하므로 항상 방출시킨다. */
+@theme static {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo",
+               "Pretendard Variable", Pretendard, system-ui, "Segoe UI",
+               "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  /* type scale — 유틸리티: text-label / text-meta / text-body / text-title / ... */
+  --text-label: 12px;
+  --text-label--line-height: 16px;
+  --text-label--font-weight: 500;
+  --text-label--letter-spacing: -0.006em;
+
+  --text-meta: 13px;
+  --text-meta--line-height: 18px;
+  --text-meta--font-weight: 400;
+  --text-meta--letter-spacing: -0.012em;
+
+  --text-body: 15px;
+  --text-body--line-height: 24px;
+  --text-body--font-weight: 400;
+  --text-body--letter-spacing: -0.010em;
+
+  --text-title: 15px;
+  --text-title--line-height: 20px;
+  --text-title--font-weight: 600;
+  --text-title--letter-spacing: -0.016em;
+
+  --text-head: 20px;
+  --text-head--line-height: 26px;
+  --text-head--font-weight: 600;
+  --text-head--letter-spacing: -0.002em;
+
+  --text-display: 32px;
+  --text-display--line-height: 36px;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: 0.004em;
+
+  /* spacing — 12스텝. 유틸리티 숫자 == px (p-16 = 16px) */
+  --spacing-2:2px;   --spacing-4:4px;   --spacing-6:6px;   --spacing-8:8px;
+  --spacing-12:12px; --spacing-16:16px; --spacing-20:20px; --spacing-24:24px;
+  --spacing-32:32px; --spacing-40:40px; --spacing-56:56px; --spacing-80:80px;
+
+  /* radius — semantic only */
+  --radius-chip:999px; --radius-control:6px; --radius-thumb:6px;
+  --radius-row:8px;    --radius-panel:12px;  --radius-sheet:16px;
+
+  /* easing */
+  --ease-ui:    cubic-bezier(0.4, 0, 0.6, 1);
+  --ease-enter: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  /* motion — 허용 duration 집합의 유일한 선언부(§2.6). lint가 여기서 목록을 만든다 */
+  --dur-out:120ms; --dur-1:160ms; --dur-2:180ms; --dur-close:200ms;
+  --dur-flip:220ms; --dur-3:260ms; --dur-pulse:2400ms;
+
+  /* 브레이크포인트 3개(= 구간 4개). 기본 스케일을 지웠으므로 md:(768px)는 존재하지 않는다 */
+  --breakpoint-sm:  560px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  /* containers — 행 내부 칩 개수 판정용 */
+  --container-row-sm: 480px;
+  --container-row-md: 640px;
+
+  /* 레이아웃 상수 — 12스텝 밖의 고정 치수. h-(--size-row) 형태로만 참조한다 */
+  --size-row:76px; --size-row-sm:88px; --size-thumb:56px; --size-thumb-sm:44px;
+  --size-header:52px; --size-toolbar:44px; --size-rail:2px; --size-spark-min:3px;
+  --w-page:1152px; --w-content:768px; --w-inspector:380px; --w-list-min:480px;
+  --w-search-input:480px; --w-form:560px;
+  --gutter: max(env(safe-area-inset-left), clamp(16px, 2.5vw, 32px));
+
+  /* z ladder — 이 7개 밖의 z-index 금지 */
+  --z-header:100; --z-popover:600; --z-palette:650;
+  --z-overlay:699; --z-sheet:700; --z-toast:800; --z-tooltip:1100;
+}
+
+/* ── 4. 베이스 ────────────────────────────────────────────────────── */
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-canvas);
+    color: var(--fg-1);
+    font-variant-numeric: tabular-nums;
+    /* -webkit-font-smoothing 은 의도적으로 선언하지 않는다 */
+  }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  :focus:not(:focus-visible) { outline: none; }
+
+  /* 로드 봉인 + reduced-motion */
+  [data-loading] *, [data-reduce-motion] * {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    animation: none !important;
+    animation-delay: 0ms !important;
+  }
+  /* 무한 루프는 감소가 아니라 제거 — 정적 불투명(대비 5.94:1 / 5.57:1) */
+  [data-reduce-motion] .rail-pulse { opacity: 1; }
+}
+
+@layer utilities {
+  .glass {
+    background: color-mix(in oklab, var(--bg-surface) 72%, transparent);
+    backdrop-filter: blur(12px) saturate(1.6);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass { background: var(--bg-surface); }   /* 블러가 없으면 더 불투명하게 */
+  }
+  .thumb-img { filter: none; }
+  .dark .thumb-img {
+    filter: brightness(.92);
+    box-shadow: inset 0 0 0 1px var(--line-1);
+  }
+  /* 진행 레일 펄스 — 하한 .7에서도 3:1을 유지한다(§2.1.3) */
+  @keyframes rail-pulse { from { opacity: .7 } to { opacity: 1 } }
+  .rail-pulse {
+    animation: rail-pulse var(--dur-pulse) var(--ease-ui) infinite alternate;
+  }
+}
+```
+
+**토큰 참조 문법.** Tailwind에 duration 네임스페이스가 없고 레이아웃 상수도 유틸리티 스케일이 아니므로, 둘 다 CSS 변수 축약 문법으로 참조한다: `duration-(--dur-2)`, `duration-(--dur-flip)`, `h-(--size-row)`, `w-(--w-inspector)`, `max-w-(--w-page)`, `z-(--z-toast)`. **익명 임의값(`h-[76px]`, `duration-[220ms]`)은 lint 실패다** — 값이 아니라 이름을 참조한다.
+
+**`@theme static`인 이유.** v4는 어떤 유틸리티도 참조하지 않는 theme 변수를 `:root`에서 제거한다(실측 확인: `static` 없이 빌드하면 `--z-toast`·`--size-thumb-sm`·`--container-row-sm`이 출력에서 사라진다). 레이아웃 상수·duration·z 사다리는 lint와 일부 JS(FLIP 계산)가 읽어야 하므로 항상 방출시킨다.
+
+**브레이크포인트.** 기본 스케일을 지우고 `sm/lg/xl` 3개만 남겼으므로 `md:`(768px)는 **컴파일 단계에서 존재하지 않는다**. 빌드 출력의 미디어 쿼리는 정확히 `(width>=560px)` / `(width>=1024px)` / `(width>=1280px)` 세 개다(§2.3의 4구간과 1:1).
+
+부트스트랩 스크립트(전이 봉인 + reduced-motion 실시간 반영) — `main.tsx` 최상단:
+
+```ts
+const mql = matchMedia('(prefers-reduced-motion: reduce)')
+const apply = () => document.documentElement.toggleAttribute('data-reduce-motion', mql.matches)
+mql.addEventListener('change', apply); apply()   // MQL을 보관해 설정 변경에 실시간 반응
+
+document.documentElement.setAttribute('data-loading', '')
+requestAnimationFrame(() => requestAnimationFrame(() =>
+  document.documentElement.removeAttribute('data-loading')))
+```
+
+`data-loading`이 없으면 SPA 첫 렌더에서 목록 전체가 한 번 번쩍인다.
+
+테마 플래시 방지 스크립트 — `index.html`의 `<head>`, **모듈 스크립트보다 먼저, 렌더 차단으로** 둔다(§2.1.6). 이 스크립트가 없으면 다크 사용자에게 첫 프레임이 흰 화면으로 나오고, `data-loading` 봉인은 전이만 막을 뿐 이 플래시를 막지 못한다.
+
+```html
+<script>
+  // 3-state 테마의 해결 결과를 첫 페인트 전에 심는다.
+  // 선택값은 localStorage, <html>에 붙는 것은 항상 .light 또는 .dark 하나다.
+  (function () {
+    var pref = null
+    try { pref = localStorage.getItem('pushpoint.theme') } catch (e) {}
+    var dark = pref === 'dark' ||
+      (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+    document.documentElement.classList.add(dark ? 'dark' : 'light')
+  })()
+</script>
+```
+
+`frontend/src/lib/theme.ts`는 같은 규칙을 런타임에서 유지한다: `setThemePref()`는 `.light`/`.dark`를 **교체**하고(둘 다 지운 상태를 만들지 않는다), `system`일 때만 `change` 이벤트를 따라 다시 계산한다.
+
+## 4. 컴포넌트 인벤토리
+
+공통 규칙:
+
+- **히트 영역은 입력 방식에 따라 2단계다**(§7.5). `@media (hover: hover) and (pointer: fine)`(마우스·트랙패드)에서는 **최소 24×24px**(WCAG 2.5.8 Target Size Minimum), `@media (pointer: coarse)`(터치)에서는 **최소 44×44px**. 시각 크기와 별개로 `::before` 확장을 쓴다. 24px 칩·`sm` 버튼은 포인터 환경 전용 치수이며, 터치 환경에서 44px 확장이 인접 타겟과 겹치는 컴포넌트는 그 구간에서 **표시하지 않는다**(예: `<560`의 행 내부 태그 칩 → 개수만 표시).
+- 포커스는 §2.6/§7의 `:focus-visible` 링 하나.
+- disabled는 `opacity: .45` + `pointer-events: none` + `aria-disabled`.
+
+### 4.1 Button
+
+| 변형 | 배경 | 텍스트 | 보더 | 사용처 |
+|---|---|---|---|---|
+| `primary` | `--accent` | `--on-accent` | 없음 | 저장, 확인. **화면당 최대 1개** |
+| `secondary` | `--bg-surface` | `--fg-1` | `1px --line-control` | 취소, 보조 액션 |
+| `ghost` | 투명 | `--fg-2` | 없음 | 행 hover 액션, 툴바 아이콘 |
+| `danger` | 투명 | `--danger` | `1px --danger` | 삭제 확인 다이얼로그의 확인 버튼(11 §5(4)) |
+
+- **`danger`를 채움색으로 쓰지 않는다**(§2.1.4-b). 재시도 버튼은 `secondary`다. **`danger-solid` 변형은 존재하지 않는다** — 확인 다이얼로그의 삭제 버튼도 위 outline 변형 하나다. 11은 이 변형을 이름으로만 참조한다.
+- 크기: `sm` 24px 높이 / `text-label` / 패딩 8px, `md` 32px 높이 / `text-label` / 패딩 12px. 두 개뿐이다. `sm`은 **포인터 환경 전용**이다 — 터치 환경(`pointer: coarse`)에서는 `md`로 승격하거나 `::before`로 44×44px까지 확장한다(§4 공통 규칙).
+- 상태: `default` → `hover`(배경 `--bg-hover`, primary는 `--accent-hover`, 진입 0ms / 이탈 `--dur-out`) → `active`(추가 변형 없음, transform 금지) → `focus-visible`(링) → `disabled` → `loading`(라벨 유지 + 16px 스피너 좌측 삽입, 폭 고정, `aria-busy`).
+- 아이콘 전용 버튼은 `aria-label` 필수 + Tooltip 연결.
+
+### 4.2 Input / Textarea
+
+| 변형 | 명세 |
+|---|---|
+| `text` | 높이 32px, `--radius-control`, 배경 `--bg-surface`, 보더 **`1px --line-control`**, `text-body`, 패딩 12px |
+| `search` | `text` + 좌측 16px 검색 아이콘 + 우측 clear 버튼(값 있을 때만). 툴바 전용, 높이 32px |
+| `url` | `text` + `--font-mono` + `inputmode="url"` + `spellcheck=false`. 저장 입력 전용 |
+| `textarea` | `text` + `min-height 72px` + `field-sizing: content`. 메모 전용 |
+
+- 상태: `default` / `hover`(보더 `--line-control` 유지, 배경 `--bg-hover` — 이 조합에서도 3.45:1 / 4.04:1로 3:1을 넘는다) / `focus-visible`(**`outline` 링. `outline-none` + 보더 색 변경 방식 금지** — 현재 입력 3곳의 처리는 접근성 결함이므로 전부 교체) / `invalid`(보더 `--danger` + 하단 12px `--danger` 메시지 + `aria-invalid`) / `disabled` / `readonly`(배경 `--bg-hover`, 커서 default).
+- placeholder는 `--fg-3`. **placeholder를 라벨 대신 쓰지 않는다** — 시각 라벨이 없으면 `VisuallyHidden` 라벨을 붙인다.
+- 검색은 Enter가 필요 없다. 디바운스 120ms + `?q` `replaceState` 동기화.
+- 입력 보더에 `--line-1`/`--line-2`(알파 헤어라인, 1.2~1.5:1)를 쓰지 않는다. 입력의 배경은 페이지와 같은 `--bg-surface`라 **보더가 컨트롤 경계의 유일한 시각 신호**이고, 그것은 WCAG 1.4.11이 3:1을 요구하는 대상이다(§7.1).
+
+### 4.3 Chip (태그 / 필터)
+
+높이 24px, `--radius-chip`, `text-label`, 패딩 `4px 8px`, 갭 6px.
+
+**변형 축은 `4변형 × facet`이 아니라 `3레벨 × 4facet`이다 — 조합 폭발이 없다.** hue는 그 태그의 facet이 정하고(§2.1.2), 채움 단계만 상태를 인코딩한다(R1).
+
+| fill level | 언제 | 배경 | 텍스트 | 보더 |
+|---|---|---|---|---|
+| **0** | 기계가 붙임(`source: rules`/`embed`), 표시 전용 | `transparent` | facet `ink` | 없음 |
+| **1** | 사람이 붙임(`source: manual`) **또는** 필터 바의 미선택 칩 | facet `tint` | facet `ink` | 표시 칩 없음 / **필터 칩만 `--line-control`** |
+| **2** | 현재 `?tag` 필터와 일치 | facet `ink` | `--bg-surface` | 없음 |
+
+- **fill level 0에는 보더가 없다.** 행·인스펙터의 표시 칩은 `readonly`라 WCAG 1.4.11의 "컨트롤 경계" 대상이 아니고(§7.1), 그래서 보더를 뺄 자격이 있다. 한 화면에 최대 38~41개가 깔리는 칩에 보더를 두면 리스트가 격자가 된다.
+- **필터 바 칩은 컨트롤이므로 `--line-control` 보더를 유지한다** — 이것이 이전 명세와 달라지지 않는 유일한 지점이다(§4.2와 같은 이유).
+- **선택된 행 안에서는 `fill 1` 칩만 fill level 0으로 내려간다.** `--bg-selected`와 `craft` tint가 같은 값이라 **fill 1 배경**이 행 배경과 겹치기 때문이고, 근거가 fill 1에만 해당하므로 규칙도 fill 1에만 적용된다. **현재 `?tag` 필터와 일치하는 칩은 선택된 행 안에서도 fill 2(solid)를 유지한다** — 분기 순서는 §5.2가 원본이며 `selected`를 가장 먼저 평가한다(`onSelectedRow`는 `manual` 분기에서만 쓰인다). 부수 효과로 지금 보고 있는 행의 소음이 줄어든다.
+- 형태 선택 근거(실측): 솔리드 채움은 흰 글자 기준 공통 L 0.55→0.60에서 통과 hue가 18/18 → 0/18로 무너지는 절벽 위에 있어 탈락, 유채 dot은 사용자의 요구를 충족하지 못해 탈락, 좌측 컬러 바는 S1(행 leading edge 레일)과 형태가 정면 충돌해 탈락, 표시 칩 아웃라인은 40개가 깔리면 리스트를 격자로 만들어 탈락했다. tint 배경 + 유채 잉크만 대비가 hue와 decouple된다(§2.1.3 칩 내부 대비표).
+- 상태: **표시 칩(`readonly`)에는 hover가 없다.** 필터 칩만 상태를 갖는다 — `hover`(fill 1은 배경이 `--bg-hover`, **fill 2는 채움을 그대로 유지한다** — facet별 hover 토큰을 만들지 않는다. 선택은 이미 최대 강도라 더 강조할 여지가 없다) / `focus-visible` / `pressed`(즉시 반영 — 낙관적) / `disabled`.
+- 카운트가 붙는 필터 칩은 `이름` + 6px + `카운트(mono, --fg-3)`. **selected(fill 2)일 때 카운트 색은 `--bg-surface` 70% 혼합**이다 — facet별 `on-color`를 만들지 않기 때문이며, `--bg-surface` 하나로 4개 facet 전부 4.5:1을 넘는다(§2.1.3).
+- **제외(`excluded`) 변형은 없다.** 계약의 태그 필터는 `tag` 파라미터 **1개**(정확 일치)뿐이라 `-name` 같은 제외 문법을 보낼 수 없다. 필요해지면 `api/openapi.yaml`의 `tag` 파라미터 의미를 먼저 확장한다(11 §10의 계약 공백 목록 소관).
+- 결정 알고리즘은 §5.2, 운영 규칙은 §5.3.
+
+### 4.4 Row (링크 행) — 목록의 기본 단위. 카드 아님
+
+```
+[2px 레일][12][56 썸네일][12][제목(title/1줄) ─ 도메인 · 저장시각(meta/mono)] ─ [칩 최대 3][액션][16]
+```
+
+| 항목 | 값 |
+|---|---|
+| 높이 | `--size-row` 76px 고정(**≥560**) / `--size-row-sm` 88px(`<560`) |
+| 레일↔썸네일 간격 | 12px(`space-12`). 레일은 행 좌측 경계에 붙고 좌측 패딩을 따로 두지 않는다 |
+| 썸네일 | `--size-thumb` 56×56(`<560`은 `--size-thumb-sm` 44×44), `--radius-thumb`, `object-fit: cover`, `loading="lazy"`, `decoding="async"` |
+| 썸네일 폴백 | 도메인 첫 글자 대문자 + `--bg-hover` 배경 + `--fg-3`. **색상 해시 금지** — 폴백은 태그가 아니라 도메인이고 도메인에는 facet이 없다. 해시는 §5.4에서 영구 배제다 |
+| 구분 | 카드 테두리 없음. 행 사이 `1px --line-1` 하한선만 |
+| hover | 배경 `--bg-hover` + `--radius-row`. 그림자 없음 |
+| `description` | **목록에 표시하지 않는다** — 인스펙터로 이동 |
+| `note` 존재 | 아이콘 하나로만 표시(내용은 인스펙터) |
+
+- 상태: `default` / `hover` / `focus-visible`(링) / `selected`(배경 `--bg-selected` + accent 레일) / `pending`(스켈레톤 슬롯 + 펄스 레일) / `failed`(danger 레일 + "실패" 텍스트 + 재시도 버튼) / `optimistic`(저장 직후 S2 상태).
+- **우측 액션(원문 열기·재시도·삭제)은 hover/포커스에서만 노출.** 체크박스를 상시 노출하지 않는다. `@media (hover: none)`에서는 상시 표시.
+- **행 안의 태그 칩은 `<560`에서 표시하지 않는다**(태그 아이콘 + 개수만). 터치 환경의 44×44px 히트 영역 요구와 24px 칩·6px 갭이 양립하지 않기 때문이다(§4 공통 규칙). 화면별 칩 개수는 11 §3(6).
+- `description` 2줄 제거가 밀도에 가장 크게 기여한다. 900px 뷰포트에서 약 10행이 보인다.
+- **가상 스크롤:** 렌더 행이 200개를 넘으면 `@tanstack/react-virtual`로 전환한다(목표가 10만 건). 행 높이가 고정이라 가상화 비용이 거의 없다.
+
+### 4.5 Card
+
+목록에는 카드가 없다. 카드는 **통계 화면과 설정 화면에만** 존재한다: 배경 `--bg-surface`, `--radius-panel`, `box-shadow: var(--ring)`, 패딩 20px. 변형은 `plain` / `interactive`(hover `--bg-hover`) 둘.
+
+### 4.6 Badge
+
+배지는 **상태에 쓰지 않는다**(R3). 남는 용도는 두 가지뿐이다.
+
+| 변형 | 스타일 | 사용처 |
+|---|---|---|
+| `count` | 배경 `--bg-hover` + `--fg-2` + mono + `--radius-chip` + 높이 18px | 태그 카운트, 결과 개수 |
+| `notice` | 배경 `--warn-tint` + `--warn` + `--radius-chip` + 높이 18px | 중복 저장(기존 항목 반환), 사전 밖 태그 |
+
+- **`notice`는 `media` facet ink와 CVD ΔE 1.53으로 붙는다**(§2.1.3 미해결 위험). 그래서 **문장을 반드시 동반**하고, 태그 이름을 담지 않으며, 칩 옆에 나란히 두지 않는다.
+
+### 4.7 StatusRail (S1)
+
+행 leading edge의 `--size-rail`(2px) 세로 획. `StatusBadge.tsx`의 5색(neutral/blue/violet/emerald/red) 매핑을 대체한다.
+
+| 상태 | 레일 | 동반 표시 |
+|---|---|---|
+| `done` | **투명**(아무것도 없음) | 없음 |
+| `pending` / `scraping` / `tagging` | `--rail-progress`, `opacity .7↔1` `--dur-pulse`(2400ms) 펄스 | 스켈레톤 슬롯 |
+| `failed` | `--danger` 실선 | 행 우측 "실패" 텍스트 + 재시도 버튼 + `alert-triangle` 아이콘 |
+| `selected` | `--accent` 실선 | 배경 `--bg-selected` |
+
+- **두께는 `--size-rail`(2px) 하나다.** 목록 행이든 인스펙터 상단이든 같은 값을 쓴다 — R3가 "2px 세로 획"으로 고정했고(§1.2·§1.4), §2.1.4의 채도 예산표가 유채 레일의 크기 상한을 **2px**으로 못 박았기 때문에 4px짜리 `--danger`·`--accent` 레일은 예산 위반이다. 굵기로 위계를 만들지 않고 위치(패널 상단 vs 행 leading edge)로 만든다. 익명 임의값(`w-[4px]`)은 lint 실패다.
+- **칩이 유채색이 되어도 레일 색 어휘는 늘지 않는다(R3).** 상태는 여전히 `--rail-progress` / `--danger` / `--accent` 3색과 투명 하나뿐이고, facet hue는 레일에 절대 등장하지 않는다.
+- **의미 토큰만 쓴다.** 레일 색을 `--ink-400` 같은 원시 팔레트로 직접 지정하면 lint 실패다(§2.1.1). 진행 레일의 의미 토큰은 `--rail-progress`(라이트 `--ink-600` / 다크 `--ink-400`)이며 §2.1.2에 등재되어 있다.
+- **펄스 하한이 `.35`가 아니라 `.7`인 이유는 대비다.** R3에 따라 배지를 폐기했으므로 레일이 진행 상태의 유일한 시각 신호이고, 따라서 WCAG 1.4.11(비텍스트 3:1) 대상이다. `.7`에서 라이트 3.38 / 다크 3.68(전 배경 최저 3.13 / 3.44)로 하한에서도 3:1을 넘는다(§2.1.3). 이전 명세의 `--ink-400` + `.35↔.8`은 라이트에서 1.38~2.22로 기준 미달이었다.
+- reduced-motion에서는 펄스를 **정적 `opacity: 1`**로 바꾼다(감소가 아니라 제거 — §7.4). 정적값도 5.94:1 / 5.57:1로 3:1을 넘는다.
+- 색 단독 표현 금지 규칙에 따라 레일에는 항상 `VisuallyHidden` 상태 텍스트가 동반된다(`aria-label="수집 중"`). 다만 시각 대비 요구를 이 텍스트가 대신하지는 못한다 — 위 3:1은 별도로 만족해야 한다.
+- `failed`와 `selected`가 동시면 `selected`가 이긴다(선택은 사용자의 현재 의도).
+
+### 4.8 EmptyState
+
+`text-head` 제목 1줄 + `text-body`/`--fg-2` 설명 1줄 + 액션 버튼 0~1개. 상하 56px 여백. **일러스트·마스코트·이모지 금지.**
+
+| 맥락 | 제목 | 설명 | 액션 |
+|---|---|---|---|
+| 링크 0건(최초) | `저장된 링크가 없습니다` | `URL을 붙여넣으면 제목과 태그가 자동으로 채워집니다.` | 저장 입력 포커스 |
+| 검색 결과 0건 | `검색 결과가 없습니다` | `다른 단어를 쓰거나 태그 필터를 해제해 보세요.` | 필터 초기화 |
+| 태그 필터 결과 0건 | `조건에 맞는 링크가 없습니다` | `선택한 태그 조합에 해당하는 항목이 없습니다.` | 필터 초기화 |
+| 실패 항목만 필터 | `실패한 링크가 없습니다` | `모든 링크가 정상 처리되었습니다.` | 없음 |
+
+**`isLoading` 동안에는 빈 상태를 절대 렌더하지 않는다.**
+
+### 4.9 Skeleton
+
+- 실제 콘텐츠와 **동일 치수**의 블록. 배경 `--bg-hover`, `--radius-thumb`(썸네일) / 4px(텍스트 줄).
+- **스켈레톤은 움직이지 않는다.** shimmer도, 자체 페이드 루프도 없다 — 무한 루프는 앱 전체에서 진행 레일 펄스 하나뿐이고(§1.4-S1, §6.1), 목록에 스켈레톤이 여러 개 깔린 상태에서 각자 다른 위상으로 깜빡이면 그 자체가 소음이다. 진행 중이라는 신호는 같은 행의 레일이 이미 주고 있다.
+- 실값이 도착하면 스켈레톤→실값 crossfade `--dur-2`(§6.1). 이것이 스켈레톤이 참여하는 유일한 모션이다.
+- **200ms 규칙:** 응답이 200ms 안에 오면 스켈레톤을 아예 띄우지 않는다(모션 duration이 아니라 **임계값**이므로 §2.6 토큰 집합과 무관하다). 스켈레톤이 깜빡였다 사라지는 것이 스켈레톤이 없는 것보다 느리게 느껴진다.
+- 로딩 표현은 **둘**이다: `Skeleton`(리스트·행 첫 진입) / `Spinner`(단일 액션, 16px, **요청이 떠 있는 동안만** — 요청 수명에 묶인 유한 회전이라 §6.1의 "유일한 무한 루프"와 구분된다). "인라인 점"은 두지 않는다 — 스크래핑 대기는 이미 레일이 표현하고 있고, 같은 정보를 두 번 움직이게 만들 이유가 없다.
+- **CLS 0** — 썸네일·스켈레톤·행 높이를 전부 사전 예약한다.
+
+### 4.10 Toast
+
+**이 절이 토스트 시각 명세의 원본이다.** "언제 띄우는가"와 에러 코드 → UI 매핑은 11 §1.4가 원본이며, 두 문서는 값을 복제하지 않는다.
+
+- **위치: 하단 중앙 고정.** 데스크톱·모바일 동일하고 우하단 변형은 없다. 모바일은 `env(safe-area-inset-bottom)` 위로 띄운다.
+- **동시 1개.** 새 토스트는 이전 것을 **교체**한다(스택·큐 금지). 화면에 토스트가 둘 이상 겹치는 순간은 없다.
+- 컨테이너: `--bg-elevated` + `--sh-panel` + `--radius-panel`, 최대 폭 360px, 패딩 12px 16px, `z-(--z-toast)`.
+- 구성: **문장 1줄 + 액션 최대 1개**. 아이콘 없음, 이모지 없음.
+
+| 변형 | 색 | 지속 | 예시 |
+|---|---|---|---|
+| `success` | **무채색**(`--fg-1` 텍스트, 마커 없음) | 4000ms | `저장했습니다` |
+| `warn` | `--warn` 2px 좌측 마커 | 4000ms | `이미 저장된 링크입니다` + `열기` |
+| `error` | `--danger` 2px 좌측 마커 | **자동 소멸 없음**(수동 닫기 또는 다음 토스트) | `저장에 실패했습니다` + `다시 시도` |
+| `undo` | 무채색 | 8000ms | `삭제했습니다` + `실행 취소` |
+
+- **success에 액센트를 쓰지 않는다.** 브랜드 solid 사용처는 정확히 4곳(§2.1.4)이고 토스트 마커는 거기 없다. 성공 토스트에 색을 넣는 순간 R1이 깨진다 — 토스트는 사람의 개입이 아니라 시스템의 응답이고, 색조는 정체성만 인코딩한다. 색은 실패(`danger`)와 경고(`warn`)에만 쓴다.
+- 상태: `entering`(`opacity 0→1` + `translateY(4px→0)`, `--dur-2`) / `visible` / `leaving`(`--dur-out`) / `paused`(hover·포커스 시 타이머 정지).
+- `role="status"`(success/warn/undo) / `role="alert"`(error). `aria-live` 영역은 앱당 1개.
+- 색 단독 금지 — 마커가 있는 변형도 문장이 상태를 그대로 말한다(마커를 지워도 의미가 남는다).
+- 4000ms·8000ms는 JS 타이머 값이며 CSS duration 토큰이 아니다(§2.6의 허용 집합에 예외로 등재된 두 값).
+
+### 4.11 그 외 프리미티브 (Radix 직접 소유)
+
+| 컴포넌트 | Radix | 비고 |
+|---|---|---|
+| Inspector / Sheet | `Dialog` | ≥1024는 non-modal 우측 패널, 미만은 modal 시트(구간별 형태는 11 §6(6)) |
+| CommandPalette | `Dialog` + 자체 리스트 | `Cmd+K`. 유리 2곳 중 하나 |
+| Tooltip | `Tooltip` | 지연 400ms, 터치 기기에서는 비활성 |
+| Popover(정렬·필터) | `Popover` | |
+| ConfirmDialog(**태그 사전 삭제 전용**) | `AlertDialog` | 기본 포커스는 취소 버튼. **링크 삭제에는 쓰지 않는다 — 실행취소 토스트가 대신한다(11 §1.2)** |
+| VisuallyHidden | `VisuallyHidden` | 상태 텍스트, 아이콘 버튼 라벨 |
+
+## 5. 태그 색상 전략
+
+### 5.1 결론: 색은 태그가 아니라 facet 4개가 갖는다
+
+**팔레트 크기는 유채 3 + 무채 1이다. 개별 태그에 색을 주지 않고, 해시도 사용자 지정 색도 도입하지 않는다.**
+
+30~50개 태그에 30~50색은 수학적으로 불가능하다(7색부터 CVD ΔE 6.2로 붕괴). 문제는 "몇 개까지 되나"인데, 이 시스템의 제약 아래서는 6도 5도 4도 아니고 **3**이다. hue 공간이 이미 거의 다 예약되어 있기 때문이다(§2.1.4 hue 예약표):
+
+```
+danger  ±20°   →  [  4 ,  44]  금지
+warn    ±18°   →  [ 49 ,  85]  금지
+brand   ±35°   →  [133 , 203]  금지 (브랜드가 곧 최대 패밀리이므로 그 주변은 "또 다른 초록"이 된다)
+중성 램프 hue  →  [205 , 275]  금지  ← 이 시스템만의 제약
+AI 바이올렛    →  [275 , 300]  금지 (편집 판단)
+────────────────────────────────────
+가용            [ 85 ,133] ∪ [300 ,360]
+```
+
+**"중성 램프 hue 금지"가 이 프로젝트 고유의 결정적 제약이다.** §2.1.1이 중성 12단을 hue 225 근처로 정의했고 실측하면 `--fg-2`가 `oklch(46.5% 0.024 257.5)`다. 즉 이 앱의 회색은 **파란 회색**이고, 파란 태그 패밀리를 넣으면 "파랑 태그"와 "패밀리 없음"이 경쟁한다. 남은 두 대역에 4개를 넣으면 자주 계열이 둘이 되어 정상시야에서도 헷갈린다.
+
+| 유채 패밀리 수 | worst normal ΔE | worst CVD ΔE | 판정 |
+|---|---|---|---|
+| 3 | **10.19 / 11.06** | **7.49 / 8.37** | 채택 |
+| 4 (파랑 없이) | 9.88 | 6.17 | 마진 부족 |
+| 5 (파랑 포함) | 6.30~8.15 | 2.93~5.15 | **실패** |
+
+배정 방식은 셋 다 규칙으로 못 박는다. **해시 금지**(§5.4), **사용자 개별 태그 색 지정 금지**(§5.4), **태그 → facet 매핑은 서버가 소유한다**(`Tag.facet`, 사용자는 태그 관리 화면에서 4지 선다로 facet만 고른다 — 11 §5).
+
+같은 이유로 **썸네일 폴백에도 색 해시를 쓰지 않는다**(도메인 첫 글자 + `--bg-hover`) — 폴백은 태그가 아니라 도메인이고, 도메인에는 facet이 없다.
+
+### 5.2 칩 결정 알고리즘 (hue × fill 2축)
+
+칩의 스타일은 아래 순수 함수로 **완전히 결정**된다. **hue는 facet이, 채움은 상태가 정한다(R1).** 분기 순서가 우선순위다.
+
+```ts
+type TagFacet = 'craft' | 'media' | 'life' | 'neutral'   // api/openapi.yaml 의 TagFacet
+
+/** facet -> 토큰 이름. 여기가 색이 등장하는 유일한 지점이고, 값이 아니라 이름만 있다. */
+const FACET_TOKENS: Record<TagFacet, { ink: string; tint: string }> = {
+  craft:   { ink: 'tag-craft-ink', tint: 'tag-craft-tint' },
+  media:   { ink: 'tag-media-ink', tint: 'tag-media-tint' },
+  life:    { ink: 'tag-life-ink',  tint: 'tag-life-tint'  },
+  neutral: { ink: 'fg-2',          tint: 'hover'          },  // 새 토큰을 만들지 않는다
+}
+
+type TagSource = 'rules' | 'embed' | 'manual'      // api/openapi.yaml 의 tag.source
+type ChipInput = {
+  facet: TagFacet
+  selected: boolean                 // 현재 ?tag 필터와 일치 (계약상 tag 파라미터는 1개)
+  source: TagSource | null          // null = 필터 바 (링크에 붙은 태그가 아님)
+  role: 'control' | 'readonly'      // 필터 바 칩 = control, 행/인스펙터 칩 = readonly
+  onSelectedRow: boolean            // 선택된 행 안에서는 tint 가 행 배경과 겹친다
+}
+
+/** 반환값은 토큰 이름만. raw hex 를 만들지 않는다. */
+function chipStyle(i: ChipInput) {
+  const t = FACET_TOKENS[i.facet]
+  if (i.selected)           return { bg: t.ink,  fg: 'surface', border: 'transparent' }   // fill 2
+  if (i.role === 'control') return { bg: t.tint, fg: t.ink,     border: 'line-control' }  // fill 1 + 컨트롤 경계
+  if (i.source === 'manual' && !i.onSelectedRow)
+                            return { bg: t.tint, fg: t.ink,     border: 'transparent' }   // fill 1
+  return                           { bg: 'transparent', fg: t.ink, border: 'transparent' } // fill 0
+}
+```
+
+`bg: 'transparent'`와 `border: 'transparent'`는 Tailwind 정적 유틸(`bg-transparent`/`border-transparent`)이라 §3의 팔레트 리셋 영향을 받지 않는다.
+
+| 축 | 무엇을 인코딩하는가 | 표현 |
+|---|---|---|
+| **hue** | 정체성(그 태그가 무엇에 관한 것인가) | `craft` 168 / `media` 112 / `life` 318 / `neutral` 무채 — §2.1.2 |
+| **fill** | 개입(누가 붙였고 지금 켜져 있는가) | 0 투명(기계) / 1 tint(사람·컨트롤) / 2 solid(선택) — §4.3 |
+
+제외 필터 분기는 없다 — 계약이 제공하지 않는다(§4.3).
+
+`manual`이 **그 태그 자신의 facet tint**를 받는 것이 개정된 R1의 가장 잘 보이는 표현이다. 내가 손댄 태그가 어디 붙어 있는지가 재발견의 단서이고, 그 수정이 `tag_feedback`으로 M5 재랭킹 학습 데이터가 되는 제품 서사와도 일치한다. **`--accent-tint`는 여기 등장하지 않는다** — 브랜드 tint는 선택된 행 배경 전용으로 되돌아갔다(§2.1.4).
+
+**재평가 트리거(측정치) 2개.** 이전의 "manual 비율 30%" 트리거는 폐기됐다 — 채움 1단이 액센트가 아니라 facet tint이므로 manual이 늘어도 브랜드 색이 번지지 않는다.
+
+1. 한 화면에서 **`neutral` 칩 비율이 40%를 넘으면** facet 배정이 실패한 것이므로 사전을 정리한다.
+2. **`craft` 비율이 75%를 넘으면** 색이 정보를 잃은 것이므로 `craft` 분할 또는 3색 팔레트 자체를 재검토한다.
+
+### 5.3 칩 운영 규칙
+
+아래 두 줄은 **계약이 실제로 주는 데이터**(`Tag.link_count` = 전역 누계)로만 판단한다.
+
+- **전역 `link_count === 0`인 태그만 목록 화면의 칩 바에서 숨긴다.** 태그 관리 화면은 0건도 표시한다(사전 관리 대상이므로). "현재 필터 결과 기준 0건 숨기기"는 **불가능하다** — 필터 스코프 카운트가 계약에 없다(11 §10-5).
+- **정렬은 `link_count` desc → 이름순.** "최근 30일 부착 횟수" 정렬은 데이터가 없어 구현하지 않는다: `Stats.by_day`는 링크 수이지 태그별이 아니고, 클라이언트 집계는 10만 건 목표와 정면충돌한다(11 §10-2). 도입하려면 `api/openapi.yaml`에 태그별 기간 카운트를 추가하는 것이 선행 조건이다.
+- **필터 바를 facet으로 정렬하지 않는다.** 정렬은 위 규칙 그대로다 — 색이 위치까지 지배하면 두 채널이 중복된다.
+- 맨 앞에 `태그 없음` 고정 칩 1개.
+- 필터 바는 **1줄 고정**. 넘치면 `+N` 버튼 → 팝오버로 전체 목록.
+- `confidence`는 목록에 표시하지 않는다. 인스펙터에서만 mono 숫자로 보여주고, `manual`은 슬롯 자체를 비운다(계약상 `confidence: null`).
+
+### 5.4 배제 근거 (영구)
+
+아래 셋은 재논의 대상이 아니다.
+
+1. **`hash(name) % palette.length` — 영구 배제.** `palette.length`가 바뀌는 순간 전량이 재배치되고, `name`이 바뀌면 그 태그의 색도 뒤집힌다. 의미와 색이 무관하므로 사용자가 색에서 배울 것도 없다. 반대로 서버가 준 facet은 순수 함수의 입력이라 **같은 태그는 언제나 같은 색이고, 태그를 추가·삭제·개명해도 다른 태그의 색이 움직이지 않는다.**
+2. **개별 태그의 사용자 지정 색 — 배제.** GitHub 라벨(임의 hex + 랜덤 버튼)과 Notion select(자동 랜덤 배정)가 정확히 무지개 문제를 만들었다. Notion은 "모든 select를 회색으로 바꾸는 법" 가이드가 별도로 존재할 정도다.
+3. **파랑 패밀리(hue 205~275) — 배제.** 중성 램프가 hue 257이라 `neutral` 칩과 CVD ΔE 2.93~5.15로 붙는다(실측 — §5.1 표, §2.1.4 hue 예약표).
+
+**경위 기록.** 이전 명세에는 "태그가 100개를 넘으면 상위 그룹 6색 배정을 재개한다"는 봉인 해제 트리거가 있었다. 그 조건은 **충족되지 않았고**, 2026-07-22에 사용자가 "태그에 브랜드 색이 보였으면 한다"고 요구해 설계가 바뀐 것이다. 봉인 해제가 아니라 요구 변경이므로 그 트리거 문장은 삭제한다. 다만 당시 조건 4개 중 세 개(사전 선언 매핑 / 대비 4.5:1 통과 / 색은 보조 채널)는 그대로 살아 이 절과 §2.1.3이 만족하며, 네 번째("액센트 hue를 그룹 팔레트에서 제외")만 의도적으로 뒤집혔다 — 브랜드 hue가 최대 패밀리 `craft`를 직접 맡는 것이 개정된 R1의 핵심이다.
+
+### 5.5 facet 정의와 배정
+
+**판정 기준.** UI에 노출되는 한글 라벨은 `만드는 것` / `형식` / `일 바깥` / `분류 없음` 4개로 고정이며 두 클라이언트가 같은 단어를 쓴다(§8.1).
+
+- `craft` — 내가 만드는 것에 **직접 쓰는** 레퍼런스. 다시 여는 이유가 "쓰려고". `ai`/`llm`/`data`가 여기 있는 것은 이 제품의 NLU 자체가 그 도메인이기 때문이다.
+- `media` — **형식 자체가 정보인** 태그. 다시 열 때의 시간 비용을 알려준다(3분짜리 아티클인가 40분짜리 영상인가). 링크 아카이브에서 스캔 가치가 가장 높은 축이라 자기 색을 받는다.
+- `life` — 일 바깥과 나 자신. `science`(읽을거리 주제)와 `productivity`/`career`(일하는 방식은 만드는 것이 아니라 나에 관한 것)가 경계 사례이며, 판정 기준은 위 문장이다.
+- `neutral` — facet 없음(UI 라벨 `분류 없음`). **사전에 없던 새 태그는 `neutral`로 태어나고**, 사용자가 태그 관리 화면(11 §5)에서 facet을 고르면 색을 얻는다.
+
+**시드 태그 30개 배정** — `craft 18 (60%) · media 5 (17%) · life 7 (23%)`.
+
+| # | tag | facet | # | tag | facet |
+|---|---|---|---|---|---|
+| 1 | `dev` | **craft** | 16 | `llm` | **craft** |
+| 2 | `golang` | **craft** | 17 | `data` | **craft** |
+| 3 | `kubernetes` | **craft** | 18 | `design` | **craft** |
+| 4 | `ios` | **craft** | 19 | `article` | **media** |
+| 5 | `swift` | **craft** | 20 | `video` | **media** |
+| 6 | `python` | **craft** | 21 | `tutorial` | **media** |
+| 7 | `rust` | **craft** | 22 | `news` | **life** |
+| 8 | `javascript` | **craft** | 23 | `science` | **life** |
+| 9 | `frontend` | **craft** | 24 | `finance` | **life** |
+| 10 | `backend` | **craft** | 25 | `career` | **life** |
+| 11 | `database` | **craft** | 26 | `productivity` | **life** |
+| 12 | `devops` | **craft** | 27 | `book` | **media** |
+| 13 | `security` | **craft** | 28 | `podcast` | **media** |
+| 14 | `opensource` | **craft** | 29 | `travel` | **life** |
+| 15 | `ai` | **craft** | 30 | `life` | **life** |
+
+**`craft`가 60%인 것은 결함이 아니라 설계다.** 40개 칩 중 24개가 브랜드 색이면 화면이 "이 앱처럼" 보이고, 나머지 16개가 두 색으로 갈라지므로 **스캔은 예외를 찾는 일이 된다** — 개발 링크 더미 속의 팟캐스트 하나, 여행 링크 하나가 즉시 튄다. 반대 설계(6그룹 균등 배분)는 모든 행이 다색이 되어 아무것도 안 튄다. "색이 60%에 걸리면 정보량이 낮다"는 반론은 사실이고, 그래서 **`craft`에는 브랜드 색을 주고 정보량이 아니라 정체성을 지게 했다.**
+
+**색 단독으로 의미를 지지 않게 하는 보조 수단 4개**(§7.1이 참조한다).
+
+1. **이름 텍스트가 항상 있다.** 칩은 자기 태그 이름을 언제나 렌더한다 — WCAG 1.4.1은 이것으로 충족된다. facet 색은 정보 채널이 아니라 **가속기**이고, 이 전제가 §2.1.3의 CVD 6~8 구간을 합법화한다.
+2. **채움 단계는 형태 채널이다.** manual/selected 구분은 hue가 아니라 배경의 유무·반전이라 전 CVD 유형에서 보존된다.
+3. **`?tag` 필터 상태는 URL과 툴바 문장에도 있다** — 어떤 칩이 solid인지 못 봐도 "태그: golang · 12건" 문장이 말한다. 여기의 숫자는 그 태그의 **전역 `Tag.link_count`** 이지 필터 결과 건수가 아니다(계약에 총 건수가 없다 — 11 §10-7).
+4. **facet은 태그 관리 화면(11 §5)에 텍스트로 노출된다.** 색이 무엇을 뜻하는지 색이 아닌 방법으로 확인할 경로가 앱 안에 존재한다.
+
+## 6. 모션 규칙
+
+### 6.1 모션을 쓰는 곳 (정확히 6곳)
+
+**이 표가 §2.6 허용 duration 집합의 사용처 목록이다.** 모든 값이 토큰이며 리터럴이 없다(§9 lint는 이 표와 `--dur-*` 선언을 대조한다). 11에 나오는 모든 모션이 이 표 안에 있어야 한다 — 표에 없는 전이를 화면 명세가 새로 만들면 반려다.
+
+| 위치 | 속성 | duration | easing | 근거 |
+|---|---|---|---|---|
+| 저장 직후 행 삽입·채워짐 (S2) | 낙관적 새 행 `opacity 0→1` + `translateY(-4px→0)` | `--dur-2` (180ms) | `--ease-enter` | 새 행이 목록 위에서 들어온다. 컨테이너 높이는 첫 프레임에 이미 최종값이고 아래 행 보정은 다음 FLIP 행이 맡는다 |
+| " | 스켈레톤→실값 crossfade | `--dur-2` (180ms) | `--ease-ui` | 시그니처. 제품의 핵심 주장을 그대로 보여준다 |
+| " | 썸네일 `opacity 0→1` | `--dur-3` (260ms) | `--ease-enter` | 늦게 도착하는 값의 등장을 부드럽게 |
+| " | 높이 변화 FLIP `transform` | `--dur-flip` (220ms) | `--ease-ui` | 레이아웃 점프 제거 (`top/height` 애니메이션 금지) |
+| 행 제거(삭제) | `position: absolute` 스냅샷 + `opacity 1→0` + `scaleY(1→.96)` | `--dur-out` (120ms) | `--ease-ui` | 문서 흐름에서 즉시 빼야 아래 행 FLIP이 같은 프레임에 시작된다 |
+| " | 아래 행들의 FLIP `transform` | `--dur-flip` (220ms) | `--ease-ui` | 삽입과 같은 보정 |
+| 인라인 편집 펼침(태그 사전) | `grid-template-rows: 0fr → 1fr` | `--dur-2` (180ms) | `--ease-ui` | 높이를 직접 애니메이션하지 않고 그리드 트랙만 보간한다. 내용 `opacity`는 `--dur-out`으로 지연 진입 |
+| 인스펙터 열기 | `transform` + `opacity` | `--dur-3` (260ms) | `--ease-enter` | 스크롤 위치를 유지한 채 컨텍스트가 바뀜을 알림 |
+| 인스펙터 닫기 | 동일 | `--dur-close` (200ms) | `--ease-ui` | 비대칭(닫기가 빠르다) |
+| 커맨드 팔레트·컴포저 진입 | `opacity 0→1` + `translateY(-4px→0)` | `--dur-1` (160ms) | `--ease-enter` | 새 레이어 전환 피드백. **`scale`을 쓰지 않는다** — 도구형 UI에서 확대·축소는 4px 이동보다 산만하고, 행 삽입과 같은 속성으로 통일된다 |
+| 커맨드 팔레트·컴포저 퇴장 | 동일 | `--dur-out` (120ms) | `--ease-ui` | |
+| 진행 중 상태 레일 | `opacity .7↔1` | `--dur-pulse` (2400ms 무한) | `--ease-ui` | 앱 내 **유일한** 무한 루프. 워커가 살아있다는 실제 시스템 상태 |
+
+- **`grid-template-rows` 보간은 "`top`/`height` 애니메이션 금지" 규칙의 승인된 예외다.** 금지의 이유는 매 프레임 레이아웃을 유발하는 것이고 `0fr → 1fr`도 같은 비용을 낸다 — 다만 인라인 편집 펼침은 **한 번에 한 행만, 사용자 조작 직후에만** 일어나고(스크롤 중 수백 행이 아니다), 대안인 `max-height` 트릭은 내용 높이를 추정해야 해서 더 나쁘다. 이 예외의 적용 대상은 태그 사전의 인라인 편집 행(11 §5(7)) **하나뿐**이며, 목록 행에는 쓰지 않는다.
+
+보조 전이(위 6곳에 종속):
+
+| 대상 | 진입 | 이탈 |
+|---|---|---|
+| hover 배경/텍스트 색 | **0ms(즉시)** | `--dur-out` |
+| 값 교체(텍스트·수치·상태 문장) | `--dur-2` | `--dur-2` |
+| 칩 추가/제거 | `--dur-2` | `--dur-out` |
+| 토스트 | `--dur-2` | `--dur-out` |
+| 시트(모바일) | `--dur-3` | `--dur-close` |
+| `visibility` | — | `step-end` / `step-start` 동반 전이로 포커스·히트테스트에서 정확히 제거 |
+
+- `will-change`는 1:1로 회수한다(설정한 곳마다 전이 종료 시 `unset`).
+- **JS로 도는 모션(FLIP, Web Animations API)은 CSS 봉인이 닿지 않는다.** `element.animate()`는 `[data-reduce-motion] * { animation: none }`의 대상이 아니므로, 실행 직전에 `matchMedia('(prefers-reduced-motion: reduce)').matches`를 확인해 `duration: 0`으로 최종 상태를 즉시 적용한다(§7.4).
+
+### 6.2 모션을 쓰지 않는 곳 (명시적 금지)
+
+스크롤 리빌, 목록 항목 stagger 진입, hover 시 카드 상승/스케일, 페이지 전환 애니메이션, 숫자 카운트업, 태그 카운트 애니메이션, 패럴랙스, 마퀴, 커스텀 커서, 스프링/오버슈트, 세로 `scroll-snap`.
+
+### 6.3 "반응성"의 실제 정의
+
+연출이 아니라 지연 예산이다. 서버가 로컬이고 저장 API p99가 50ms 미만이라는 사실(성능 목표는 [00-README.md](00-README.md))을 UI가 활용해야 한다.
+
+| 규칙 | 값 |
+|---|---|
+| 스켈레톤 억제 | 응답 200ms 이내면 스켈레톤을 띄우지 않는다 |
+| 낙관적 반영 | 저장·태그 토글·삭제·메모 저장은 서버 응답을 기다리지 않고 즉시 UI 반영, 실패 시 롤백 + `error` 토스트 |
+| 페이지 전환 | 0ms. 라우팅은 즉시 |
+| 검색 | Enter 불필요. 디바운스 120ms + `?q` `replaceState` |
+| CLS | 0 (모든 치수 사전 예약) |
+
+## 7. 접근성 기준
+
+### 7.1 대비
+
+- 본문·라벨·인터랙티브 텍스트: **4.5:1 이상**.
+- **비텍스트 3:1 규칙의 적용 범위는 "상태·컨트롤 경계"다.** 대상은 정확히 셋이다: (a) 상태 표시(진행/실패/선택 레일, 상태 아이콘), (b) 컨트롤 경계(입력·셀렉트·**필터 바 칩**·secondary 버튼의 보더 = `--line-control`), (c) 포커스 링. **행·인스펙터의 표시 칩은 (b)에서 제외된다** — `readonly`라 컨트롤이 아니고, 그래서 어느 fill level에서도 보더 없이 렌더한다(§4.3). **장식 헤어라인도 예외**다 — 행 구분선·카드 링(`--line-1`/`--line-2`)은 그 자체가 정보를 지지 않고, 제거해도 행 높이·간격·배경 대비로 구조가 남으므로 WCAG 1.4.11의 대상이 아니다. 대신 이 두 토큰을 컨트롤 경계에 쓰는 것을 금지한다(§4.2·§4.3).
+- `--fg-3`(라이트 2.66~2.83 / 다크 3.96~4.25)는 **중복 정보 전용**이다 — 도메인, 상대 시각, placeholder, 비활성 텍스트. 근거와 범위는 §2.1.3, 그 외 사용 금지.
+- 빌드 게이트(§9): 텍스트 조합은 4.5:1, `--line-control`과 상태 색은 3:1. 알파 색은 배경 위에 **실제로 합성(flatten)한 뒤** 계산한다.
+- **색 단독 표현 금지.** 상태는 항상 색 + 텍스트 + 아이콘/형태 3중이다. 다만 보조 텍스트가 있다고 해서 시각 대비 요구가 면제되지는 않는다(§4.7). 다크 + Increase Contrast + Reduce Transparency 조합에서도 확인한다.
+- **태그 칩의 보조 수단은 4개다**(이름 텍스트 상시 / 채움 단계라는 형태 채널 / URL·툴바 문장의 필터 상태 / 태그 관리 화면의 facet 텍스트). 목록은 §5.5가 원본이며, 이 4개가 있기 때문에 facet 색은 정보 채널이 아니라 가속기로 취급된다.
+
+### 7.2 포커스
+
+```css
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }
+```
+
+- `outline-offset`으로 갭을 만든다(box-shadow 이중 링 대신). `overflow: hidden` 컨테이너 안에서 잘리지 않고 그림자 토큰과 충돌하지 않는다.
+- **`outline: none` + 보더 색만 바꾸는 처리 금지.**
+- 모달(Dialog/AlertDialog/Sheet/Palette)은 포커스 트랩 + 닫을 때 트리거로 포커스 복귀. Radix가 기본 제공하므로 직접 구현하지 않는다.
+- 페이지 최상단에 "본문으로 건너뛰기" 스킵 링크(포커스 시에만 표시).
+
+### 7.3 키보드 내비게이션
+
+**단축키 표는 11 §1.2가 유일한 원본이다.** 여기에 값을 복제하지 않는다 — 두 벌이 되는 순간 `Cmd+Enter` 이중 바인딩과 `Esc` 처리 순서 충돌이 다시 생긴다. 이 절은 키 목록이 아니라 **목록 내비게이션의 접근성 요구**만 정의한다.
+
+- 목록은 **roving tabindex** 1개 — 행 수천 개가 탭 순서에 들어가면 안 된다.
+- **hover에서만 보이는 액션은 포커스에서도 반드시 보인다.** 키보드 사용자가 도달할 수 없는 액션을 만들지 않는다.
+- 모든 아이콘 버튼에 `aria-label`. 목록은 `role="list"`, 행은 `role="listitem"` + `aria-selected`.
+- 낙관적 반영 결과와 비동기 상태 변화는 `aria-live="polite"` 영역 1개로 통지(`3건 저장 완료`).
+- 단축키가 있는 액션도 **포인터로 도달 가능한 경로가 반드시 함께 있어야 한다**(단축키 전용 기능 금지). `?` 오버레이는 11 §1.2 표를 그대로 렌더한다.
+- 다중 선택 단축키(`X`, `Shift+↑↓`)와 테마 순환(`T`)은 **존재하지 않는다**(11 §1.2 · §8.5).
+
+### 7.4 모션 접근성
+
+- `prefers-reduced-motion: reduce` → `[data-reduce-motion]`으로 `transition-duration: 1ms` + `transition-delay: 0` + `animation: none` + `animation-delay: 0`. **지연(delay)까지 함께 0으로 만들어야** "120ms 지연 후 진입" 같은 연출이 남지 않는다.
+- **무한 루프(레일 펄스)는 정적 `opacity: 1`로 대체**한다 — 감소가 아니라 제거다(정적값도 3:1을 넘는다, §4.7).
+- **JS 모션은 CSS 봉인 밖이다.** FLIP과 Web Animations API(`element.animate()`)는 `animation: none`의 대상이 아니므로, 실행 전에 `matchMedia('(prefers-reduced-motion: reduce)').matches`를 확인해 duration 0으로 최종 상태를 즉시 적용한다.
+- MQL 객체를 보관해 `change` 이벤트로 **설정 변경에 실시간 반응**한다(초기 1회 읽기로 끝내지 않는다).
+- iOS 대응은 `@Environment(\.accessibilityReduceMotion)`이다(§8.2).
+- 자동 재생·자동 스크롤·자동 캐러셀 없음(애초에 §6.2에서 금지).
+
+### 7.5 그 외
+
+- **히트 영역 2단계**(§4 공통 규칙): 포인터 환경(`hover: hover` + `pointer: fine`) 최소 **24×24px**(WCAG 2.5.8 Target Size Minimum, AA), 터치 환경(`pointer: coarse`) 최소 **44×44px**. 두 환경 모두 인접 타겟 간 최소 간격 4px.
+- 44px 확장이 인접 타겟과 겹치는 밀집 컴포넌트는 그 구간에서 표시하지 않는다 — 24px 칩 3개 + 6px 갭을 76px 행 안에 넣고 각각 44px로 확장하면 물리적으로 겹치므로, `<560`에서는 행 내부 칩을 개수 표시로 대체한다(§4.4).
+- 텍스트 200% 확대에서 가로 스크롤이 생기지 않아야 한다(행 내부는 `flex-wrap`).
+- 이미지: 썸네일은 장식이므로 `alt=""` + `role="presentation"`(제목이 바로 옆에 있다). 폴백 이니셜도 동일.
+- 언어: `<html lang="ko">`. 라틴 고유명사에 별도 `lang` 표기는 하지 않는다.
+
+## 8. iOS 대응표 (M4)
+
+이 절만 보고도 SwiftUI에서 같은 디자인을 만들 수 있어야 한다. **최소 배포 타깃은 iOS 17**이다 — 아래 대응표가 `ContentUnavailableView`, `.sensoryFeedback`, `.scrollTargetBehavior` 등 iOS 17 API를 전제한다.
+
+### 8.1 공유하는 것 (같은 원본에서 나온다)
+
+- **의미 색 토큰 전체**(§2.1.2 의미 토큰 표의 **모든 행**: canvas/surface/hover/elevated/selected, fg-1..3, fg-inverse, line-1/2, line-control, rail-progress, accent/accent-hover/accent-tint/on-accent, danger/danger-tint, warn/warn-tint — 라이트+다크 쌍) **+ facet 팔레트 6개**(tag-craft/media/life의 ink·tint). 상태 색과 태그 색이 두 클라이언트에서 다르면 제품이 깨진다.
+- **`Tag.facet` → 토큰 매핑 규칙**(§5.2의 `FACET_TOKENS` 4줄 표). **iOS는 hex를 복제하지 않고 계약의 `Tag.facet`에서 자기 asset을 고른다** — 이것이 "같은 원본에서 나온다"의 실제 이행이다.
+- **간격 12스텝**, radius의 **의미 이름**(chip/control/thumb/row/panel/sheet).
+- **컨셉 규칙 3개(R1/R2/R3)**.
+- **한글 라벨 사전**: 상태 5개(`대기` / `수집 중` / `태깅 중` / `완료` / `실패`), **facet 4개**(`만드는 것` = craft / `형식` = media / `일 바깥` = life / `분류 없음` = neutral), 내비 5개, 검색 모드 라벨, 에러 코드 문구. 두 클라이언트가 다른 단어를 쓰면 안 된다.
+- **폴백 규칙**: `title` 빈 문자열 → `domain` → `url` / `thumb_url: null` 폴백(도메인 이니셜) / `author`·`lang`·`error`가 빈 문자열이면 **행 자체를 숨김** / `confidence: null`(manual)은 슬롯 비움 / `jobs.tag`·`jobs.thumb`의 **필드 부재와 failed는 다른 상태** / `thumb: failed` + `status: done`은 정상.
+- **정보 위계**: 목록 행의 필드 순서와 인스펙터의 필드 순서를 **웹과 iOS가 각각 동일하게** 유지한다. 1:1로 맞추는 대상은 **클라이언트 사이**이지 행↔인스펙터 사이가 아니다 — 행(썸네일→제목→도메인→칩)과 인스펙터(제목→도메인→썸네일→액션→태그→메모→설명→메타→잡)는 애초에 다른 구조이고 달라야 한다(11 §3(2)·§6(2)). 같은 계약 + 같은 정보 계층이 "두 클라이언트가 대등하다"는 주장의 실체다.
+
+### 8.2 토큰 대응
+
+| 웹 토큰 | SwiftUI 대응 | 비고 |
+|---|---|---|
+| `--bg-canvas` | Asset Catalog `Color("canvas")` (Any/Dark 2값) | 시스템 색 대신 명시 값. 상태 색 일치가 우선 |
+| `--bg-surface` | `Color("surface")` | List row background |
+| `--bg-hover` | `Color("hover")` | iOS에는 hover가 없다 → **pressed 상태와 폴백 배경에만** |
+| `--bg-elevated` | `Color("elevated")` | sheet 배경 |
+| `--bg-selected` | `Color("selected")` | edit mode 선택 행 |
+| `--fg-1/2/3` | `Color("fg1"/"fg2"/"fg3")` | `.primary/.secondary`를 쓰지 않는다(값이 갈라짐) |
+| `--fg-inverse` | `Color("fgInverse")` | 딥 배경 위 텍스트 |
+| `--line-1/2` | `Color("line1"/"line2")` | 장식 헤어라인 전용. `Divider().overlay(Color("line1"))` |
+| `--line-control` | `Color("lineControl")` | 입력·**필터 바 칩** 보더. **3:1 대상이므로 시스템 기본 보더로 대체하지 않는다** |
+| `--rail-progress` | `Color("railProgress")` | 진행 레일. 라이트 `#515A67` / 다크 `#9099A6` |
+| `--accent` / `--accent-hover` | `Color("accent")` + `.tint(Color("accent"))` / `Color("accentHover")` | AccentColor 에셋으로도 등록(시스템 컨트롤 tint). hover 대응은 pressed |
+| `--accent-tint` / `--on-accent` | `Color("accentTint")` / `Color("onAccent")` | 선택된 행 배경 / primary 버튼 텍스트. **manual 칩에는 쓰지 않는다**(facet tint가 대신한다) |
+| `--tag-craft-ink` / `--tag-craft-tint` | `Color("tagCraftInk")` / `Color("tagCraftTint")` | craft 칩. **hex를 손으로 옮기지 않고 `Tag.facet`으로 asset을 고른다**(§8.1) |
+| `--tag-media-ink` / `--tag-media-tint` | `Color("tagMediaInk")` / `Color("tagMediaTint")` | media 칩 |
+| `--tag-life-ink` / `--tag-life-tint` | `Color("tagLifeInk")` / `Color("tagLifeTint")` | life 칩 |
+| `neutral` facet | asset 없음 — `Color("fg2")` / `Color("hover")` 재사용 | 새 토큰을 만들지 않는다(§5.2 `FACET_TOKENS`) |
+| `--danger` / `--warn` | `Color("danger")` / `Color("warn")` | |
+| `--danger-tint` / `--warn-tint` | `Color("dangerTint")` / `Color("warnTint")` | 실패·경고 배너 배경 |
+| `--font-sans` | 시스템 폰트(SF). **커스텀 폰트 미탑재** | 자동으로 웹과 같은 인상 |
+| `--font-mono` | `.monospaced()` / `.font(.system(.footnote, design: .monospaced))` | R2 대상 필드 동일 |
+| `tabular-nums` | `.monospacedDigit()` | |
+| type scale | **크기가 아니라 역할로 대응** (§8.3) | Dynamic Type 필수 |
+| spacing 12스텝 | `enum Space { static let s2: CGFloat = 2 ... }` + `@ScaledMetric` | 큰 글자에서 간격도 함께 늘어난다 |
+| `radius-chip` | `Capsule()` | |
+| `radius-control` / `thumb` | `.clipShape(.rect(cornerRadius: 6, style: .continuous))` | **`.continuous` 필수** |
+| `radius-row` | 8 (`.continuous`) | |
+| `radius-panel` | 12 (`.continuous`) | |
+| `radius-sheet` | 시스템 시트가 자동 | 직접 그리지 않는다 |
+| `--ring` / `--sh-panel` | `@Environment(\.displayScale) private var displayScale` → `.overlay(shape.strokeBorder(Color("line1"), lineWidth: 1 / displayScale))` | 그림자는 시스템 시트에 위임. **`UIScreen.main`은 iOS 16부터 deprecated**(멀티 씬·Catalyst에서 틀린 값) |
+| z-index 사다리 | `.zIndex` 대신 표현 계층(sheet/alert/overlay)로 해결 | 값 이식 불필요 |
+| `--dur-*` | **duration은 그대로 이식한다.** 기본은 `.easeInOut(duration:)` — 열기 `.26`, 닫기 `.20`, 값 교체 `.18`, 퇴장 `.12`, 진입 `.16`, FLIP 대체(`.animation`) `.22` | §2.6의 오버슈트 금지는 iOS에도 적용된다 |
+| 스프링 | `.spring`을 쓸 경우 **`dampingFraction: 1.0`(임계 감쇠) 고정** — 예: `.spring(response: 0.26, dampingFraction: 1.0)` | 1.0 미만은 오버슈트가 생겨 §2.6 위반 |
+| `--dur-pulse` | `.easeInOut(duration: 1.2).repeatForever(autoreverses: true)`로 `opacity .7↔1` | 왕복 1회가 2.4s가 되도록 편도 1.2s. `.spring`으로는 표현할 수 없다 |
+| `--ease-*` | `.easeInOut`(= `--ease-ui`) / `.easeOut`(= `--ease-enter`) | cubic-bezier 계수는 이식하지 않는다(SwiftUI에 동일 곡선이 없다) |
+| reduced-motion | `@Environment(\.accessibilityReduceMotion) private var reduceMotion` → `true`면 레일 펄스를 정적 `opacity 1`로 두고 전이를 `nil`로 | §7.4의 iOS 대응. 감소가 아니라 제거 |
+
+Swift 토큰 스켈레톤(M4 착수 시 `design/tokens/`에서 생성될 형태의 손코딩 원본). **`DS.Palette`는 §2.1.2의 의미 토큰 표 전 행 + facet 6개를 담아야 한다** — 부분집합이 되는 순간 iOS는 태그 칩이나 진행 레일 색을 만들 수 없다. Asset Catalog 이름은 위 §8.2 표의 문자열과 1:1이다.
+
+```swift
+enum DS {
+    enum Space {                       // 12스텝. 이 외 값 금지
+        static let s2: CGFloat = 2,  s4 = 4,  s6 = 6,  s8 = 8
+        static let s12: CGFloat = 12, s16 = 16, s20 = 20, s24 = 24
+        static let s32: CGFloat = 32, s40 = 40, s56 = 56, s80 = 80
+    }
+    enum Radius {                      // chip 은 Capsule() 로 대체 — 값이 없다
+        static let control: CGFloat = 6, thumb: CGFloat = 6
+        static let row: CGFloat = 8, panel: CGFloat = 12
+    }
+    enum Palette {                     // Asset Catalog (Any/Dark). §2.1.2 전 행
+        static let canvas = Color("canvas"), surface = Color("surface")
+        static let hover = Color("hover"), elevated = Color("elevated")
+        static let selected = Color("selected")
+        static let fg1 = Color("fg1"), fg2 = Color("fg2"), fg3 = Color("fg3")
+        static let fgInverse = Color("fgInverse")
+        static let line1 = Color("line1"), line2 = Color("line2")
+        static let lineControl = Color("lineControl")
+        static let railProgress = Color("railProgress")
+        static let accent = Color("accent"), accentHover = Color("accentHover")
+        static let accentTint = Color("accentTint"), onAccent = Color("onAccent")
+        static let danger = Color("danger"), dangerTint = Color("dangerTint")
+        static let warn = Color("warn"), warnTint = Color("warnTint")
+    }
+    enum TagFacetColor {              // Tag.facet(계약) -> asset. hex 복제 금지
+        static let craftInk = Color("tagCraftInk"), craftTint = Color("tagCraftTint")
+        static let mediaInk = Color("tagMediaInk"), mediaTint = Color("tagMediaTint")
+        static let lifeInk  = Color("tagLifeInk"),  lifeTint  = Color("tagLifeTint")
+        // neutral 은 새 asset 을 만들지 않는다 — Palette.fg2 / Palette.hover
+    }
+    enum Motion {                      // §2.6 토큰 이식. 오버슈트 금지
+        static let out = 0.12, enter = 0.16, swap = 0.18
+        static let close = 0.20, flip = 0.22, open = 0.26
+        static let pulseHalf = 1.2     // 왕복 2.4s
+    }
+}
+```
+
+### 8.3 타입 스케일 대응 (크기가 아니라 역할)
+
+| 웹 토큰 | SwiftUI TextStyle | 기본 크기 | 비고 |
+|---|---|---|---|
+| `label` | `.caption` (500 → `.weight(.medium)`) | 12/16 | 칩, 카운트 |
+| `meta` | `.footnote` | 13/18 | 도메인·시각. mono 변형은 `design: .monospaced` |
+| `body` | `.subheadline` | 15/20 | 설명·메모 |
+| `title` | `.headline` | 17/22 | **웹 15px → iOS 17pt.** 터치 스케일이므로 의도적으로 다르다 |
+| `head` | `.title3` | 20/25 | 화면 제목 |
+| `display` | `.largeTitle` 또는 `.title` | 34/41 | 통계 숫자 |
+
+- **letter-spacing을 이식하지 않는다.** SF는 iOS에서 크기별 광학 트래킹을 자동 적용한다. `.tracking()`을 손으로 넣으면 그 자동 보정을 깨뜨린다(웹은 브라우저가 해주지 않아서 값을 명시할 뿐이다).
+- 크기는 Dynamic Type을 따라 변한다. **행 높이 76px을 고정 이식하지 않는다** — `@ScaledMetric` 기반 최소 높이로 두고 내용이 늘면 늘어나게 한다.
+
+### 8.4 컴포넌트 대응
+
+| 웹 컴포넌트 | SwiftUI | 차이 |
+|---|---|---|
+| Button `primary` | `.buttonStyle(.borderedProminent).tint(DS.Palette.accent)` | |
+| Button `secondary` | `.buttonStyle(.bordered)` + `.overlay(Capsule/RoundedRectangle.strokeBorder(DS.Palette.lineControl))` | 보더가 컨트롤 경계이므로 3:1 토큰을 그린다 |
+| Button `ghost` | `.buttonStyle(.plain)` + 아이콘 | hover가 없으므로 상시 표시 또는 swipe로 대체 |
+| Button `danger` | `.role(.destructive)` | 시스템이 색을 처리 |
+| Input `text` / `url` | `TextField` + `.textFieldStyle(.plain)` + `.textContentType(.URL)` | 커스텀 보더는 우리가 그린다 — `lineControl`, 1pt |
+| Textarea | `TextField(axis: .vertical)` | |
+| Chip | `Text` + `Capsule` 배경. **fill 2 = facet ink 채움 + `surface` 텍스트 / fill 1 = facet tint + facet ink / fill 0 = 투명 + facet ink.** 필터 칩만 `lineControl` 보더 | 알고리즘(§5.2 `chipStyle`) 그대로 이식(제외 분기 없음). hue는 `Tag.facet`이 정한다 |
+| Row | `List` row + leading 2pt 레일 | `.listRowInsets` / `.listRowSeparatorTint(Color("line1"))` |
+| Row 액션 | **`.swipeActions`** (원문 열기 / 재시도 / 삭제) + `.contextMenu` | hover 노출 개념 없음 |
+| StatusRail | `Rectangle().frame(width: 2)` + **`.accessibilityHidden(true)`** | 웹과 동일한 4상태. Shape는 기본적으로 접근성 요소가 아니라 `.accessibilityLabel`만 붙이면 VoiceOver에 노출되지 않거나 행 안에 불필요한 정지점을 만든다 |
+| Row 접근성 | 행 전체를 `.accessibilityElement(children: .combine)` + `.accessibilityValue("수집 중")`(§8.1 한글 라벨 5개) | `failed` 행은 `.accessibilityHint("두 번 탭하면 재시도")`. 상태를 색 아닌 채널로 전달하는 iOS 경로다 |
+| Badge `count` | `Text().monospacedDigit()` + Capsule | |
+| EmptyState | `ContentUnavailableView` | 문구는 §4.8 표 그대로 |
+| Skeleton | `.redacted(reason: .placeholder)` | 200ms 규칙 동일 적용 |
+| Toast | 하단 **중앙** 오버레이 뷰(직접 소유), 동시 1개 | 시각 명세는 §4.10 그대로. 시스템 alert 남용 금지, `undo`는 `.sensoryFeedback` 동반 |
+| Inspector | `.sheet` + `.presentationDetents([.medium, .large])` + drag indicator | |
+| CommandPalette | `.searchable` + `.searchScopes` | 팔레트 대신 검색이 정식 관용구 |
+| Tooltip | **없음** | 아이콘 옆에 라벨을 쓰거나 `.contextMenu`로 대체 |
+
+### 8.5 플랫폼 관용을 따르는 것 (의도적으로 다르다)
+
+| 관심사 | 웹 | iOS |
+|---|---|---|
+| 내비게이션 | sticky 상단 바 1개 | `NavigationStack` + `.navigationTitle` (large). **커스텀 헤더 금지** — large title 전환과 시스템 배경 효과를 잃는다 |
+| 다중 선택 | **웹·iOS 모두 P3 보류**(배치 API 부재 — 11 §10-3) | 계약에 배치 엔드포인트가 생기기 전에는 iOS edit mode도 만들지 않는다. N개 선택이 N번 요청이 되는 구현을 패리티 명목으로 되살리지 않는다 |
+| 주 액션 위치 | 우상단 | 하단/툴바 trailing(한손 도달) |
+| 유리 | 상단 바 + 팔레트 2곳만 | 시스템 컴포넌트가 자동 획득. **콘텐츠 레이어 커스텀 유리 금지** |
+| 아이콘 | lucide | SF Symbols. **에셋을 공유하지 않고 의미 이름만 공유**(라이선스 + 광학 정렬) |
+| 테마 토글 | light / dark / system 3-state | **제공하지 않는다**(HIG: 앱별 외관 설정 지양). 대등한 클라이언트의 명시적 예외로 문서화 |
+| 탭 타겟 | 포인터 24×24px / 터치 44×44px(§7.5) | 항상 44×44pt(터치 전용 플랫폼) |
+| 큰 글자 대응 | `flex-wrap` | `ViewThatFits`로 가로 배치 → 세로 스택 전환 |
+| 모션 | ms 토큰 + cubic-bezier | **같은 duration을 `.easeInOut(duration:)`으로 이식**(§8.2 `DS.Motion`). `.spring`은 `dampingFraction: 1.0`일 때만 허용 — 오버슈트 금지는 플랫폼 공통이다 |
+| 저장 진입 | URL 입력 필드(+북마클릿) | Share Extension(2초 진입) — 유일하게 웹이 가질 수 없는 기능 |
+
+## 9. 구현 검증 게이트
+
+이 디자인 시스템을 적용하는 작업은 아래를 전부 통과해야 완료 선언할 수 있다.
+
+- **CSS 스모크 체크(가장 먼저)**: `just web-build` 후 생성 CSS에 `.bg-canvas` / `.text-fg-1` / `.bg-accent` / `.border-line-control` / `.text-tag-craft-ink` / `.bg-tag-life-tint`가 존재하는지 grep한다. 0건이면 §3의 블록 순서가 깨진 것이다(리셋 `@theme`가 `@theme inline` 뒤로 내려가면 의미 색 유틸리티가 전부 사라진다 — 빌드는 성공하므로 이 체크가 없으면 화면을 열기 전까지 모른다). 같은 출력에서 `.bg-slate-500`과 `md:`(768px) 미디어 쿼리가 **0건**인 것도 함께 확인한다.
+- **대비 게이트**: 아래 조합을 라이트/다크 각각 계산한다. 알파 색은 배경 위에 flatten한 뒤 계산한다.
+  - 텍스트 **4.5:1**: `fg-1`·`fg-2` × (`bg-canvas`, `bg-surface`, `bg-hover`, `bg-elevated`, `bg-selected`), `accent` × (`bg-canvas`, `bg-surface`), `on-accent` × (`accent`, `accent-hover`), `danger` × (`bg-canvas`, `bg-surface`, `danger-tint`), `warn` × (`bg-canvas`, `warn-tint`).
+  - 텍스트 **4.5:1 — 태그 칩**: `tag-{craft,media,life}-ink`와 `neutral`의 잉크(`fg-2`) × (`bg-canvas`, `bg-surface`, `bg-hover`, `bg-selected`, 다크는 `bg-elevated` 추가, 그리고 자기 `tint`) = **라이트 4×5 + 다크 4×6 = 44조합**(잉크×배경 36 + 잉크/자기 tint 8). 선택 칩(fill 2)은 `bg-surface` 텍스트 × facet `ink` 배경으로 계산한다. 현재값은 §2.1.3의 두 표이며 최저 5.94:1이다.
+  - 비텍스트 **3:1**: `line-control` × 모든 `bg-*`(대상은 **필터 바 칩 보더**까지이며 표시 칩은 제외), `rail-progress`(펄스 하한 `opacity .7` 합성값) × 모든 `bg-*`, `danger`·`accent` 레일 × 배경, 포커스 링 `accent` × 배경.
+  - **제외 대상**: `fg-3`(§2.1.3의 명시적 예외 — 중복 정보 전용 화이트리스트로만 통과), `fg-inverse`(같은 모드의 일반 배경 위에 쓰이지 않는다 — `accent` 위에서는 `on-accent`로 계산한다), `line-1`/`line-2`(장식 헤어라인, §7.1), 칩 `tint` 배경 자체(1.1 안팎 — 정보를 지지 않는다, §2.1.3).
+- **색맹 게이트**: facet ink 4개(`craft`/`media`/`life`/`neutral`)의 all-pairs를 Viénot-Brettel-Mollon 1999로 protan/deutan 시뮬레이션해 OKLab ΔE×100을 계산하고, **normal ΔE ≥ 10 / CVD ΔE ≥ 6**을 라이트·다크 각각 검사한다. 스크립트는 `frontend/`에 두고 `just color-check`로 노출한다.
+
+  | 모드 | 통과 기준(normal / CVD) | 현재값 | 판정 |
+  |---|---|---|---|
+  | 라이트 | ≥ 10 / ≥ 6 | 10.19 / 7.49 | 통과 |
+  | 다크 | ≥ 10 / ≥ 6 | 11.06 / 8.37 | 통과 |
+
+  라이트 normal 10.19는 하한 바로 위다 — facet 토큰의 L을 건드리면 이 게이트가 먼저 깨진다.
+- **토큰 lint**: 생성물 밖에서 raw hex, `rgb(` 리터럴, 12스텝 밖의 익명 간격값, Tailwind 기본 팔레트 유틸(`bg-neutral-*`, `text-slate-*`), 컴포넌트 코드의 `--ink-*` 직접 참조 금지. 아래 세 항목은 **하드코딩하지 말고 `@theme` 선언에서 목록을 생성**한다.
+  - z-index: `--z-*` 7개 토큰 외 금지.
+  - duration: `--dur-*` 7개 토큰 외 CSS 리터럴 금지(예외는 §4.10의 JS 타이머 4000/8000ms 둘뿐).
+  - 레이아웃 상수: `--size-*`/`--w-*` 토큰 참조만 허용, 익명 임의값(`h-[76px]`, `w-[380px]`, `max-w-[480px]`) 금지. **화면 전용 폭도 예외가 아니다** — §2.3에 `--w-*`로 등재한 뒤 이름으로 참조한다.
+- **계약 정합**: 문서와 코드가 참조하는 필드가 `api/openapi.yaml`에 실재하는지 확인한다(`updated_at`·요청 ID·태그 제외 필터·필터 스코프 태그 카운트는 **없다**). 태그 facet은 **계약에 있다**(`TagFacet` enum + `Tag.facet` / `TagInput.facet`) — 다만 **`LinkTag`에는 facet이 없으므로** 목록 행의 칩은 클라이언트가 `GET /api/v1/tags` 캐시로 `Map<tagId, facet>`을 만들어 해석하고, **캐시 미스는 추측하지 않고 `neutral`로 렌더한다**(정확한 폴백이지 버그가 아니다). 계약에 없는 기능은 11 §10에 사유와 함께 남긴다.
+- **sweep 규칙 적용**: 현재 `dark:` 유틸리티가 9개 파일 51곳에 흩어져 있다. `grep -l` 목록을 먼저 파일로 뽑아 체크리스트로 소거하고, 끝나면 같은 검색을 다시 돌려 0건을 확인한다(CLAUDE.md sweep 규칙).
+- **두 모드 실제 확인**: 라이트/다크 각각 실제로 열어보고, 다크 + Increase Contrast + Reduce Transparency 조합도 확인한다. OS 다크 + 앱 라이트 선택 조합에서 스크롤바·폼 컨트롤이 라이트로 따라오는지(§2.1.6), 첫 페인트에 흰 화면 플래시가 없는지도 함께 본다.
+- **커맨드**: `just fmt`, `just lint`, `just test`, `just web-gen-check`, `just web-build` 전부 통과 후에만 완료 선언(출력 없는 성공 주장 금지).
