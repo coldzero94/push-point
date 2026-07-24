@@ -15,6 +15,11 @@ type Config struct {
 	APIKey            string     // PUSHPOINT_API_KEY (필수)
 	ScrapeConcurrency int        // PUSHPOINT_SCRAPE_CONCURRENCY (기본 8)
 	LogLevel          slog.Level // PUSHPOINT_LOG_LEVEL (debug|info|warn|error, 기본 info)
+	// LogFormat은 PUSHPOINT_LOG_FORMAT (json|text|auto, 기본 auto). text는 사람이 읽는
+	// 컬러 출력(개발), json은 구조화 출력(운영 파싱), auto는 stderr가 터미널이면 text
+	// 아니면 json. `just dev`는 text를 강제한다(air가 stderr를 파이프로 감싸 auto만으론
+	// json이 되기 때문) — 운영 배포는 미설정→auto→non-TTY→json으로 떨어진다.
+	LogFormat string
 	// AllowPrivateHosts는 PUSHPOINT_ALLOW_PRIVATE_HOSTS (기본 false). true면 스크랩·썸네일
 	// 다운로드의 SSRF 가드(사설/루프백/링크로컬 대상 거부)를 끈다 — 로컬 fixture·개발 전용
 	// (예: scripts/test_crash.sh가 127.0.0.1 fixture 서버를 스크랩). 운영 기본은 가드 활성.
@@ -29,9 +34,15 @@ func Load() (Config, error) {
 		APIKey:            os.Getenv("PUSHPOINT_API_KEY"),
 		ScrapeConcurrency: 8,
 		LogLevel:          slog.LevelInfo,
+		LogFormat:         getenv("PUSHPOINT_LOG_FORMAT", "auto"),
 	}
 	if cfg.APIKey == "" {
 		return Config{}, fmt.Errorf("config: PUSHPOINT_API_KEY 미설정 (필수)")
+	}
+	switch cfg.LogFormat {
+	case "json", "text", "auto":
+	default:
+		return Config{}, fmt.Errorf("config: PUSHPOINT_LOG_FORMAT=%q 는 json|text|auto 중 하나여야 함", cfg.LogFormat)
 	}
 	if v := os.Getenv("PUSHPOINT_SCRAPE_CONCURRENCY"); v != "" {
 		n, err := strconv.Atoi(v)

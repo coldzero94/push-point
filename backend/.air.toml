@@ -1,0 +1,29 @@
+# air (air-verse/air) — backend 핫 리로드 설정. `just dev`가 air를 감지하면 이 설정으로
+# 실행하고(없으면 go run 폴백), .go·마이그레이션(.sql)이 바뀌면 재빌드·재시작한다.
+#
+# PUSHPOINT_ADDR·PUSHPOINT_API_KEY·PUSHPOINT_LOG_* 는 `just dev`가 env로 주입한다 —
+# 여기에 하드코딩하지 않는다(포트는 dev가 빈 포트를 스캔해 정하므로, 고정하면 자동
+# 회피와 충돌한다). air는 부모 프로세스로 세션 내내 살아 있고 자식 바이너리만 교체하므로
+# `.dev-api-port`에 기록된 PID(=air)의 kill -0 판정은 그대로 유효하다(web-dev 무변경).
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/pushpoint ./cmd/pushpoint"
+bin = "./tmp/pushpoint"
+# .go 와 마이그레이션(.sql)만 재빌드 트리거 — `just gen`이 gen/*.go를 바꿔도 잡힌다.
+include_ext = ["go", "sql"]
+exclude_dir = ["bin", "tmp", "data", "testdata", "internal/web/dist"]
+exclude_regex = ["_test\\.go"]
+# 내용이 안 바뀐 파일 이벤트는 무시 — 저장만 눌러도 재빌드되는 잡음 방지.
+exclude_unchanged = true
+# 빌드 실패 시 직전 정상 바이너리를 계속 띄운다 → 포트가 안 끊겨 web-dev 프록시 유지.
+stop_on_error = true
+# 재빌드 시 자식에 SIGINT → server의 signal.NotifyContext(os.Interrupt)가 graceful
+# shutdown(srv.Shutdown → WAL 체크포인트). kill_delay는 그 유예.
+send_interrupt = true
+kill_delay = "1s"
+delay = 200
+
+[misc]
+clean_on_exit = true

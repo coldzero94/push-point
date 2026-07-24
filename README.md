@@ -21,12 +21,13 @@ Share a YouTube video or an article and Push-Point saves it instantly, then fill
 
 ## Quick start
 
-Requirements: Go 1.25+ and [just](https://just.systems) (`brew install just`). Node 22+ only if you want the web UI.
+Requirements: Go 1.25+ and [just](https://just.systems) (`brew install just`). Node 22+ only if you want the web UI. Optional: [air](https://github.com/air-verse/air) for backend hot-reload (`just dev` uses it when present, falls back to `go run`).
 
 ```bash
 just dev          # API + worker, prints the URL it took (default http://127.0.0.1:8420)
 just web-install  # once — installs web dependencies
 just web-dev      # web UI on :8421, proxied to the backend it finds
+just dev-all      # optional: both of the above in one split screen (needs mprocs)
 ```
 
 A busy port never blocks a run: `just dev` scans upward from 8420 for a free port and prints the one it picked, `just web-dev` proxies to the backend of the same checkout (falling back to a `/healthz` probe from 8420), and Vite moves off 8421 by itself if that port is taken. Several checkouts — git worktrees, one per agent — can therefore run side by side without colliding.
@@ -54,6 +55,7 @@ Everything is read from `PUSHPOINT_`-prefixed environment variables; there is no
 | `PUSHPOINT_DATA_DIR` | `./data` | SQLite database and thumbnails |
 | `PUSHPOINT_SCRAPE_CONCURRENCY` | `8` | Maximum concurrent scraper workers |
 | `PUSHPOINT_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
+| `PUSHPOINT_LOG_FORMAT` | `auto` | `text` (human, colored) / `json` (structured) / `auto` (text on a terminal, else json) |
 
 For real use, replace the API key with a long random string (`openssl rand -hex 32`). Full reference: [docs/v2/07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md).
 

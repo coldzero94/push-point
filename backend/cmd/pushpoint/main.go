@@ -25,6 +25,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lmittmann/tint"
+	"github.com/mattn/go-isatty"
+
 	"github.com/coby/push-point/backend/internal/api"
 	"github.com/coby/push-point/backend/internal/config"
 	"github.com/coby/push-point/backend/internal/queue"
@@ -68,6 +71,33 @@ func main() {
 	}
 }
 
+// newLogger는 cfg.LogFormat에 따라 stderr 핸들러를 고른다. text는 tint(사람이 읽는
+// 컬러), json은 구조화(운영 파싱), auto는 stderr가 터미널이면 text 아니면 json.
+// 색은 isatty가 아니라 format에 묶는다 — `just dev`는 air가 stderr를 파이프로 감싸
+// isatty=false여도 text를 강제하고, air는 tint의 ANSI를 터미널로 그대로 흘려보낸다.
+func newLogger(cfg config.Config) *slog.Logger {
+	colorText := cfg.LogFormat == "text" ||
+		(cfg.LogFormat == "auto" && isatty.IsTerminal(os.Stderr.Fd()))
+	if colorText {
+		return slog.New(tint.NewTextHandler(os.Stderr, &tint.Options{
+			Level:      cfg.LogLevel,
+			TimeFormat: "15:04:05.000",
+		}))
+	}
+	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))
+}
+
+// maskKey는 API 키를 로그에 안전하게 노출한다 — 전체 값 대신 상태와 끝 4자리만.
+func maskKey(k string) string {
+	if k == "" {
+		return "unset"
+	}
+	if len(k) <= 4 {
+		return "set(****)"
+	}
+	return "set(…" + k[len(k)-4:] + ")"
+}
+
 // serve는 서버 모드: config → slog → DB(+마이그레이션) → store/queue/dispatcher
 // → chi 서버 → graceful shutdown. 콜드 스타트 < 1s를 위해 이 이상의 초기화는 없다.
 func serve() error {
@@ -75,7 +105,7 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	logger := newLogger(cfg)
 	slog.SetDefault(logger)
 
 	db, err := store.Open(cfg.DataDir) // 마이그레이션 자동 적용 포함
@@ -121,7 +151,15 @@ func serve() error {
 	}
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
-	logger.Info("pushpoint 시작", "addr", cfg.Addr, "data_dir", cfg.DataDir)
+	logger.Info("pushpoint 시작",
+		"addr", cfg.Addr,
+		"data_dir", cfg.DataDir,
+		"scrape_concurrency", cfg.ScrapeConcurrency,
+		"log_level", cfg.LogLevel.String(),
+		"log_format", cfg.LogFormat,
+		"allow_private_hosts", cfg.AllowPrivateHosts,
+		"api_key", maskKey(cfg.APIKey), // 값 전체는 로그에 남기지 않는다 — set(…끝4자리)만
+	)
 
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

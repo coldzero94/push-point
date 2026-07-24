@@ -4,11 +4,12 @@ Push-Point is a single-user personal project, but the workflow below is enforced
 
 ## Setup
 
-Requirements: Go 1.25+, [just](https://just.systems) (`brew install just`). Node 22+ and `just web-install` are needed only for the web frontend. The SQLite driver is CGO-free (`modernc.org/sqlite`), so there is no C toolchain and no container runtime to install.
+Requirements: Go 1.25+, [just](https://just.systems) (`brew install just`). Node 22+ and `just web-install` are needed only for the web frontend. The SQLite driver is CGO-free (`modernc.org/sqlite`), so there is no C toolchain and no container runtime to install. Two optional dev tools: [air](https://github.com/air-verse/air) (`go install github.com/air-verse/air@latest`) gives `just dev` hot-reload — it rebuilds and restarts on a `.go`/`.sql` change, and without it `just dev` falls back to `go run`; [mprocs](https://github.com/pvolok/mprocs) (`brew install mprocs`) powers `just dev-all`. Both degrade gracefully when absent.
 
 ```bash
-just dev          # API + worker; scans upward from :8420 for a free port
+just dev          # API + worker; scans upward from :8420 for a free port (hot-reload via air, colored logs)
 just web-dev      # Vite dev server on :8421, proxied to the backend it detects
+just dev-all      # both of the above in one split-screen TUI (mprocs)
 just --list       # every recipe with its description
 ```
 
@@ -45,7 +46,8 @@ All Go recipes run inside `backend/`. Recipes for milestones that have not lande
 | Recipe | What it does |
 |---|---|
 | `just` | List recipes (default) |
-| `just dev` | Dev server (`PUSHPOINT_API_KEY=dev-key`); scans from `:8420` (override the base with `PUSHPOINT_PORT`) and prints the URL |
+| `just dev` | Dev server (`PUSHPOINT_API_KEY=dev-key`); scans from `:8420` (override the base with `PUSHPOINT_PORT`) and prints the URL. Hot-reload via air when installed (else `go run`); forces `PUSHPOINT_LOG_FORMAT=text` and `PUSHPOINT_LOG_LEVEL=debug` for colored, verbose dev logs |
+| `just dev-all` | `just dev` + `just web-dev` in one split-screen TUI (mprocs) — panels keep their own colors, web restarts with `r` while air reloads the backend |
 | `just build` | `go build -o bin/pushpoint ./cmd/pushpoint` |
 | `just release` | `web-build` then `go build -tags embed_frontend` — single binary with the SPA embedded |
 | `just gen` | `api/openapi.yaml` → `backend/internal/api/gen/` (oapi-codegen v2.8.0, output committed) |

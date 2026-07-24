@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"golang.org/x/sync/semaphore"
 
@@ -34,6 +35,7 @@ func newScrapeHandler(sc scraper.Scraper, st store.Store, concurrency int, log *
 		}
 		defer sem.Release(1)
 
+		start := time.Now()
 		rawURL, _, err := st.GetLinkURL(ctx, job.LinkID)
 		if err != nil {
 			return err
@@ -42,7 +44,13 @@ func newScrapeHandler(sc scraper.Scraper, st store.Store, concurrency int, log *
 		if err != nil {
 			return err
 		}
-		return st.ApplyScrape(ctx, job.LinkID, scrapeResult(m))
+		res := scrapeResult(m)
+		if err := st.ApplyScrape(ctx, job.LinkID, res); err != nil {
+			return err
+		}
+		// 잡 성공은 Debug — dev(레벨 debug)에서 잡이 도는지 보이고, 운영(info)에선 조용.
+		log.Debug("scrape 완료", "link", job.LinkID, "content_type", res.ContentType, "dur_ms", time.Since(start).Milliseconds())
+		return nil
 	}
 }
 
@@ -84,6 +92,7 @@ func newThumbHandler(sc scraper.Scraper, ts thumbs.Store, st store.Store, log *s
 		}
 		defer sem.Release(1)
 
+		start := time.Now()
 		rawURL, urlHash, err := st.GetLinkURL(ctx, job.LinkID)
 		if err != nil {
 			return err
@@ -94,13 +103,18 @@ func newThumbHandler(sc scraper.Scraper, ts thumbs.Store, st store.Store, log *s
 		}
 		if m.ImageURL == "" {
 			// 재-Fetch 시점에 og:image가 사라짐 — thumb 없이 성공 완료 (best-effort, 에러 아님).
-			log.Info("thumb: og:image 없음 — 스킵", "link", job.LinkID)
+			// 잡별 best-effort 스킵은 Debug — 운영(info) 로그를 조용하게 유지한다.
+			log.Debug("thumb: og:image 없음 — 스킵", "link", job.LinkID)
 			return nil
 		}
 		relPath, err := ts.Save(ctx, urlHash, m.ImageURL)
 		if err != nil {
 			return err
 		}
-		return st.SetThumbPath(ctx, job.LinkID, relPath)
+		if err := st.SetThumbPath(ctx, job.LinkID, relPath); err != nil {
+			return err
+		}
+		log.Debug("thumb 저장 완료", "link", job.LinkID, "path", relPath, "dur_ms", time.Since(start).Milliseconds())
+		return nil
 	}
 }

@@ -36,6 +36,9 @@ bin/
 # Runtime data (SQLite DB, thumbnails)
 data/
 
+# air (backend hot-reload) build target — `just dev` builds ./tmp/pushpoint here
+backend/tmp/
+
 # Frontend (web) — build output & deps. schema.d.ts IS committed (contract artifact).
 frontend/dist/
 frontend/node_modules/
