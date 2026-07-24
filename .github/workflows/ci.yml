@@ -47,6 +47,10 @@ jobs:
         run: |
           if [ -f scripts/lint_enums.sh ]; then bash scripts/lint_enums.sh; else echo "lint_enums.sh 없음 — 건너뜀"; fi
 
+      - name: 사전 자산 정합 검사 (nlu/dictionary ↔ 시드 마이그레이션)
+        run: |
+          if [ -f scripts/lint_dict.sh ]; then bash scripts/lint_dict.sh; else echo "lint_dict.sh 없음 — 건너뜀"; fi
+
   # 웹 프론트 — openapi.yaml의 3번째 소비자. 계약 드리프트 차단 + 빌드 (backend gen-check와 대칭)
   web:
     runs-on: ubuntu-latest
