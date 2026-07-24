@@ -53,6 +53,11 @@ func TestMigration0003_TagFacet_Reversible(t *testing.T) {
 	if hasFacet() != 1 {
 		t.Fatal("Open 직후 tags.facet이 없다 — 0003이 적용되지 않았다")
 	}
+	// 상위 마이그레이션(0004+)을 먼저 내려 0003을 top으로 만든다 — 그래야 Steps(-1)이
+	// 0003 down을 정확히 태운다(새 마이그레이션이 붙어도 이 테스트가 0003만 검증).
+	if err := m.Migrate(3); err != nil {
+		t.Fatalf("버전 3으로 이동 실패: %v", err)
+	}
 	if err := m.Steps(-1); err != nil {
 		t.Fatalf("0003 down 실패: %v", err)
 	}
@@ -69,5 +74,42 @@ func TestMigration0003_TagFacet_Reversible(t *testing.T) {
 	}
 	if facet != FacetCraft {
 		t.Fatalf("재-up 후 golang facet = %q, want %q", facet, FacetCraft)
+	}
+}
+
+// TestMigration0004_BodyText_Reversible은 0004 down.sql(DROP COLUMN body_text)이
+// 되감기는지 본다 — 0004가 top이라 Steps(-1)이 곧 0004 down이다.
+func TestMigration0004_BodyText_Reversible(t *testing.T) {
+	db, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open 실패: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	m := newMigrator(t, db)
+
+	hasBody := func() int {
+		t.Helper()
+		var n int
+		if err := db.Writer.QueryRow(
+			`SELECT COUNT(*) FROM pragma_table_info('links') WHERE name = 'body_text'`).Scan(&n); err != nil {
+			t.Fatalf("pragma_table_info 실패: %v", err)
+		}
+		return n
+	}
+
+	if hasBody() != 1 {
+		t.Fatal("Open 직후 links.body_text가 없다 — 0004가 적용되지 않았다")
+	}
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("0004 down 실패: %v", err)
+	}
+	if hasBody() != 0 {
+		t.Fatal("down 후에도 links.body_text가 남아 있다")
+	}
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("0004 재-up 실패: %v", err)
+	}
+	if hasBody() != 1 {
+		t.Fatal("재-up 후 links.body_text가 없다")
 	}
 }

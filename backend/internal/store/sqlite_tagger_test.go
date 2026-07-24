@@ -33,12 +33,12 @@ func TestGetLinkContent(t *testing.T) {
 	if c.Note != "내 메모" || c.Title != "" {
 		t.Errorf("스크랩 전 콘텐츠 = %+v", c)
 	}
-	// 스크랩 후 — title/description 반영.
-	if err := s.ApplyScrape(ctx, id, ScrapeResult{Title: "쿠버네티스 입문", Description: "k8s 튜토리얼", ContentType: "article"}); err != nil {
+	// 스크랩 후 — title/description/body_text 반영.
+	if err := s.ApplyScrape(ctx, id, ScrapeResult{Title: "쿠버네티스 입문", Description: "k8s 튜토리얼", ContentType: "article", BodyText: "본문 내용 추출됨"}); err != nil {
 		t.Fatalf("ApplyScrape: %v", err)
 	}
 	c, _ = s.GetLinkContent(ctx, id)
-	if c.Title != "쿠버네티스 입문" || c.Description != "k8s 튜토리얼" {
+	if c.Title != "쿠버네티스 입문" || c.Description != "k8s 튜토리얼" || c.Body != "본문 내용 추출됨" {
 		t.Errorf("스크랩 후 콘텐츠 = %+v", c)
 	}
 

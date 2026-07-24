@@ -45,6 +45,7 @@ func TestClassify_matchExamples(t *testing.T) {
 		{"한글 prefix — 딥러닝을→ai", Content{Title: "딥러닝을 공부"}, 5, 0},
 		{"한글 짧은 alias — 쿠버→kubernetes", Content{Title: "쿠버 입문"}, 3, 0},
 		{"1룬 한글 정확 — 책→book", Content{Description: "이 책 추천"}, 8, 0},
+		{"본문 신호 — body의 kubernetes", Content{Body: "이 문서는 kubernetes 클러스터 운영을 처음부터 다룬다"}, 3, 0},
 	}
 	for _, tc := range cases {
 		got := ids(Classify(tc.c, d))

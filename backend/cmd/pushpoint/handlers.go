@@ -79,6 +79,7 @@ func scrapeResult(m scraper.Metadata) store.ScrapeResult {
 		DurationSec: m.DurationSec,
 		WordCount:   m.WordCount,
 		HasImage:    m.ImageURL != "",
+		BodyText:    m.BodyText,
 	}
 }
 
@@ -164,7 +165,7 @@ func toTagEntries(es []store.TagDictEntry) []tagger.TagEntry {
 }
 
 func toTaggerContent(c store.LinkContent) tagger.Content {
-	return tagger.Content{Domain: c.Domain, Title: c.Title, Description: c.Description, Note: c.Note}
+	return tagger.Content{Domain: c.Domain, Title: c.Title, Description: c.Description, Note: c.Note, Body: c.Body}
 }
 
 func toStoreScored(ss []tagger.ScoredTag) []store.ScoredTag {

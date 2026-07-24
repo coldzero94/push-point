@@ -35,11 +35,11 @@ func (s *sqliteStore) ApplyScrape(ctx context.Context, linkID int64, m ScrapeRes
 		res, err := tx.ExecContext(ctx, `
 			UPDATE links SET
 				title = ?, description = ?, author = ?, content_type = ?, lang = ?,
-				published_at = ?, duration_sec = ?, word_count = ?,
+				published_at = ?, duration_sec = ?, word_count = ?, body_text = ?,
 				status = 'done', error = '', updated_at = unixepoch()
 			WHERE id = ? AND deleted_at IS NULL`,
 			m.Title, m.Description, m.Author, m.ContentType, m.Lang,
-			m.PublishedAt, m.DurationSec, m.WordCount, linkID)
+			m.PublishedAt, m.DurationSec, m.WordCount, m.BodyText, linkID)
 		if err != nil {
 			return fmt.Errorf("store: 스크랩 결과 UPDATE 실패: %w", err)
 		}

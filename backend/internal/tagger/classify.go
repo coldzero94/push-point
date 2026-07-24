@@ -11,6 +11,7 @@ const (
 	wTitle    = 2.0 // 제목 매칭: 매칭당
 	wDesc     = 1.0 // 설명 매칭: 매칭당
 	wNote     = 1.0 // 개인 메모 매칭: 매칭당
+	wBody     = 1.0 // 본문 매칭: 매칭당 (matchCap이 본문 반복 스터핑을 억제)
 	matchCap  = 3   // 한 필드에서 한 태그의 기여 상한 (키워드 스터핑 방지)
 	threshold = 1.0 // 총점이 이 미만인 태그는 컷 (설명 1매치 = 통과)
 	topK      = 5   // 링크당 최대 태그 수
@@ -31,6 +32,7 @@ func Classify(c Content, d *Dictionary) []ScoredTag {
 	addField(score, d, c.Title, wTitle)
 	addField(score, d, c.Description, wDesc)
 	addField(score, d, c.Note, wNote)
+	addField(score, d, c.Body, wBody)
 
 	out := make([]ScoredTag, 0, len(score))
 	for id, s := range score {
