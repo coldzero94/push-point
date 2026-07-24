@@ -32,10 +32,30 @@ dev:
           echo "경고: 포트 기록 실패 — just web-dev가 포트 스캔으로 백엔드를 찾습니다"
         fi
         cd backend
-        exec env PUSHPOINT_ADDR="127.0.0.1:$p" PUSHPOINT_API_KEY="${PUSHPOINT_API_KEY:-dev-key}" go run ./cmd/pushpoint
+        # 핫 리로드: air가 있으면 .go/.sql 변경 시 자동 재빌드·재시작(.air.toml). air는
+        # 부모로 세션 내내 살아 있어 위에서 기록한 PID(=air)의 kill -0 판정이 그대로
+        # 유효하다(web-dev 감지 무변경). 없으면 go run 폴백(핫 리로드 없음).
+        # PUSHPOINT_LOG_FORMAT=text: air가 stderr를 파이프로 감싸 auto만으론 json이 되므로
+        # dev에선 컬러 text를 강제한다. LOG_LEVEL=debug로 접근·잡 로그까지 보인다.
+        run_env=(env PUSHPOINT_ADDR="127.0.0.1:$p" PUSHPOINT_API_KEY="${PUSHPOINT_API_KEY:-dev-key}"
+                 PUSHPOINT_LOG_FORMAT=text PUSHPOINT_LOG_LEVEL="${PUSHPOINT_LOG_LEVEL:-debug}")
+        if command -v air >/dev/null 2>&1; then
+          exec "${run_env[@]}" air -c .air.toml
+        else
+          echo "air 미설치 — go run 폴백(핫 리로드 없음). 설치: go install github.com/air-verse/air@latest"
+          exec "${run_env[@]}" go run ./cmd/pushpoint
+        fi
       fi
     done
     echo "빈 포트를 찾지 못했습니다 ($base~$((base + 20))). PUSHPOINT_PORT로 다른 대역을 지정하세요."; exit 1
+
+# just dev/just web-dev를 그대로 감싸므로 포트 자동 회피·.dev-api-port 격리가 그 안에서
+# 원래대로 동작한다(새 로직 없음). mprocs는 dev 전용 — 없으면 안내만 하고, 그냥 터미널
+# 2개로 just dev + just web-dev를 따로 띄워도 된다.
+# 백엔드+웹을 한 화면(mprocs)에서 병렬 실행 — 패널·색 분리, 웹만 r로 재시작(백엔드는 air 자동 리로드)
+dev-all:
+    @command -v mprocs >/dev/null 2>&1 || { echo "mprocs 미설치 — 설치: brew install mprocs (또는 터미널 2개로 just dev + just web-dev)"; exit 1; }
+    mprocs --names api,web "just dev" "just web-dev"
 
 # backend/bin/pushpoint 단일 바이너리 빌드
 build:

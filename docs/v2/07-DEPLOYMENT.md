@@ -72,6 +72,7 @@ curl -H "Authorization: Bearer dev-key" \
 | `PUSHPOINT_API_KEY` | (없음, 필수) | Bearer 인증 키. `just dev`는 `dev-key`로 설정 |
 | `PUSHPOINT_SCRAPE_CONCURRENCY` | `8` | 스크래퍼 워커 동시 실행 상한 |
 | `PUSHPOINT_LOG_LEVEL` | `info` | slog 로그 레벨 (`debug`/`info`/`warn`/`error`) |
+| `PUSHPOINT_LOG_FORMAT` | `auto` | 로그 출력 형식. `text`(사람이 읽는 컬러)·`json`(구조화·`jq` 파싱)·`auto`(stderr가 터미널이면 text, 아니면 json). `just dev`는 `text`를 강제한다 |
 | `PUSHPOINT_ALLOW_PRIVATE_HOSTS` | `false` | `true`면 스크랩·썸네일의 사설 대역 차단(SSRF 가드)을 해제 — 로컬 fixture 테스트 전용 |
 
 실사용 구동 시에는 `PUSHPOINT_API_KEY`를 충분히 긴 랜덤 문자열로 교체할 것 (`openssl rand -hex 32` 등).
@@ -330,13 +331,15 @@ curl http://localhost:8420/debug/pprof/goroutine?debug=1
 
 ### 로그
 
-표준 `log/slog` JSON 핸들러로 출력한다. `jq`로 바로 필터링 가능하다.
+`log/slog`로 출력하며 형식은 `PUSHPOINT_LOG_FORMAT`가 정한다 (기본 `auto`). 운영 배포는 stderr가
+터미널이 아니므로(systemd/journal·파일 리다이렉트) `auto`가 JSON으로 떨어져 `jq`로 바로 필터링된다.
 
 ```bash
 tail -f /tmp/pushpoint.log | jq 'select(.level == "ERROR")'
 ```
 
-레벨은 `PUSHPOINT_LOG_LEVEL`로 조절한다 (기본 `info`).
+레벨은 `PUSHPOINT_LOG_LEVEL`로 조절한다 (기본 `info`). 개발(`just dev`)은 `text`를 강제해 사람이
+읽는 컬러 로그로 나오고, 접근 로그와 잡(scrape/thumb) 처리 로그는 `debug` 레벨이라 dev에서만 보인다.
 
 ### 성능·복구 게이트
 
