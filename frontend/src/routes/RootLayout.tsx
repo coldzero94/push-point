@@ -1,46 +1,118 @@
-import { Link, Outlet } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { Link, Outlet, useNavigate } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
+import { Button, Icon } from '../components/ui'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { ApiKeyBanner } from '../components/ApiKeyBanner'
+import { OfflineBar } from '../components/OfflineBar'
+import { KeyboardShortcuts } from '../components/KeyboardShortcuts'
+import { LinkInspector } from './LinkInspector'
+import { reportNetworkError, reportNetworkOk } from '../lib/offline'
 
+// Nav is the 4 screen links only (§1.1). "저장" is the accent primary button on
+// the right, not a nav link; the detail inspector is an overlay, not a route tab.
 const NAV = [
   { to: '/', label: '목록' },
-  { to: '/save', label: '저장' },
   { to: '/search', label: '검색' },
   { to: '/tags', label: '태그' },
   { to: '/settings', label: '설정' },
 ] as const
 
 export function RootLayout() {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  // Offline escalation (§1.6): a network-level fetch rejection surfaces in the
+  // query cache as a thrown TypeError ("Failed to fetch"). HTTP 4xx/5xx throw the
+  // contract Error object instead, so they do not false-trigger. Any success
+  // clears the escalation. Coming back online revalidates the active queries
+  // (§1.6 — current screen only; no toast, the bar vanishing is the signal).
+  useEffect(() => {
+    const unsub = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== 'updated') return
+      if (event.action.type === 'error') {
+        if (event.action.error instanceof TypeError) reportNetworkError()
+      } else if (event.action.type === 'success') {
+        reportNetworkOk()
+      }
+    })
+    const onOnline = () => queryClient.invalidateQueries()
+    window.addEventListener('online', onOnline)
+    return () => {
+      unsub()
+      window.removeEventListener('online', onOnline)
+    }
+  }, [queryClient])
+
   return (
-    <div className="min-h-full">
-      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/80">
-        <div className="mx-auto flex max-w-3xl items-center gap-1 px-4 py-2">
-          <Link to="/" className="mr-2 font-semibold">
-            Push-Point
-          </Link>
-          <nav className="flex items-center gap-1 text-sm">
-            {NAV.map((n) => (
-              <Link
-                key={n.to}
-                to={n.to}
-                activeOptions={{ exact: n.to === '/' }}
-                className="rounded-md px-2 py-1 text-neutral-600 hover:bg-neutral-100 data-[status=active]:font-medium data-[status=active]:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:data-[status=active]:text-neutral-50"
-              >
-                {n.label}
+    <>
+      {/* skip link — first tab stop, revealed only on keyboard focus (§7.2) */}
+      <a
+        href="#main-content"
+        className="sr-only rounded-control bg-elevated px-12 py-8 text-body text-fg-1 shadow-panel focus-visible:not-sr-only focus-visible:absolute focus-visible:left-16 focus-visible:top-8 focus-visible:z-(--z-header)"
+      >
+        본문으로 건너뛰기
+      </a>
+
+      <div className="min-h-full">
+        {/* Header + top banners pinned together (§1.1 / §1.4 / §1.6). */}
+        <div className="sticky top-0 z-(--z-header)">
+          <header className="glass border-b border-line-1">
+            <div className="mx-auto flex h-(--size-header) max-w-(--w-page) items-center gap-16 px-(--gutter)">
+              {/* wordmark: achromatic — brand solid is reserved for 4 places (§2.1.4). Hidden < 560. */}
+              <Link to="/" className="hidden text-title text-fg-1 sm:block">
+                Push-Point
               </Link>
-            ))}
-          </nav>
-          <div className="ml-auto">
-            <ThemeToggle />
-          </div>
+
+              <nav className="flex items-center gap-4 text-body">
+                {NAV.map((n) => (
+                  <Link
+                    key={n.to}
+                    to={n.to}
+                    activeOptions={{ exact: n.to === '/' }}
+                    activeProps={{ 'aria-current': 'page' }}
+                    className="rounded-control px-8 py-4 text-fg-2 transition-colors duration-(--dur-out) ease-ui hover:bg-hover data-[status=active]:font-medium data-[status=active]:text-fg-1"
+                  >
+                    {n.label}
+                  </Link>
+                ))}
+              </nav>
+
+              <div className="ml-auto flex items-center gap-8">
+                {/* "저장" opens the composer over the list (§0 / §2). Icon (+) < 560. */}
+                <Button
+                  variant="primary"
+                  aria-label="링크 저장"
+                  onClick={() => navigate({ to: '/save' })}
+                >
+                  <Icon icon={Plus} size={16} className="sm:hidden" />
+                  <span className="hidden sm:inline">저장</span>
+                </Button>
+                <ThemeToggle />
+              </div>
+            </div>
+          </header>
+
+          <ApiKeyBanner />
+          <OfflineBar />
         </div>
-      </header>
 
-      <ApiKeyBanner />
+        <main
+          id="main-content"
+          className="mx-auto max-w-(--w-page) px-(--gutter) pb-80 pt-24"
+        >
+          <Outlet />
+        </main>
+      </div>
 
-      <main className="mx-auto max-w-3xl px-4 py-6">
-        <Outlet />
-      </main>
-    </div>
+      {/* The ?link inspector overlay, mounted once above the routed screens: the
+          list/save set ?link on row-open and this reads it (§11 0 / §6). The
+          /links/$id deep-link route renders its own inspector via the Outlet. */}
+      <LinkInspector />
+
+      {/* Global keyboard contract (§1.2) + the `?` overlay. */}
+      <KeyboardShortcuts />
+    </>
   )
 }

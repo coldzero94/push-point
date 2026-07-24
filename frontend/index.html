@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Push-Point</title>
+    <script>
+      // 3-state 테마의 해결 결과를 첫 페인트 전에 심는다 (렌더 차단, 모듈 스크립트보다 먼저).
+      // 선택값은 localStorage, <html>에 붙는 것은 항상 .light 또는 .dark 하나다.
+      (function () {
+        var pref = null
+        try { pref = localStorage.getItem('pushpoint.theme') } catch (e) {}
+        var dark = pref === 'dark' ||
+          (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.add(dark ? 'dark' : 'light')
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
