@@ -108,14 +108,16 @@ type ScrapeResult struct {
 	DurationSec *int64 // links.duration_sec (nil이면 NULL)
 	WordCount   *int64 // links.word_count (nil이면 NULL)
 	HasImage    bool   // og:image 존재 여부 — true면 ApplyScrape가 같은 트랜잭션에서 thumb 잡 enqueue
+	BodyText    string // links.body_text — 추출 본문(태거·요약 입력 전용, FTS·API 미노출)
 }
 
-// LinkContent는 tag 잡 핸들러가 태거에 넘길 링크 콘텐츠(런타임 가용 필드만 — 본문 없음).
+// LinkContent는 tag 잡 핸들러가 태거에 넘길 링크 콘텐츠.
 type LinkContent struct {
 	Domain      string
 	Title       string
 	Description string
 	Note        string
+	Body        string // 추출 본문(body_text) — 있으면 태거의 강한 신호
 }
 
 // TagDictEntry는 태그 사전 한 항목(DB tags 행). 핸들러가 tagger.TagEntry로 변환한다.

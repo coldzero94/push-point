@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -8,8 +9,10 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/markusmobius/go-trafilatura"
 )
 
 // 스크랩 요청 공통 상수 (스펙 docs/v2/05 §4·§6).
@@ -20,6 +23,9 @@ const (
 	requestTimeout = 10 * time.Second
 	// maxBodyBytes는 응답 본문 상한(5MB) — 거대한 페이지가 메모리를 삼키지 않도록 LimitReader로 자른다.
 	maxBodyBytes = 5 << 20
+	// maxBodyText는 추출 본문 저장 상한(32KB). 보일러플레이트 제거 본문은 대개 훨씬 작아
+	// 병적 outlier만 자른다 — DB 비대화를 막되 태깅·요약에 필요한 본문은 온전히 유지한다.
+	maxBodyText = 32 << 10
 )
 
 // DefaultParser는 사이트 어댑터가 매치되지 않을 때 쓰이는 범용 og 파서다.
@@ -48,26 +54,28 @@ func NewDefaultParser(client *http.Client, userAgent string) *DefaultParser {
 // Match는 fallback 파서라 모든 URL을 처리한다 (Registry가 fallback으로 부를 때만 사용).
 func (p *DefaultParser) Match(*url.URL) bool { return true }
 
-// Fetch는 HTML을 내려받아 파싱한 메타데이터를 반환한다.
+// Fetch는 HTML을 내려받아 파싱한 메타데이터 + 추출 본문을 반환한다.
 func (p *DefaultParser) Fetch(ctx context.Context, u *url.URL) (Metadata, error) {
-	doc, finalURL, err := p.fetchHTML(ctx, u)
+	doc, body, finalURL, err := p.fetchHTML(ctx, u)
 	if err != nil {
 		return Metadata{}, err
 	}
 	m := parseMetadata(doc, finalURL)
 	m.ContentType = contentTypeFor(u.Host)
+	m.BodyText = extractBodyText(body, finalURL)
 	return m, nil
 }
 
-// fetchHTML은 u를 GET해 goquery 문서와 리다이렉트 후 최종 URL을 반환한다.
+// fetchHTML은 u를 GET해 goquery 문서, 원본 HTML 바이트, 리다이렉트 후 최종 URL을 반환한다.
+// 본문을 한 번 버퍼링해 goquery(메타)와 go-trafilatura(본문) 양쪽에 재사용한다 — 재fetch 없음.
 // 요청당 10s 타임아웃, User-Agent 설정, 본문 5MB 상한. 2xx가 아니면 에러(재시도 대상).
-func (p *DefaultParser) fetchHTML(ctx context.Context, u *url.URL) (*goquery.Document, *url.URL, error) {
+func (p *DefaultParser) fetchHTML(ctx context.Context, u *url.URL) (*goquery.Document, []byte, *url.URL, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel() // goquery가 본문을 함수 반환 전에 모두 읽으므로 defer로 안전.
+	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("scraper: 요청 생성 실패 %s: %w", u, err)
+		return nil, nil, nil, fmt.Errorf("scraper: 요청 생성 실패 %s: %w", u, err)
 	}
 	req.Header.Set("User-Agent", p.userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
@@ -75,23 +83,55 @@ func (p *DefaultParser) fetchHTML(ctx context.Context, u *url.URL) (*goquery.Doc
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("scraper: GET 실패 %s: %w", u, err)
+		return nil, nil, nil, fmt.Errorf("scraper: GET 실패 %s: %w", u, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, fmt.Errorf("scraper: 예상 밖 상태 코드 %d (%s)", resp.StatusCode, u)
+		return nil, nil, nil, fmt.Errorf("scraper: 예상 밖 상태 코드 %d (%s)", resp.StatusCode, u)
 	}
 
-	doc, err := ParseHTML(io.LimitReader(resp.Body, maxBodyBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if err != nil {
-		return nil, nil, fmt.Errorf("scraper: HTML 파싱 실패 %s: %w", u, err)
+		return nil, nil, nil, fmt.Errorf("scraper: 본문 읽기 실패 %s: %w", u, err)
+	}
+	doc, err := ParseHTML(bytes.NewReader(body))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("scraper: HTML 파싱 실패 %s: %w", u, err)
 	}
 	// 리다이렉트를 따라간 최종 URL — 상대 og:image 해석 기준.
 	finalURL := u
 	if resp.Request != nil && resp.Request.URL != nil {
 		finalURL = resp.Request.URL
 	}
-	return doc, finalURL, nil
+	return doc, body, finalURL, nil
+}
+
+// extractBodyText는 go-trafilatura로 본문(보일러플레이트 제거)을 뽑아 상한(maxBodyText)으로
+// 자른다. 추출 실패는 치명적이지 않다 — 본문 없이 진행하고 태거가 title/description으로
+// graceful degrade한다(비-아티클·SPA·추출 실패 시 빈 문자열). EnableFallback으로 trafilatura가
+// 실패하면 readability·domdistiller로 폴백해 정밀도를 높인다.
+func extractBodyText(htmlBytes []byte, u *url.URL) string {
+	res, err := trafilatura.Extract(bytes.NewReader(htmlBytes), trafilatura.Options{
+		OriginalURL:     u,
+		EnableFallback:  true,
+		ExcludeComments: true,
+	})
+	if err != nil || res == nil {
+		return ""
+	}
+	return capRunes(strings.TrimSpace(res.ContentText), maxBodyText)
+}
+
+// capRunes는 s를 최대 limit 바이트로 자르되 UTF-8 룬 경계에서 끊는다(멀티바이트 깨짐 방지).
+func capRunes(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // parseMetadata는 goquery 문서에서 og:*, meta, <title>, html[lang]을 뽑는다.

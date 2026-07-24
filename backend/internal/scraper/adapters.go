@@ -63,7 +63,8 @@ func (a *youtubeAdapter) Fetch(ctx context.Context, u *url.URL) (Metadata, error
 		ContentType: "video",
 	}
 	// watch 페이지 og:description 병합 — best-effort. 실패해도 oEmbed 결과는 유지한다.
-	if doc, finalURL, err := a.parser.fetchHTML(ctx, u); err == nil {
+	// 본문 바이트는 무시한다 — 영상은 아티클 본문이 없다(body_text는 DefaultParser·naver만).
+	if doc, _, finalURL, err := a.parser.fetchHTML(ctx, u); err == nil {
 		page := parseMetadata(doc, finalURL)
 		if page.Description != "" {
 			m.Description = page.Description

@@ -37,6 +37,7 @@ type Metadata struct {
 	DurationSec *int64 // 영상 길이(초). 없으면 nil
 	WordCount   *int64 // 본문 단어 수. 없으면 nil
 	ImageURL    string // og:image 썸네일 원본 URL. 없으면 ""
+	BodyText    string // go-trafilatura로 추출한 본문(보일러플레이트 제거). 비-아티클/추출실패면 ""
 }
 
 // Scraper는 URL 하나를 메타데이터로 변환한다. 구현은 Registry(어댑터 라우팅)가 제공한다.

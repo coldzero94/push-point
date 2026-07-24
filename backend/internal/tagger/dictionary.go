@@ -5,13 +5,14 @@ import (
 	"unicode/utf8"
 )
 
-// Content는 태거 입력 — 런타임에 links에서 읽는 필드. 본문(body_text)·meta_keywords 컬럼은
-// 아직 없어 여기 없다(설계 open_risk #1; golden fixture도 이 표면만 채운다).
+// Content는 태거 입력 — 런타임에 links에서 읽는 필드. Body는 go-trafilatura 추출 본문
+// (비-아티클/추출실패면 빈 값 — 그때는 title/description으로 graceful degrade).
 type Content struct {
 	Domain      string
 	Title       string
 	Description string
 	Note        string
+	Body        string
 }
 
 // TagEntry는 사전 한 항목. store가 DB tags 테이블에서 읽어 넘긴다(태거는 store를 모른다).
