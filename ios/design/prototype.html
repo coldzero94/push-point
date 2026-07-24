@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Push-Point iOS — 화면 프로토타입 (M4 변환 기준)</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════
+   Push-Point iOS 프로토타입 — docs/v2/10-DESIGN-SYSTEM.md §2 토큰의 사본이다.
+   값이 다르면 10번 문서가 옳다. SwiftUI 변환 대응은 §8 iOS 대응표.
+   브라우저에서 파일을 그냥 열면 된다 (외부 의존성 없음).
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  --canvas:#F5F7F5; --surface:#FFFFFF; --hover:#EBF0EC; --elevated:#FFFFFF;
+  --fg-1:#0F1714; --fg-2:#505C57; --fg-3:#6E7C75;
+  --line-1:rgb(15 23 20 / .09); --line-2:rgb(15 23 20 / .16);
+  --accent:#0B6A50; --accent-tint:#DFF3EA; --on-accent:#FFFFFF;
+  --danger:#A82733;
+  --tag-craft-ink:#0B6A50; --tag-craft-tint:#DFF3EA;
+  --tag-media-ink:#5A6410; --tag-media-tint:#EEF2DA;
+  --tag-life-ink:#6E2A7C;  --tag-life-tint:#F6E7FA;
+  --sh-card: 0 1px 2px rgb(15 23 20 / .05), 0 8px 24px -12px rgb(15 23 20 / .16);
+  --sh-phone: 0 4px 8px rgb(15 23 20 / .08), 0 40px 80px -28px rgb(15 23 20 / .35);
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo",
+          "Pretendard Variable", Pretendard, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --serif: Charter, "Iowan Old Style", Georgia, AppleMyungjo, "Nanum Myeongjo", serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas:#0A0F0D; --surface:#151C19; --hover:#1C2521; --elevated:#1E2723;
+    --fg-1:#E7EDE9; --fg-2:#A0AEA8; --fg-3:#6E7C75;
+    --line-1:rgb(231 237 233 / .10); --line-2:rgb(231 237 233 / .18);
+    --accent:#43D3A3; --accent-tint:#0D2C22; --on-accent:#06120E;
+    --danger:#F0797A;
+    --tag-craft-ink:#43D3A3; --tag-craft-tint:#0D2C22;
+    --tag-media-ink:#C2CC6B; --tag-media-tint:#21260E;
+    --tag-life-ink:#E4A9F2;  --tag-life-tint:#2B1B31;
+    --sh-card: 0 1px 2px rgb(0 0 0 / .40), 0 8px 24px -12px rgb(0 0 0 / .60);
+    --sh-phone: 0 4px 8px rgb(0 0 0 / .5), 0 40px 80px -28px rgb(0 0 0 / .8);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin:0; background: var(--canvas); color: var(--fg-1); font-family: var(--sans); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 40px clamp(16px, 4vw, 40px) 80px; }
+
+header h1 { font-family: var(--serif); font-size: clamp(28px,4vw,42px); line-height:1.12;
+            letter-spacing:-.02em; font-weight:600; margin:8px 0 0; }
+.eyebrow { font-size:11px; font-weight:650; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); }
+header p { color: var(--fg-2); max-width: 64ch; line-height:1.7; font-size:15px; }
+h2 { font-family: var(--serif); font-size:24px; letter-spacing:-.016em; font-weight:600; margin:56px 0 4px; }
+h2 + p { color: var(--fg-2); max-width:64ch; line-height:1.7; font-size:14.5px; margin-top:6px; }
+code { font-family: var(--mono); font-size:.88em; background: var(--hover); padding:.12em .4em; border-radius:5px; }
+
+/* ── 아이폰 프레임 ───────────────────────────────────────────────────── */
+.phones { display:flex; gap: clamp(16px,3vw,36px); overflow-x:auto; padding: 28px 4px 16px; }
+.pw { flex:none; display:grid; gap:12px; justify-items:center; }
+.phone { width:272px; height:574px; border-radius:42px; padding:9px;
+         background: linear-gradient(160deg,#C9D1CC,#6E7A74 40%,#A8B2AC); box-shadow: var(--sh-phone); }
+@media (prefers-color-scheme: dark) {
+  .phone { background: linear-gradient(160deg,#3A423E,#171C1A 40%,#2A312E); }
+}
+.screen { position:relative; width:100%; height:100%; border-radius:34px; overflow:hidden;
+          background: var(--canvas); display:flex; flex-direction:column; }
+.notch { position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:20;
+         width:84px; height:22px; border-radius:999px; background:#0B0F0D; }
+.statusbar { position:relative; z-index:10; display:flex; justify-content:space-between;
+             padding:13px 20px 4px; font-family:var(--mono); font-size:11px; font-weight:600; }
+.cap { font-family:var(--mono); font-size:11px; color:var(--fg-3); text-align:center; max-width:272px; line-height:1.6; }
+.cap b { display:block; font-family:var(--sans); font-size:13px; font-weight:620; color:var(--fg-1);
+         letter-spacing:-.012em; margin-bottom:3px; }
+
+/* ── 공용 조각 ───────────────────────────────────────────────────────── */
+.cover { position:relative; overflow:hidden; background: var(--hover); }
+.cover canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+.cover .wm { position:absolute; left:12px; bottom:9px; z-index:2; font-family:var(--mono);
+             font-size:12px; letter-spacing:-.02em; }
+
+.tag { display:inline-flex; align-items:center; gap:4px; height:22px; padding:0 9px;
+       border-radius:999px; font-size:11.5px; font-weight:550; white-space:nowrap; }
+.tag[data-facet="craft"]{ color:var(--tag-craft-ink) } .tag[data-fill="1"][data-facet="craft"]{ background:var(--tag-craft-tint) }
+.tag[data-facet="media"]{ color:var(--tag-media-ink) } .tag[data-fill="1"][data-facet="media"]{ background:var(--tag-media-tint) }
+.tag[data-facet="life"] { color:var(--tag-life-ink) }  .tag[data-fill="1"][data-facet="life"] { background:var(--tag-life-tint) }
+.tag[data-facet="neutral"]{ color:var(--fg-2) }        .tag[data-fill="1"][data-facet="neutral"]{ background:var(--hover) }
+.tag[data-fill="0"]{ background:transparent; padding-left:0 }
+.tag[data-fill="2"]{ color: var(--surface) }
+.tag[data-fill="2"][data-facet="craft"]{ background:var(--tag-craft-ink) }
+
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:40px;
+       padding:0 16px; border-radius:13px; font-size:14px; font-weight:620; letter-spacing:-.01em; }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
+.btn.ghost { border:1px solid var(--line-2); color: var(--fg-2); }
+
+.ioscard { position:relative; background:var(--surface); border-radius:15px; overflow:hidden;
+           box-shadow: var(--sh-card); }
+.ioscard .cover { aspect-ratio: 2/1; }
+.ioscard .rail { position:absolute; inset:0 auto 0 0; width:3px; z-index:3; }
+.ioscard .body { padding:10px 12px 12px; display:grid; gap:5px; }
+.ioscard .t { font-size:14px; font-weight:640; letter-spacing:-.014em; line-height:1.3;
+              display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.ioscard .d { font-size:11.5px; line-height:1.5; color:var(--fg-2);
+              display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.ioscard .m { font-family:var(--mono); font-size:10.5px; color:var(--fg-3); }
+.ioscard .tags { display:flex; gap:4px; flex-wrap:wrap; }
+.ioscard .tag { height:19px; font-size:10.5px; padding:0 7px; }
+
+.head { padding:12px 18px 8px; }
+.head .h1 { font-family:var(--serif); font-size:28px; font-weight:600; letter-spacing:-.02em; line-height:1.1; }
+.head .sub { font-family:var(--mono); font-size:11px; color:var(--fg-3); margin-top:5px; }
+.scroll { flex:1; overflow:hidden; padding:0 14px 12px; display:grid; gap:11px; align-content:start; }
+.spine { display:flex; align-items:baseline; gap:9px; padding:2px 2px 0; }
+.spine h4 { margin:0; font-family:var(--serif); font-size:16px; font-weight:600; letter-spacing:-.014em; }
+.spine .bar { flex:1; height:1px; background:var(--line-1); }
+.spine .c { font-family:var(--mono); font-size:10px; color:var(--fg-3); }
+.tabbar { display:flex; justify-content:space-around; align-items:center; padding:9px 0 22px;
+          border-top:1px solid var(--line-1); background:var(--surface); }
+.tab { display:grid; justify-items:center; gap:3px; font-size:9.5px; color:var(--fg-3); font-weight:550; }
+.tab.on { color: var(--accent); }
+.tab .g { width:20px; height:20px; border-radius:6px; border:1.6px solid currentColor; }
+.tab.on .g { background: var(--accent-tint); }
+
+.dim { position:absolute; inset:0; background:rgb(6 12 10 / .42); }
+.sheet { position:absolute; left:8px; right:8px; bottom:8px; border-radius:26px; background:var(--elevated);
+         box-shadow:0 -8px 40px -12px rgb(0 0 0 / .4); padding:18px 18px 22px; display:grid; gap:14px; }
+.sheet .grab { width:36px; height:4px; border-radius:999px; background:var(--line-2); justify-self:center; }
+.sheet .ttl { font-size:17px; font-weight:660; letter-spacing:-.018em; }
+.check { width:46px; height:46px; border-radius:50%; background:var(--accent-tint); justify-self:center;
+         display:grid; place-items:center; color:var(--accent); font-size:22px; font-weight:700; }
+.progress { height:3px; border-radius:999px; background:var(--line-1); overflow:hidden; }
+.progress i { display:block; height:100%; width:62%; background:var(--accent); border-radius:999px; }
+.savecard { display:flex; gap:11px; align-items:center; padding:11px; border-radius:14px; background:var(--hover); }
+.savecard .mini { width:48px; height:48px; border-radius:10px; overflow:hidden; flex:none; }
+.kv { display:grid; grid-template-columns:60px 1fr; gap:5px 12px; font-size:12px; margin:0; }
+.kv dt { color:var(--fg-3); } .kv dd { margin:0; font-family:var(--mono); font-size:11.5px; color:var(--fg-2); }
+
+/* ── 대응표 ──────────────────────────────────────────────────────────── */
+table { width:100%; border-collapse:collapse; margin-top:20px; font-size:13.5px; }
+th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line-1); vertical-align:top; }
+th { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-3); font-weight:650; }
+td:first-child { font-family:var(--mono); font-size:12px; color:var(--accent); white-space:nowrap; }
+.tablewrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Push-Point · iOS 프로토타입</div>
+  <h1>M4가 SwiftUI로 옮길 화면</h1>
+  <p>
+    웹과 같은 디자인 시스템(<code>docs/v2/10-DESIGN-SYSTEM.md</code>)을 iOS 치수로 옮긴 것이다.
+    카드·생성 커버·시간 척추·칩 채움 3단은 웹과 동일하고, 다른 것은 <b>공유 시트</b> 하나다 —
+    이 화면이 이 제품의 승부처이고 웹에는 대응물이 없다.
+    이 파일은 외부 의존성이 없으니 브라우저로 그냥 열면 된다.
+  </p>
+</header>
+
+<h2>화면 4개</h2>
+<p>
+  좌 → 우: 공유 시트(Share Extension) · 목록 · 상세 · 태그 편집.
+  커버는 캔버스로 실제 생성되므로 도메인마다 무늬가 다른 것을 그대로 볼 수 있다(R4).
+</p>
+
+<div class="phones">
+
+  <!-- 1. 공유 시트 -->
+  <div class="pw">
+    <div class="phone"><div class="screen">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>▮▮▮</span></div>
+      <div style="flex:1;position:relative;background:var(--hover)">
+        <div style="padding:30px 20px;opacity:.35;font-size:12px;line-height:1.7;color:var(--fg-2)">
+          Safari — sqlite.org<br>FTS5 Tokenizers<br><br>The FTS5 module supports custom tokenizers…
+        </div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="check">✓</div>
+          <div style="text-align:center">
+            <div class="ttl">저장했습니다</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--fg-3);margin-top:3px">
+              0.4초 · 분류는 백그라운드에서
+            </div>
+          </div>
+          <div class="savecard">
+            <div class="mini cover" data-cover="sqlite.org" data-facet="craft"></div>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:13px;font-weight:620;letter-spacing:-.012em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                SQLite FTS5 Tokenizers
+              </div>
+              <div style="font-family:var(--mono);font-size:10.5px;color:var(--fg-3);margin-top:2px">sqlite.org</div>
+              <div class="progress" style="margin-top:7px"><i></i></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span class="btn ghost" style="flex:1">메모 추가</span>
+            <span class="btn primary" style="flex:1">완료</span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="cap"><b>Share Extension</b>성공을 먼저 확정하고 분류는 뒤에서 돈다. App Group 큐에 먼저 쓰므로 서버가 꺼져 있어도 이 화면은 성공으로 닫힌다.</div>
+  </div>
+
+  <!-- 2. 목록 -->
+  <div class="pw">
+    <div class="phone"><div class="screen">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="head">
+        <div class="h1">모아둔 것</div>
+        <div class="sub">312건 · 분류 대기 1</div>
+      </div>
+      <div style="padding:0 14px 10px;display:flex;gap:6px;overflow:hidden">
+        <span class="tag" data-facet="craft" data-fill="2" style="height:26px">프론트엔드</span>
+        <span class="tag" data-facet="craft" data-fill="1" style="height:26px">머신러닝</span>
+        <span class="tag" data-facet="media" data-fill="1" style="height:26px">논문</span>
+      </div>
+      <div class="scroll" id="list"></div>
+      <div class="tabbar">
+        <div class="tab on"><div class="g"></div>목록</div>
+        <div class="tab"><div class="g"></div>검색</div>
+        <div class="tab"><div class="g"></div>태그</div>
+        <div class="tab"><div class="g"></div>설정</div>
+      </div>
+    </div></div>
+    <div class="cap"><b>목록</b>웹과 같은 카드·시간 척추. 커서 페이지네이션 무한 스크롤 (<code>next_cursor</code>).</div>
+  </div>
+
+  <!-- 3. 상세 -->
+  <div class="pw">
+    <div class="phone"><div class="screen">
+      <div class="notch"></div>
+      <div class="cover" data-cover="arxiv.org" data-facet="craft" style="height:206px;flex:none">
+        <div class="wm" style="color:var(--tag-craft-ink);bottom:14px;left:18px;font-size:13px">arxiv.org</div>
+      </div>
+      <div style="flex:1;padding:16px 18px;display:grid;gap:12px;align-content:start">
+        <div style="font-size:19px;font-weight:660;letter-spacing:-.02em;line-height:1.3">
+          사전 없이 도메인 적응하기 — 규칙 태거의 한계
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <span class="tag" data-facet="craft" data-fill="0">머신러닝</span>
+          <span class="tag" data-facet="media" data-fill="1">논문</span>
+          <span class="tag" data-facet="neutral" data-fill="1">＋</span>
+        </div>
+        <div style="font-size:13px;line-height:1.6;color:var(--fg-2)">
+          규칙 기반 태거가 새 도메인에서 무너지는 지점을 세 가지 실패 사례로 정리하고,
+          사전 확장 없이 재현율을 올리는 방법을 검토한다.
+        </div>
+        <dl class="kv">
+          <dt>저장</dt><dd>오늘 09:14</dd>
+          <dt>발행</dt><dd>2026-07-19</dd>
+          <dt>분량</dt><dd>8,120 단어 · en</dd>
+          <dt>잡</dt><dd>scrape·tag done / thumb failed</dd>
+        </dl>
+      </div>
+      <div style="padding:10px 14px 26px;display:flex;gap:8px;border-top:1px solid var(--line-1);background:var(--surface)">
+        <span class="btn primary" style="flex:1">원문 열기</span>
+        <span class="btn ghost" style="width:48px">⋯</span>
+      </div>
+    </div></div>
+    <div class="cap"><b>상세</b>커버가 머리. <code>thumb failed</code> + <code>status done</code>이라도 빈칸이 없다 — 생성 커버가 최종 커버다.</div>
+  </div>
+
+  <!-- 4. 태그 편집 -->
+  <div class="pw">
+    <div class="phone"><div class="screen">
+      <div class="notch"></div>
+      <div class="statusbar"><span>9:41</span><span>▮▮▮</span></div>
+      <div style="flex:1;background:var(--hover);position:relative">
+        <div style="padding:16px 18px;opacity:.3;font-size:19px;font-weight:660;letter-spacing:-.02em">
+          사전 없이 도메인 적응하기
+        </div>
+        <div class="dim"></div>
+        <div class="sheet" style="top:60px;bottom:0;border-radius:26px 26px 0 0;align-content:start">
+          <div class="grab"></div>
+          <div class="ttl">태그 편집</div>
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;background:var(--hover);font-size:13px;color:var(--fg-3)">
+            <span>⌕</span><span>태그 검색</span>
+            <span style="margin-left:auto;color:var(--accent);font-weight:600">한국</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            <span class="tag" data-facet="craft" data-fill="0">머신러닝 <span style="opacity:.5">✕</span></span>
+            <span class="tag" data-facet="media" data-fill="1">논문 <span style="opacity:.5">✕</span></span>
+          </div>
+          <div style="border-top:1px solid var(--line-1);padding-top:12px;display:grid;gap:10px">
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3)">사전에서</div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <span class="tag" data-facet="craft" data-fill="1">한국어처리</span>
+              <span style="font-family:var(--mono);font-size:10.5px;color:var(--fg-3);margin-left:auto">14건</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <span class="tag" data-facet="craft" data-fill="1">한글 타이포그래피</span>
+              <span style="font-family:var(--mono);font-size:10.5px;color:var(--fg-3);margin-left:auto">6건</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;opacity:.7">
+              <span class="tag" data-facet="neutral" data-fill="1">＋ "한국" 새로 만들기</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <span class="btn ghost" style="flex:1">취소</span>
+            <span class="btn primary" style="flex:1">저장</span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="cap"><b>태그 편집</b>사전에 있는 것만 붙는다. 새 이름을 만들면 사전에도 함께 들어간다 (<code>POST /tags</code> → <code>PATCH /links/{id}</code>).</div>
+  </div>
+
+</div>
+
+<h2>SwiftUI 변환 대응표</h2>
+<p>
+  왼쪽은 이 프로토타입의 CSS 토큰, 오른쪽은 M4에서 만들 SwiftUI 대응물이다.
+  색은 Asset Catalog에 <b>Any/Dark 2벌</b>로 넣고, 코드에서 hex를 쓰지 않는다.
+</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>프로토타입</th><th>SwiftUI / iOS</th><th>비고</th></tr></thead>
+  <tbody>
+    <tr><td>--canvas / --surface</td><td><code>Color("Canvas")</code> / <code>Color("Surface")</code></td><td>Asset Catalog, Any + Dark 2벌</td></tr>
+    <tr><td>--accent</td><td><code>Color("Accent")</code> = AccentColor</td><td>hue 168 고정</td></tr>
+    <tr><td>--tag-craft-ink / -tint</td><td><code>Color("TagCraftInk")</code> …</td><td>facet 3축 × ink/tint = 6개</td></tr>
+    <tr><td>--serif (시간 척추)</td><td><code>.font(.system(.title3, design: .serif))</code></td><td>척추 머리글에만</td></tr>
+    <tr><td>--mono (도메인·시각·카운트)</td><td><code>.monospaced()</code> + <code>.monospacedDigit()</code></td><td>R2 — 기계 데이터 전부</td></tr>
+    <tr><td>.ioscard</td><td><code>LinkCardView</code> — <code>.background(.surface)</code> + <code>.clipShape(.rect(cornerRadius: 15))</code></td><td>커버 <code>.aspectRatio(2/1, contentMode: .fill)</code></td></tr>
+    <tr><td>생성 커버 (canvas)</td><td><code>Canvas { ctx, size in … }</code> + <code>.drawingGroup()</code></td><td>무늬 4종은 도메인 해시, 색은 facet — 웹 <code>lib/covers.ts</code>와 같은 규칙</td></tr>
+    <tr><td>.rail (상태 획)</td><td><code>Rectangle().frame(width: 3)</code> + <code>.accessibilityLabel</code></td><td><code>done</code>은 아무것도 그리지 않는다 (R3)</td></tr>
+    <tr><td>.spine</td><td><code>Section(header:)</code> in <code>List</code>/<code>LazyVStack</code></td><td>그룹 키는 <code>created_at</code> 기준 (웹 <code>timeGroup</code>과 동일 규칙)</td></tr>
+    <tr><td>.sheet (공유 시트)</td><td>Share Extension <code>UIViewController</code> + SwiftUI <code>UIHostingController</code></td><td>App Group 큐 기록 → 완료 표시 → <code>completeRequest</code></td></tr>
+    <tr><td>.tabbar</td><td><code>TabView</code> + SF Symbols</td><td>lucide 대응: list.bullet / magnifyingglass / tag / gearshape</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>이 화면들이 지켜야 하는 것</h2>
+<p>
+  M4 구현 시 아래 4개는 화면 예쁨보다 우선한다. 셋 다 <code>docs/v2/09-PLAN-REVIEW.md</code> ⑥·⑦에 배경이 있다.
+</p>
+<div class="tablewrap">
+<table>
+  <tbody>
+    <tr><td>2초</td><td>공유 시트 한 탭 → 시트 닫힘까지 2초 미만. 이 프로토타입의 "저장했습니다"는 <b>서버 응답이 아니라 큐 적재 완료</b>를 뜻한다.</td></tr>
+    <tr><td>큐 먼저</td><td>App Group 로컬 큐에 먼저 쓰고 그 다음 <code>POST /links</code>. "POST 후 즉시 닫기"는 요청 유실 경로 — 금지.</td></tr>
+    <tr><td>Keychain</td><td>API 키는 App Group 공유 Keychain. 앱과 확장이 같은 키를 본다.</td></tr>
+    <tr><td>빈칸 금지</td><td><code>title</code>이 빈 문자열이면 <code>domain</code> → <code>url</code> 순으로 대체. 커버는 R4로 항상 존재한다.</td></tr>
+  </tbody>
+</table>
+</div>
+
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const FACET_INK  = { craft:"--tag-craft-ink", media:"--tag-media-ink", life:"--tag-life-ink", neutral:"--fg-2" };
+  const FACET_TINT = { craft:"--tag-craft-tint", media:"--tag-media-tint", life:"--tag-life-tint", neutral:"--hover" };
+
+  // FNV-1a — 기하만 결정한다. 색은 절대 여기서 나오지 않는다 (§5.4).
+  const hash = (s) => {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  };
+  const readVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  function draw(canvas, domain, facet) {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = readVar(FACET_TINT[facet] || "--hover");
+    ctx.fillRect(0, 0, w, h);
+
+    const seed = hash(domain), kind = seed % 4;
+    const rot = ((seed >> 4) % 5) - 2, step = 12 + ((seed >> 8) % 5) * 4;
+    const ink = readVar(FACET_INK[facet] || "--fg-2");
+
+    ctx.save();
+    ctx.globalAlpha = kind === 3 ? .13 : .16;
+    ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 1.25;
+    ctx.translate(w/2, h/2); ctx.rotate(rot * Math.PI / 180); ctx.translate(-w/2, -h/2);
+    const R = Math.hypot(w, h);
+
+    if (kind === 0) {                                   // 빗금
+      ctx.beginPath();
+      for (let x = -R; x < R*2; x += step) { ctx.moveTo(x, -R); ctx.lineTo(x + h + R, R*2); }
+      ctx.stroke();
+    } else if (kind === 1) {                            // 점자
+      const r = Math.max(1.4, step/8);
+      for (let y = step/2; y < h + step; y += step) {
+        const off = (Math.floor(y/step) % 2) * (step/2);
+        for (let x = step/2; x < w + step; x += step) {
+          ctx.beginPath(); ctx.arc(x + off, y, r, 0, Math.PI*2); ctx.fill();
+        }
+      }
+    } else if (kind === 2) {                            // 등고선
+      const cx = w * (0.18 + ((hash(String(step)) >> 3) % 5) * 0.16), cy = h * 1.02;
+      for (let r = step; r < R; r += step) { ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, Math.PI*2); ctx.stroke(); }
+    } else {                                            // 계단
+      const s = step * 1.4;
+      for (let i = 0; i * s < w + h; i++) ctx.fillRect(i*s - h, i*s*0.55, s*0.62, h*2);
+    }
+    ctx.restore();
+  }
+
+  function paint() {
+    document.querySelectorAll("[data-cover]").forEach((el) => {
+      let c = el.querySelector("canvas");
+      if (!c) { c = document.createElement("canvas"); c.setAttribute("aria-hidden","true"); el.prepend(c); }
+      draw(c, el.dataset.cover, el.dataset.facet || "neutral");
+    });
+  }
+
+  // 목록 카드 — 계약에 실재하는 필드만 쓴다
+  const LINKS = [
+    { d:"sqlite.org", t:"SQLite FTS5에 한국어 토크나이저 붙이기",
+      s:"unicode61로는 조사가 분리되지 않는다. 커스텀 토크나이저를 등록해 형태소 경계를 넘기는 과정.",
+      f:"craft", time:"오늘 09:14", tags:[["sqlite","craft",0],["글","media",1]] },
+    { d:"arxiv.org", t:"사전 없이 도메인 적응하기 — 규칙 태거의 한계",
+      s:"규칙 기반 태거가 새 도메인에서 무너지는 지점을 세 가지 실패 사례로 정리한다.",
+      f:"craft", time:"오늘 08:20", tags:[["머신러닝","craft",0],["논문","media",1]] },
+    { d:"brunch.co.kr", t:"렌터카 없이 제주 3박 4일",
+      s:"버스 시간표와 걷는 거리를 미리 재고 다녀온 기록. 동선과 실제 소요 시간을 표로 정리했다.",
+      f:"life", time:"어제", tags:[["여행","life",1]] },
+  ];
+
+  const card = (l) => `<article class="ioscard"><div class="rail"></div>
+      <div class="cover" data-cover="${l.d}" data-facet="${l.f}">
+        <div class="wm" style="color:var(${FACET_INK[l.f]})">${l.d}</div>
+      </div>
+      <div class="body">
+        <div class="t">${l.t}</div>
+        <div class="d">${l.s}</div>
+        <div class="tags">${l.tags.map(([n,f,fill]) =>
+          `<span class="tag" data-facet="${f}" data-fill="${fill}">${n}</span>`).join("")}</div>
+        <div class="m">${l.d} · ${l.time}</div>
+      </div></article>`;
+
+  document.getElementById("list").innerHTML =
+    `<div class="spine"><h4>오늘</h4><span class="bar"></span><span class="c">2건</span></div>` +
+    card(LINKS[0]) + card(LINKS[1]);
+
+  paint();
+  addEventListener("resize", paint);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
+})();
+</script>
+</body>
+</html>

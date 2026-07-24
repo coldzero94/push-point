@@ -1,10 +1,17 @@
-// List (screen 2) — the app home (§11 3). A single-column row list with a
-// sticky toolbar: a search launcher + status dropdown, then a tag filter chip
-// bar. `?tag` / `?status` are URL state; `?link` opens the inspector overlay
-// (the contract with the inspector owner — §11 0). Rows render at a fixed height
-// (CLS 0) via LinkRow, facet-resolved from the tags cache. The three states are
-// Skeleton rows (loading) / EmptyState (empty) / an inline error block (§11 3(5)
-// — list errors are an inline block, NOT a toast).
+// List (screen 2) — the app home (§11 3). A card BOARD broken by a time spine,
+// with a sticky toolbar: a search launcher + status dropdown, then a tag filter
+// chip bar. `?tag` / `?status` are URL state; `?link` opens the inspector overlay
+// (the contract with the inspector owner — §11 0).
+//
+// Two structural decisions live here:
+//  - Column count comes from a CONTAINER query, not the viewport (§10 2.3): the
+//    board's usable width changes when the inspector opens, and the board should
+//    drop a column then even though the window never resized.
+//  - Groups come from `timeGroup` over an already-DESC list (lib/time.ts), so the
+//    spine costs one pass and can never emit the same group twice.
+//
+// The three states are skeleton cards (loading) / EmptyState (empty) / an inline
+// error block (§11 3(5) — list errors are an inline block, NOT a toast).
 
 import { useEffect, useRef, useState } from 'react'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
@@ -16,11 +23,12 @@ import { useCreateLink, useDeleteLink, useRetryLink } from '../hooks/useLinkMuta
 import { startPolling } from '../hooks/useSaveLink'
 import { useRowKeyboard } from '../hooks/useRowKeyboard'
 import { requestInspectorFocus } from '../lib/keyboard/inspectorFocus'
-import { LinkRow } from '../components/LinkRow'
+import { BOARD_GRID, LinkCard, LinkCardSkeleton } from '../components/LinkCard'
 import { StatusFilter } from '../components/StatusFilter'
-import { Button, Chip, EmptyState, Icon, Skeleton, useToast } from '../components/ui'
+import { Button, Chip, EmptyState, Icon, useToast } from '../components/ui'
 import { makeFacetResolver } from '../lib/tags/facet'
 import { errorMessage } from '../lib/api/client'
+import { timeGroup } from '../lib/time'
 import type { Link as LinkItem, LinkStatus, Tag } from '../lib/api/types'
 
 const route = getRouteApi('/')
@@ -40,6 +48,20 @@ function useDelayed(active: boolean, ms = 200): boolean {
   return on
 }
 
+type TimeGroupedLinks = { key: string; label: string; links: LinkItem[] }
+
+/** Walk a DESC-sorted list once, splitting it at every time-group boundary. */
+function groupByTime(links: readonly LinkItem[]): TimeGroupedLinks[] {
+  const groups: TimeGroupedLinks[] = []
+  for (const link of links) {
+    const { key, label } = timeGroup(link.created_at)
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.links.push(link)
+    else groups.push({ key, label, links: [link] })
+  }
+  return groups
+}
+
 export function ListScreen() {
   const { tag, status, link } = route.useSearch()
   const navigate = useNavigate()
@@ -55,6 +77,7 @@ export function ListScreen() {
 
   const facetOf = makeFacetResolver(tagsQuery.data)
   const links = data?.pages.flatMap((p) => p.links) ?? []
+  const groups = groupByTime(links)
   const hasFilter = Boolean(tag || status)
   const showSkeleton = useDelayed(isPending)
 
@@ -74,9 +97,9 @@ export function ListScreen() {
 
   const toastErr = (e: unknown) => toast.show({ variant: 'error', message: errorMessage(e) })
 
-  // Row-cursor Backspace/Delete — soft delete + undo toast (§1.2 / §1.5). No
-  // restore endpoint, so undo re-POSTs the same url (row reopens as pending); the
-  // label states that. Mirrors the inspector's onDelete.
+  // Card-cursor Backspace/Delete — soft delete + undo toast (§1.2 / §1.5). No
+  // restore endpoint, so undo re-POSTs the same url (the card reopens as pending);
+  // the label states that. Mirrors the inspector's onDelete.
   const undoDelete = (url: string, note: string) =>
     create.mutate(
       { url, note: note || undefined },
@@ -109,11 +132,11 @@ export function ListScreen() {
     })
   }
 
-  // Row-cursor keyboard (§1.2): J/K move the DOM focus between row buttons; the
-  // rest act on the focused row. E/N park a focus intent then open the inspector.
-  const listRef = useRef<HTMLUListElement>(null)
+  // Card-cursor keyboard (§1.2): J/K move the DOM focus between card buttons; the
+  // rest act on the focused card. E/N park a focus intent then open the inspector.
+  const boardRef = useRef<HTMLDivElement>(null)
   useRowKeyboard({
-    containerRef: listRef,
+    containerRef: boardRef,
     links,
     inspectorOpen: link != null,
     onOpen: openInspector,
@@ -138,17 +161,19 @@ export function ListScreen() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   return (
-    <section className="mx-auto flex max-w-(--w-content) flex-col gap-16 pt-16">
+    <section className="flex flex-col gap-20">
       {/* Toolbar (sticky) — search launcher + status filter. */}
-      <div className="sticky top-(--size-header) z-(--z-header) -mx-16 flex flex-col gap-12 bg-canvas px-16 py-8">
+      <div className="sticky top-(--size-header) z-(--z-header) -mx-16 flex flex-col gap-12 bg-canvas px-16 pb-12 pt-8">
         <div className="flex items-center gap-12">
           <Link
             to="/search"
-            className="flex h-32 min-w-0 flex-1 items-center gap-8 rounded-control border border-line-control bg-surface px-12 text-meta text-fg-3 hover:bg-hover"
+            className="flex h-40 min-w-0 flex-1 items-center gap-8 rounded-control border border-line-control bg-surface px-16 text-body text-fg-3 transition-colors duration-(--dur-out) ease-ui hover:bg-hover"
           >
             <Icon icon={Search} size={16} />
-            <span>검색하거나 이동합니다</span>
-            <kbd className="ml-auto rounded-control bg-hover px-6 py-2 font-mono text-fg-2">/</kbd>
+            <span className="truncate">검색하거나 이동합니다</span>
+            <kbd className="ml-auto rounded-control bg-hover px-6 py-2 font-mono text-label text-fg-2">
+              /
+            </kbd>
           </Link>
           <StatusFilter value={status} onChange={setStatus} />
         </div>
@@ -158,46 +183,60 @@ export function ListScreen() {
         <TagFilterBar tags={tagsQuery.data} activeTag={tag} onToggle={toggleTag} />
       </div>
 
-      <ul ref={listRef} className="@container flex flex-col">
+      {/* The element the board's column query measures. LinkCard declares no
+          container of its own, so this is the only measuring element. */}
+      <div ref={boardRef} className="@container">
         {/* Loading */}
-        {isPending && showSkeleton
-          ? Array.from({ length: 8 }, (_, i) => <SkeletonRow key={i} />)
-          : null}
+        {isPending && showSkeleton ? (
+          <ul className={BOARD_GRID}>
+            {Array.from({ length: 6 }, (_, i) => (
+              <LinkCardSkeleton key={i} />
+            ))}
+          </ul>
+        ) : null}
 
         {/* Error — inline block, not a toast (§11 3(5)). Already-loaded pages stay. */}
         {isError ? (
-          <li className="flex flex-col items-center gap-12 rounded-panel bg-surface py-40 text-center shadow-ring">
+          <div className="flex flex-col items-center gap-12 rounded-card bg-surface py-40 text-center shadow-ring">
             <p className="text-body text-fg-2">{errorMessage(error)}</p>
             <Button variant="secondary" onClick={() => void query.refetch()}>
               다시 시도
             </Button>
-          </li>
+          </div>
         ) : null}
 
-        {/* Rows */}
+        {/* Board — one section per time group: spine header, then cards. */}
         {!isPending && !isError
-          ? links.map((l: LinkItem) => (
-              <LinkRow
-                key={l.id}
-                link={l}
-                facetOf={facetOf}
-                selected={link === l.id}
-                activeTag={tag}
-                onOpen={openInspector}
-                onTagClick={toggleTag}
-                onRetry={(x) => retry.mutate(x.id)}
-              />
+          ? groups.map((group) => (
+              <section key={group.key} className="mb-32 last:mb-0">
+                <TimeSpine label={group.label} count={group.links.length} />
+                <ul className={BOARD_GRID}>
+                  {group.links.map((l) => (
+                    <LinkCard
+                      key={l.id}
+                      link={l}
+                      facetOf={facetOf}
+                      selected={link === l.id}
+                      activeTag={tag}
+                      onOpen={openInspector}
+                      onTagClick={toggleTag}
+                      onRetry={(x) => retry.mutate(x.id)}
+                    />
+                  ))}
+                </ul>
+              </section>
             ))
           : null}
 
-        {/* Next-page loading */}
+        {/* Next-page loading — appended under the last spine, not as a new group. */}
         {isFetchingNextPage ? (
-          <>
-            <SkeletonRow />
-            <SkeletonRow />
-          </>
+          <ul className={`${BOARD_GRID} mt-16`}>
+            <LinkCardSkeleton />
+            <LinkCardSkeleton />
+            <LinkCardSkeleton />
+          </ul>
         ) : null}
-      </ul>
+      </div>
 
       {/* Empty states — never rendered while isPending (§4.8). */}
       {!isPending && !isError && links.length === 0 ? (
@@ -217,7 +256,7 @@ export function ListScreen() {
           />
         ) : (
           <EmptyState
-            title="저장된 링크가 없습니다"
+            title="아직 모아둔 것이 없습니다"
             description="URL을 붙여넣으면 제목과 태그가 자동으로 채워집니다."
             action={
               <Link
@@ -238,8 +277,21 @@ export function ListScreen() {
           더 보기
         </Button>
       ) : null}
-      {/* P1: switch to @tanstack/react-virtual when rendered rows exceed 200 (§10 4.4). */}
+      {/* P1: switch to @tanstack/react-virtual when rendered cards exceed 200 (§10 4.4). */}
     </section>
+  )
+}
+
+// Time spine header (§11 3(2)) — the one slot where serif is allowed (§10 2.2.5).
+// The label is human ("오늘") and the count is machine, so R2 puts the two in
+// different faces on the same line.
+function TimeSpine({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="mb-12 flex items-baseline gap-12">
+      <h2 className="font-serif text-spine text-fg-1">{label}</h2>
+      <span className="font-mono text-label text-fg-3">{count}건</span>
+      <span className="h-px flex-1 bg-line-1" aria-hidden />
+    </div>
   )
 }
 
@@ -282,20 +334,3 @@ function TagFilterBar({
   )
 }
 
-// A row-shaped skeleton at the EXACT final dimensions (CLS 0) — the rail slot is
-// reserved but transparent; the rail's own pulse signals progress (§4.9).
-function SkeletonRow() {
-  return (
-    <li className="flex h-(--size-row-sm) items-center gap-12 pl-12 pr-16 sm:h-(--size-row)">
-      <span className="w-(--size-rail) shrink-0" aria-hidden />
-      <Skeleton
-        variant="thumb"
-        className="h-(--size-thumb-sm) w-(--size-thumb-sm) shrink-0 sm:h-(--size-thumb) sm:w-(--size-thumb)"
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-6">
-        <Skeleton variant="text" className="h-16 w-3/5" />
-        <Skeleton variant="text" className="h-12 w-2/5" />
-      </div>
-    </li>
-  )
-}

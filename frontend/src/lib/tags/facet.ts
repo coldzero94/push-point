@@ -63,6 +63,36 @@ export function makeFacetResolver(
   return (tag) => byId.get(tag.id) ?? 'neutral'
 }
 
+/**
+ * Chip ordering (§11 3(3)): manual first → confidence desc → name. Shared by the
+ * card and the inspector so the same link never presents its tags in two orders.
+ */
+export function sortLinkTags(tags: readonly LinkTag[]): LinkTag[] {
+  return [...tags].sort((a, b) => {
+    const am = a.source === 'manual' ? 0 : 1
+    const bm = b.source === 'manual' ? 0 : 1
+    if (am !== bm) return am - bm
+    const ac = a.confidence ?? -1
+    const bc = b.confidence ?? -1
+    if (ac !== bc) return bc - ac
+    return a.name.localeCompare(b.name)
+  })
+}
+
+/**
+ * The facet that colors a link's generated cover (R4 / §4.5): the first tag in
+ * chip order — i.e. what the user attached by hand if they attached anything,
+ * otherwise the tagger's most confident guess. An untagged link is `neutral`,
+ * which is the honest answer (the machine has not decided yet), not a fallback.
+ */
+export function dominantFacet(
+  tags: readonly LinkTag[],
+  resolve: (tag: Pick<LinkTag, 'id'>) => TagFacet,
+): TagFacet {
+  const first = sortLinkTags(tags)[0]
+  return first ? resolve(first) : 'neutral'
+}
+
 /** `tag.source` from the contract (rules / embed / manual). */
 type TagSource = LinkTag['source']
 

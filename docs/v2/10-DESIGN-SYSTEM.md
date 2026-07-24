@@ -1,6 +1,8 @@
 # 디자인 시스템 (Design System)
 
-> Push-Point v2 — 마지막 업데이트: 2026-07-24
+> Push-Point v2 — 마지막 업데이트: 2026-07-25
+
+**2026-07-25 개정 — 행에서 카드로.** 목록의 기본 단위가 76px 행에서 **카드**가 되고, `description`이 화면에 들어오고, 썸네일이 없는 링크는 **생성 커버**(R4, §4.5)를 받는다. 시간 척추가 목록을 끊고 그 머리글에만 serif를 허용한다(§2.2.5). 중성 램프는 hue 170으로 옮겼다 — L은 유지하고 C만 0.62배로 줄였으며, CVD 여유가 얼마나 줄었는지는 §2.1.1에 측정치로 적었다. **facet 6색·accent·hue lock·채도 상한은 바뀌지 않았다**: 이 개정이 바꾼 것은 색이 아니라 구조다. 배제 목록 재작성은 §1.3.
 
 이 문서는 Push-Point의 **시각·상호작용 단일 진실 원천**이다. 웹(`frontend/`)과 iOS(`ios/`, M4)가 같은 원본에서 나오도록, 토큰 값·컴포넌트 명세·모션 수치·접근성 기준·플랫폼 대응표를 구현 가능한 수준으로 고정한다.
 
@@ -34,29 +36,40 @@ Push-Point의 정체성은 "링크를 예쁘게 모으는 곳"이 아니라 **LL
 |---|---|---|
 | **R1. 색조는 정체성, 채움은 개입** | **hue**는 "무엇에 관한 것인가"만 인코딩한다 — 태그 facet 3개(craft 168 / media 112 / life 318)와 브랜드 hue 168뿐이다. **채움 단계(fill level)** 가 "누가 손댔고 지금 켜져 있는가"를 인코딩한다(0=기계 출력 투명 / 1=사람이 붙임·컨트롤 tint / 2=사용자가 선택함 solid). 상태(진행·실패·경고)는 태그 팔레트의 hue를 절대 쓰지 않고 예약된 hue + 형태 + 문장으로만 표현한다 | hue 예약표(§2.1.4)를 벗어난 색이 토큰으로 들어오면 리뷰 반려. facet별 `on-color`는 만들지 않는다(§2.1.3 칩 내부 대비표) |
 | **R2. 기계 데이터는 mono** | 도메인, URL, 저장 시각, 카운트, 신뢰도, 검색 rank는 고정폭. 사람이 쓴 것(제목 표시, 메모)은 sans | `--font-mono` 적용 대상이 계약에 실재하는 필드 단위로 고정(§2.2.4) |
-| **R3. 상태는 배지가 아니라 획** | 행 leading edge의 2px 레일 하나가 진행/실패/선택을 표현. 완료 상태는 아무 표시도 하지 않는다 | `StatusBadge` 5색 매핑 폐기, `StatusRail`로 대체(§4.7). **칩이 유채색이 되어도 상태는 여전히 무채 레일 하나다 — R3가 R1 개정의 전제다** |
+| **R3. 상태는 배지가 아니라 획** | 카드 leading edge의 2px 레일 하나가 진행/실패/선택을 표현. 완료 상태는 아무 표시도 하지 않는다 | `StatusBadge` 5색 매핑 폐기, `StatusRail`로 대체(§4.7). **칩이 유채색이 되어도 상태는 여전히 무채 레일 하나다 — R3가 R1 개정의 전제다** |
+| **R4. 빈칸을 만들지 않는다 — 없으면 생성한다** | 썸네일이 없는 링크는 회색 박스도 도메인 이니셜도 아니라 **생성 커버**를 받는다. 바탕은 지배 태그의 facet tint, 무늬는 도메인 해시로 고른 4종, 그 위에 도메인 워드마크 | `thumb: failed` + `status: done`은 정상 조합이므로 커버는 "빠진 이미지의 대체물"이 아니라 **다수 링크의 최종 커버**다. **해시가 정하는 것은 기하뿐이고 색은 facet에서만 온다** — 이 경계가 §5.4의 태그 색상 해시 금지를 그대로 살린다. 명세는 §4.5 |
 
 **R1 개정 경위(2026-07-22).** 개정 전 R1은 "색은 사람의 흔적"이었고 hue가 개입 여부를 인코딩했다. 개정은 그 **목적을 버리지 않고 채널만 바꾼다** — 사람의 흔적은 이제 채움이 진다. 개정 전보다 강해지는 점: manual 표시가 **모든 facet에서 동일한 형태**로 나타나므로 색맹 조건에서도 살아남는다(hue는 살아남지 못했다). 배경과 확정값은 §2.1.4 · §5.
 
 ### 1.3 배제 목록 (하지 않을 것)
 
+> **2026-07-25 재작성.** 아래 세 항목이 해제됐다 — 카드 그리드, 연출된 모션 예산, 화면 표제의 serif.
+> 해제 근거는 각 항목에 적었다. 나머지는 그대로 금지다.
+
 - **마케팅 히어로, 스크롤텔링, 패럴랙스, 마퀴, 스크롤 큐** — 도구에 랜딩 문법을 얹지 않는다.
-- **카드 그리드 / 무드보드 / masonry** — 썸네일은 구조적으로 비거나 실패한다(`thumb: failed` + `status: done`은 정상 조합). 이미지 격자는 회색 박스 밭이 된다.
-- **리더뷰** — 스키마에 본문이 없다. primary 액션은 영원히 "원문 열기"다.
-- **뷰 스위처, 밀도 토글, 테마 프리셋 갤러리** — 단일 사용자에게 선택지는 기능이 아니라 세금이다. 밀도는 뷰포트가 결정한다.
+- ~~**카드 그리드**~~ **→ 해제(2026-07-25).** 금지 근거는 "썸네일이 비면 회색 박스 밭"이었는데 R4가 그 전제를 없앤다 — 커버는 항상 존재하고, 없으면 생성된다. **단 masonry와 무드보드는 계속 금지**다. 커버 종횡비를 16:9로 고정해야 CLS 0을 지킬 수 있고, 높이가 들쭉날쭉한 격자는 스캔 속도를 깎는다.
+- **리더뷰** — 스키마에 본문이 없다. primary 액션은 영원히 "원문 열기"다. (`description`을 카드에 2줄 노출하는 것은 리더뷰가 아니다 — 계약이 이미 목록 응답에 200자를 주고 있고, 그것을 안 쓰던 쪽이 낭비였다.)
+- **뷰 스위처, 밀도 토글, 테마 프리셋 갤러리** — 단일 사용자에게 선택지는 기능이 아니라 세금이다. 밀도는 뷰포트가 결정한다. 카드 열 수도 사용자가 고르지 않고 **보드 컨테이너 폭**이 정한다(§2.3).
 - **그라데이션, 글로우, 뉴모피즘, 유리 카드** — 유리(backdrop blur)는 상단 바와 커맨드 팔레트 딱 2곳.
 - **이모지** — 라벨/빈 상태/버튼 어디에도 없다. 아이콘은 lucide(웹) / SF Symbols(iOS)만, strokeWidth 1.5, 16·20px 두 사이즈.
+- ~~**연출된 모션**~~ **→ 조건부 해제(2026-07-25).** S2(채워지는 카드)에만 안무 예산을 준다. 카드가 되면서 채워질 자리가 4개(제목·본문·태그·커버)로 늘었고, 순서대로 켜지는 것이 곧 "3초 안에 분류가 끝났다"는 증명이다. **여전히 앱 전체에서 연출은 이것 하나뿐이다** — 다른 화면 전환·목록 진입·hover에 안무를 추가하지 않는다.
+- ~~**본문 serif**~~ **→ 제한적 해제(2026-07-25).** 시간 척추 머리글(`오늘`/`이번 주`/`7월`)에만 serif를 허용한다(§2.2.5). 본문·라벨·컨트롤·칩·버튼은 전부 sans 그대로다. 근거: 그 줄에서 사람의 언어(척추 라벨)와 기계의 언어(건수, mono)가 나란히 서고, 서체 대비가 R2를 한 번 더 말한다.
 - **온보딩 투어, 빈 상태 마스코트, 숫자 카운트업, 3-컬럼 기능 카드.**
 - **태그 색상 해시 + 태그별 사용자 지정 색** — §5.4에서 해시(사전이 바뀌면 전량 재배치 + 의미와 색이 무관)와 개별 지정(GitHub 라벨·Notion select의 실패 사례)의 금지 근거를 명시한다.
 - **shadcn/ui 도입** — 접근성 동작이 필요한 프리미티브(`@radix-ui/react-*` 4~5개)만 직접 의존성으로 넣고 컴포넌트는 우리가 소유한다. 이 토큰 체계가 shadcn 기본값(slate 중성 + 단일 8px radius + 무채도 primary)을 90% 덮어쓰므로 남는 것이 파일 구조뿐이기 때문이다.
 
 ### 1.4 시그니처 요소 2개
 
-**S1. 상태 레일** — 각 행 leading edge의 2px 세로 획 하나가 상태 배지·상태 점·선택 체크박스·포커스 표시를 전부 대체한다. 기억에 남는 이유는 장식이 아니라 **제거**다. 정상 상태에는 아무 표시도 없으므로, 화면에 남은 획은 전부 "지금 뭔가 일어나고 있거나 잘못됐다"는 뜻이다.
+**S1. 상태 레일** — 각 카드 leading edge의 2px 세로 획 하나가 상태 배지·상태 점·선택 체크박스·포커스 표시를 전부 대체한다. 기억에 남는 이유는 장식이 아니라 **제거**다. 정상 상태에는 아무 표시도 없으므로, 화면에 남은 획은 전부 "지금 뭔가 일어나고 있거나 잘못됐다"는 뜻이다. 행이 카드가 되어도 **두께는 2px 그대로다** — §2.1.4의 채도 예산표가 유채 레일의 크기 상한을 2px로 못 박았고(danger 0.180 / accent 상당의 채도가 그 크기에서만 허용된다), 굵기로 위계를 만들지 않는다는 §4.7의 규칙도 그대로다.
 
-**S2. 채워지는 행(the fill)** — 저장 제출 즉시 목록 최상단에 행이 생긴다. 이때 실값은 도메인 하나뿐이고 제목/태그/썸네일 자리는 최종 치수 그대로의 스켈레톤이다. 워커가 끝나는 순서대로 제목 → 태그 → 썸네일이 제자리에서 채워진다(그 행만 교체, 목록 전체 리렌더 금지). 앱에서 유일하게 연출된 모션이며, 제품의 핵심 주장(3초 내 자동 분류)을 문장이 아니라 동작으로 증명한다.
+**S2. 채워지는 카드(the fill)** — 저장 제출 즉시 보드 최상단에 카드가 생긴다. 이때 실값은 도메인 하나뿐이고 제목/본문/태그/커버 자리는 **최종 치수 그대로 비어 있다**. 워커가 끝나는 순서대로 제목 → 본문 → 태그 → 커버가 제자리에서 채워진다(그 카드만 교체, 보드 전체 리렌더 금지). 앱에서 유일하게 연출된 모션이며, 제품의 핵심 주장(3초 내 자동 분류)을 문장이 아니라 동작으로 증명한다.
 
-**절제 규칙:** S1·S2 외에 "기억에 남는 디테일"을 추가하지 않는다. 세 번째 시그니처를 넣는 순간 둘 다 죽는다. **칩 채움 3단(§4.3)은 S1·S2와 경쟁하는 세 번째 시그니처가 아니다** — 새 형태가 아니라 이미 있는 칩의 상태 축이다.
+- 구현은 **타이머가 아니다.** 각 슬롯이 `.fill-step` + `data-in`을 달고, `data-in`은 "그 값이 도착했는가"만 본다(제목은 `title` 비어있지 않음, 커버는 `status`가 종단). 폴러가 링크를 갱신하면 슬롯이 알아서 켜지므로 안무 순서 = 워커가 실제로 끝난 순서다.
+- 첫 렌더에 이미 완성된 카드는 `data-in="true"`인 채로 DOM에 들어가므로 전환 없이 그대로 그려진다. 목록을 열 때마다 전 카드가 페이드인하는 사고가 구조적으로 불가능하다.
+- **아직 채워지지 않은 슬롯은 `inert`다.** `opacity: 0`은 시각에서만 사라질 뿐 포커스와 접근성 트리에는 남는다 — 그대로 두면 키보드 사용자가 보이지 않는 링크로 탭 이동하고 스크린 리더가 화면상 비어 있는 카드를 읽는다. `inert`는 요소를 마운트한 채로 두 트리에서만 빼므로, 값이 도착했을 때 페이드가 실제로 실행되는 성질을 잃지 않는다(§7.2).
+- `prefers-reduced-motion`에서는 감소가 아니라 **제거**다(최종 상태로 직행).
+
+**절제 규칙:** S1·S2 외에 "기억에 남는 디테일"을 추가하지 않는다. 세 번째 시그니처를 넣는 순간 둘 다 죽는다. **칩 채움 3단(§4.3)은 S1·S2와 경쟁하는 세 번째 시그니처가 아니다** — 새 형태가 아니라 이미 있는 칩의 상태 축이다. **생성 커버(R4 / §4.5)도 세 번째 시그니처가 아니다** — 새 연출이 아니라 빈칸을 없애는 규칙이고, 눈에 띄는 순간은 S2의 마지막 단계로 흡수된다.
 
 ## 2. 디자인 토큰
 
@@ -64,22 +77,24 @@ Push-Point의 정체성은 "링크를 예쁘게 모으는 곳"이 아니라 **LL
 
 #### 2.1.1 중성 계조 (12단, 원시 팔레트)
 
-Hue 225 근처의 아주 낮은 채도. 완전 무채색은 한글 본문에서 차갑게 죽고, 채도가 높은 파란 중성은 "핀테크"로 읽힌다. 그 사이. **순수 `#000`/`#fff`는 쓰지 않는다.**
+**Hue 170의 아주 낮은 채도**(2026-07-25 개정 — 이전 hue 225~257). 완전 무채색은 한글 본문에서 차갑게 죽고, 채도가 높은 파란 중성은 "핀테크"로 읽힌다. 그 사이. **순수 `#000`/`#fff`는 쓰지 않는다.**
+
+**개정 방식과 대가.** 각 단계의 **L은 그대로 두고 hue만 옮기고 C를 0.62배로 줄였다.** L이 보존되므로 §7.1의 명도 대비 표는 사실상 불변이다. 대신 중성 램프가 `craft`(168)에 가까워지면서 CVD 여유가 줄었다 — neutral 칩 ink와 facet ink의 최소 분리가 **deutan 1차 근사 ΔE 9.69 → 8.67(라이트) / 10.14 → 9.17(다크)**. 둘 다 §5.1 목표선 8을 넘으므로 개정을 받아들이되, **램프의 C를 여기서 더 올리면 목표선을 깬다**. 채도를 만지려면 §5.1을 먼저 다시 측정할 것. (근사 모델: oklab에서 적록 축 `a`를 소거한 거리 — 정밀 CVD 시뮬레이션이 아니라 **두 램프를 같은 자로 비교하기 위한 상대 측정**이다.)
 
 | 토큰 | 값 | 고정 역할 |
 |---|---|---|
-| `--ink-0` | `#FCFDFE` | 라이트 표면(행/입력/패널) |
-| `--ink-50` | `#F4F6F8` | 라이트 페이지 바닥 |
-| `--ink-100` | `#EAEDF1` | 라이트 hover |
-| `--ink-200` | `#DBDFE6` | 라이트 보더(강) |
-| `--ink-300` | `#C2C8D2` | 비활성 텍스트 / 구분선(강) |
-| `--ink-400` | `#9099A6` | 라이트 3차 텍스트, **다크 진행 레일** |
-| `--ink-500` | `#6B7482` | 다크 3차 텍스트(근사값 `#6E7889` 사용) |
-| `--ink-600` | `#515A67` | 라이트 2차 텍스트, **라이트 진행 레일** |
-| `--ink-700` | `#3A424E` | 다크 보더(강) |
-| `--ink-800` | `#262D37` | 다크 표면 상단 단계 — **의미 토큰에 직접 매핑되지 않는다**(다크 `--bg-selected`는 브랜드 tint `#0F2C22`다). 램프 연속성 유지용 |
-| `--ink-900` | `#171C23` | 라이트 1차 텍스트 |
-| `--ink-950` | `#0D1116` | 다크 페이지 바닥 |
+| `--ink-0` | `#FCFDFD` | 라이트 표면(카드/입력/패널) |
+| `--ink-50` | `#F4F6F5` | 라이트 페이지 바닥 |
+| `--ink-100` | `#EAEEEC` | 라이트 hover |
+| `--ink-200` | `#DBE0DE` | 라이트 보더(강) |
+| `--ink-300` | `#C2CAC7` | 비활성 텍스트 / 구분선(강) |
+| `--ink-400` | `#919B97` | 라이트 3차 텍스트, **다크 진행 레일** |
+| `--ink-500` | `#6B7672` | 다크 3차 텍스트(근사값 `#6E7B76` 사용) |
+| `--ink-600` | `#515C58` | 라이트 2차 텍스트, **라이트 진행 레일** |
+| `--ink-700` | `#3A4440` | 다크 보더(강) |
+| `--ink-800` | `#262F2B` | 다크 표면 상단 단계 — **의미 토큰에 직접 매핑되지 않는다**(다크 `--bg-selected`는 브랜드 tint `#0F2C22`다). 램프 연속성 유지용 |
+| `--ink-900` | `#171D1B` | 라이트 1차 텍스트 |
+| `--ink-950` | `#0D1210` | 다크 페이지 바닥 |
 
 원시 팔레트는 **의미 토큰 정의부에서만** 참조한다. 컴포넌트 코드에서 `--ink-*`를 직접 쓰면 lint 실패다.
 
@@ -87,23 +102,23 @@ Hue 225 근처의 아주 낮은 채도. 완전 무채색은 한글 본문에서 
 
 | 토큰 | 라이트 | 다크 | 용도 |
 |---|---|---|---|
-| `--bg-canvas` | `#F4F6F8` | `#0D1116` | 페이지 바닥 |
-| `--bg-surface` | `#FCFDFE` | `#141920` | 행·입력·툴바 표면 |
-| `--bg-hover` | `#EAEDF1` | `#1A2029` | hover, 썸네일 폴백 배경 |
-| `--bg-elevated` | `#FCFDFE` | `#1B222B` | 인스펙터·팝오버·시트·팔레트 |
-| `--bg-selected` | `#E1F9EF` | `#0F2C22` | 선택된 행 배경(= `--accent-tint`) |
-| `--fg-1` | `#171C23` | `#E8ECF1` | 1차 텍스트(제목, 본문) |
-| `--fg-2` | `#515A67` | `#A8B1BE` | 2차 텍스트(설명, 라벨) |
-| `--fg-3` | `#9099A6` | `#6E7889` | 3차 텍스트(도메인·시각) — **보조 메타 전용** |
-| `--fg-inverse` | `#FCFDFE` | `#06120E` | 액센트/딥 배경 위 텍스트 |
-| `--line-1` | `rgb(13 17 22 / .08)` | `rgb(255 255 255 / .08)` | **장식 헤어라인 전용** — 행 구분선, 카드 링 |
-| `--line-2` | `rgb(13 17 22 / .14)` | `rgb(255 255 255 / .14)` | **장식 헤어라인 전용** — 섹션 구분, 패널 외곽 |
-| `--line-control` | `#767F8C` | `#767F8C` | **컨트롤 경계 전용** — 입력·셀렉트·**필터 바 칩**·secondary 버튼 보더(표시 칩 제외, §4.3) |
+| `--bg-canvas` | `#F4F6F5` | `#0D1210` | 페이지 바닥 |
+| `--bg-surface` | `#FCFDFD` | `#141A18` | 카드·입력·툴바 표면 |
+| `--bg-hover` | `#EAEEEC` | `#1A221F` | hover, 커버 로드 전 바탕 |
+| `--bg-elevated` | `#FCFDFD` | `#1C2320` | 인스펙터·팝오버·시트·팔레트 |
+| `--bg-selected` | `#E1F9EF` | `#0F2C22` | 선택된 카드 배경(= `--accent-tint`) |
+| `--fg-1` | `#171D1B` | `#E9EDEB` | 1차 텍스트(제목, 본문) |
+| `--fg-2` | `#515C58` | `#A9B3AF` | 2차 텍스트(설명, 라벨) |
+| `--fg-3` | `#919B97` | `#6E7B76` | 3차 텍스트(도메인·시각) — **보조 메타 전용** |
+| `--fg-inverse` | `#FCFDFD` | `#06120E` | 액센트/딥 배경 위 텍스트 |
+| `--line-1` | `rgb(13 18 16 / .08)` | `rgb(233 237 235 / .08)` | **장식 헤어라인 전용** — 척추 하한선, 카드 링 |
+| `--line-2` | `rgb(13 18 16 / .14)` | `rgb(233 237 235 / .14)` | **장식 헤어라인 전용** — 섹션 구분, 패널 외곽 |
+| `--line-control` | `#77817D` | `#77817D` | **컨트롤 경계 전용** — 입력·셀렉트·**필터 바 칩**·secondary 버튼 보더(표시 칩 제외, §4.3) |
 | `--rail-progress` | `var(--ink-600)` | `var(--ink-400)` | 진행 중(pending/scraping/tagging) 상태 레일 |
-| `--accent` | `#197459` | `#2EB88F` | 포커스 링, primary 버튼, 선택된 행 레일, 선택된 `craft` 칩 채움 |
+| `--accent` | `#197459` | `#2EB88F` | 포커스 링, primary 버튼, 선택된 카드 레일, 선택된 `craft` 칩 채움 |
 | `--accent-hover` | `#096149` | `#37CFA1` | 액센트 요소 hover |
-| `--accent-tint` | `#E1F9EF` | `#0F2C22` | 선택된 행 배경 전용(= `--bg-selected`). **manual 칩에는 쓰지 않는다** — manual은 그 태그 자신의 facet tint다(§5.2) |
-| `--on-accent` | `#FCFDFE` | `#06120E` | 액센트 채움 위 텍스트 |
+| `--accent-tint` | `#E1F9EF` | `#0F2C22` | 선택된 카드 배경 전용(= `--bg-selected`). **manual 칩에는 쓰지 않는다** — manual은 그 태그 자신의 facet tint다(§5.2) |
+| `--on-accent` | `#FCFDFD` | `#06120E` | 액센트 채움 위 텍스트 |
 | `--danger` | `#B4232B` | `#F2706B` | `status: failed`, 4xx/5xx, 삭제 확인 |
 | `--danger-tint` | `#FCEBEA` | `#2A1518` | 실패 배너 배경 |
 | `--warn` | `#8E6400` | `#B28738` | 중복 저장, 사전에 없는 태그, API 키 미설정 |
@@ -304,23 +319,29 @@ hex 반올림에 의한 hue drift는 최대 **0.81°** 다.
 --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo",
              "Pretendard Variable", Pretendard, system-ui, "Segoe UI", "Malgun Gothic", sans-serif;
 --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+--font-serif: Charter, "Iowan Old Style", Georgia, AppleMyungjo, "Nanum Myeongjo",
+              "Apple SD Gothic Neo", serif;   /* 시간 척추 머리글 전용 — §2.2.5 */
 ```
 
 **웹폰트를 로드하지 않는다.** Pretendard는 비-Apple 환경 폴백 전용으로만 self-host하고, `unicode-range`를 한글+라틴으로 제한한다(Apple 기기에서는 앞선 폰트가 글리프를 커버하므로 실제로 다운로드되지 않는다).
 
 근거: (a) 사용자는 Mac/iPhone 단일 사용자이고, `-apple-system` + `Apple SD Gothic Neo`면 한글/라틴이 모두 SF 계열 광학 크기로 렌더된다 — **M4 SwiftUI 앱과 글자 인상이 자동으로 같아진다.** 커스텀 폰트를 쓰는 순간 웹과 iOS가 갈라지고 iOS는 Dynamic Type을 잃는다. (b) FOUT/FOIT 0, 요청 0, 단일 바이너리 embed 용량 증가 0. 차별화는 폰트 파일이 아니라 아래 트래킹 곡선과 mono 분리에서 만든다.
 
-#### 2.2.2 타입 스케일 (6단, rem/px 고정 — `clamp()` 금지)
+#### 2.2.2 타입 스케일 (8단, rem/px 고정 — `clamp()` 금지)
 
 폰트 크기에 `clamp()`나 `vw`를 쓰지 않는다. **타입은 이산 계단, 유동은 여백만.**
+
+2026-07-25 개정은 **`card`와 `spine` 두 단계를 추가했을 뿐, 기존 6단의 값은 하나도 바꾸지 않았다.** 트래킹이 SF의 광학 곡선(아래)에 묶여 있어서 크기를 흔들면 곡선을 다시 계산해야 하기 때문이다.
 
 | 토큰 | size / line-height | weight | letter-spacing | 용도 |
 |---|---|---|---|---|
 | `label` | 12px / 16px | 500 | `-0.006em` | 태그 칩, 상태 텍스트, 카운트, 소형 버튼 |
 | `meta` | 13px / 18px | 400 | `-0.012em` | 도메인, 저장 시각, 보조 설명 (mono 변형 존재) |
+| `card` | 13px / 20px | 400 | `-0.010em` | **카드의 `description` 2줄** (신규). `body`를 쓰면 카드가 8px 높아지고 `meta`를 쓰면 한글 두 줄이 붙는다 — 그 사이 |
 | `body` | 15px / 24px | 400 | `-0.010em` | 설명, 메모, 입력 필드 |
-| `title` | 15px / 20px | 600 | `-0.016em` | 링크 제목(목록 행) |
+| `title` | 15px / 20px | 600 | `-0.016em` | 링크 제목(카드 2줄 클램프) |
 | `head` | 20px / 26px | 600 | `-0.002em` | 화면 제목, 인스펙터 제목 |
+| `spine` | 21px / 28px | 600 | `0` | **시간 척추 머리글** (신규, serif). SF 광학 곡선은 SF에만 해당하므로 여기서는 0이다 |
 | `display` | 32px / 36px | 600 | **`+0.004em`** | 통계 숫자, 상세 화면 제목 |
 
 **트래킹 곡선은 Apple SF의 광학 곡선을 따른다.** SF Pro Text는 크기가 커질수록 더 음수(12px −0.010 → 17px −0.022)이고, 21px부터 Display 패밀리로 넘어가며 양수에서 시작해(21px +0.011) 40px에서 0을 통과한다. 32px의 **양수 트래킹**은 오타가 아니라 이 곡선이다. 렌더링 폰트가 실제로 SF이므로 광학적으로 옳다. "제목은 무조건 tracking-tighter"는 SF가 아닌 폰트를 전제한 관습이다.
@@ -335,7 +356,7 @@ hex 반올림에 의한 hue drift는 최대 **0.81°** 다.
 |---|---|
 | 400 | 본문, 설명, 메타 |
 | 500 | 라벨, 칩, 활성 내비게이션 |
-| 600 | 링크 제목, 화면 제목, primary 버튼 |
+| 600 | 링크 제목, 화면 제목, 시간 척추 머리글, primary 버튼 |
 
 위계는 굵기가 아니라 **색 4단(fg-1/2/3/accent)과 크기**로 만든다. 굵기로 소리치기 시작하면 밀도 7의 목록에서 전부 굵어진다.
 
@@ -348,17 +369,26 @@ hex 반올림에 의한 hue drift는 최대 **0.81°** 다.
 - 존재 여부가 불확실한 stylistic set(`ss01`, `cv01` 등)은 선언하지 않는다. SF에서 동작을 보장할 수 없다.
 - `-webkit-font-smoothing: antialiased`를 쓰지 않는다(텍스트를 얇게 만들어 저대비를 유발).
 
+#### 2.2.5 serif의 유일한 용처 (2026-07-25 신설)
+
+`--font-serif`는 **시간 척추 머리글 한 곳에만** 쓴다 — `오늘` / `어제` / `이번 주` / `7월`. 본문·라벨·컨트롤·칩·버튼·빈 상태에는 쓰지 않으며, 그 규칙을 어기는 순간 §1.3의 "본문 serif 금지"가 되살아난다.
+
+- **왜 거기만인가.** 척추 줄에서 사람의 언어(라벨)와 기계의 언어(건수, mono)가 나란히 선다. 서체 대비가 R2를 한 번 더 말하는 유일한 자리다.
+- **폰트 스택 순서의 의도.** Latin은 Charter/Iowan(macOS 기본 탑재)으로, 한글은 AppleMyungjo로 떨어진다. 브라우저가 글리프 단위로 폴백하므로 한 줄 안에서 라틴 세리프 + 한글 명조가 자연히 섞인다.
+- **웹폰트를 로드하지 않는 원칙은 그대로다**(§2.2.1). 비-Apple 환경에서는 Georgia → generic serif로 떨어지며, 그 경우에도 sans와 구분되기만 하면 의도는 달성된다.
+- iOS 대응은 `.font(.system(.title3, design: .serif))`(§8).
+
 ### 2.3 간격
 
 **12스텝. 패딩·마진·갭에 이 12개 밖의 값이 나타나면 lint 실패다**(아래 레이아웃 상수 토큰은 별도 목록이며, 그것도 이름으로만 참조한다).
 
 | 토큰 | 값 | 주 용도 |
 |---|---|---|
-| `space-2` | 2px | 레일 두께, 아이콘-텍스트 미세 보정 |
+| `space-2` | 2px | 아이콘-텍스트 미세 보정 (레일 두께는 `--size-rail` 2px) |
 | `space-4` | 4px | 칩 내부 세로 패딩, 아이콘 갭 |
 | `space-6` | 6px | 칩 사이 갭, 인라인 메타 구분 |
 | `space-8` | 8px | 칩 가로 패딩, 버튼 내부 세로 패딩 |
-| `space-12` | 12px | 행 내부 요소 갭(**레일↔썸네일 포함**), 입력 가로 패딩 |
+| `space-12` | 12px | 카드 내부 요소 갭, 입력 가로 패딩 |
 | `space-16` | 16px | 행 우측 패딩, 모바일 거터 |
 | `space-20` | 20px | 인스펙터 내부 패딩 |
 | `space-24` | 24px | 목록↔인스펙터 갭, 툴바 블록 간격 |
@@ -369,27 +399,27 @@ hex 반올림에 의한 hue drift는 최대 **0.81°** 다.
 
 작은 쪽은 촘촘(2~8), 큰 쪽은 급격히 벌어진다(32~80). UI 밀도용(2~24)과 섹션 리듬용(32~80)을 한 스케일 안에서 분리한 형태다.
 
-레이아웃 상수는 12스텝 간격 스케일 밖의 값이므로 **전부 명명 토큰으로 승격**한다. 익명 임의값(`h-[76px]`, `w-[380px]`)은 lint 실패다 — `h-(--size-row)`, `w-(--w-inspector)`처럼 토큰을 참조한다(§3, §9).
+레이아웃 상수는 12스텝 간격 스케일 밖의 값이므로 **전부 명명 토큰으로 승격**한다. 익명 임의값(`h-[76px]`, `w-[380px]`)은 lint 실패다 — `min-h-(--size-card-title)`, `w-(--w-inspector)`처럼 토큰을 참조한다(§3, §9). 커버만 예외로 `aspect-[16/9]`를 쓴다 — 종횡비는 치수가 아니라 비율이고, 토큰으로 만들면 오히려 읽기 어려워진다.
 
 | 토큰 | 값 | 용도 |
 |---|---|---|
-| `--w-page` | 1152px | 페이지 최대 폭 |
+| `--w-page` | 1200px | 페이지 최대 폭 |
 | `--w-content` | 768px | 목록 콘텐츠 폭(인스펙터 닫힘). **브레이크포인트가 아니라 폭 상수다** |
-| `--w-inspector` | 380px | 인스펙터 폭(≥1024) |
+| `--w-inspector` | 400px | 인스펙터 폭(≥1024) |
 | `--w-list-min` | 480px | 목록 최소 폭(인스펙터 열림) |
 | `--w-search-input` | 480px | 검색 입력 최대 폭(≥1024, 11 §4(6)) |
 | `--w-form` | 560px | 단일 컬럼 폼 최대 폭(설정 화면, 11 §8(6)) |
-| `--size-row` | 76px | 행 높이(**≥560**) |
-| `--size-row-sm` | 88px | 행 높이(`<560`, 터치) |
+| `--size-card-title` | 40px | 카드 제목 슬롯(= `text-title` 20px × 2줄). 값이 없어도 자리를 비워 둔다 |
+| `--size-card-desc` | 40px | 카드 본문 슬롯(= `text-card` 20px × 2줄) |
 | `--size-thumb` | 56px | 썸네일(≥560) |
 | `--size-thumb-sm` | 44px | 썸네일(`<560`) |
-| `--size-header` | 52px | 헤더 높이(sticky, glass) |
+| `--size-header` | 56px | 헤더 높이(sticky, glass) |
 | `--size-toolbar` | 44px | 툴바 높이(sticky, 불투명) |
-| `--size-rail` | 2px | 상태 레일 두께(= `space-2`). **행·인스펙터·토스트 마커 공통 — 레일 두께 토큰은 이것 하나뿐이다**(§4.7) |
+| `--size-rail` | 2px | 상태 레일 두께(= `space-2`). **카드·인스펙터·토스트 마커 공통 — 레일 두께 토큰은 이것 하나뿐이다**(§4.7) |
 | `--size-spark-min` | 3px | 통계 30일 스트립 한 칸 최소 폭(11 §8(6)). **12스텝 간격 스케일의 명시적 예외** — 간격이 아니라 치수다 |
 | `--gutter` | `max(env(safe-area-inset-left), clamp(16px, 2.5vw, 32px))` | 좌우 거터 |
 
-**브레이크포인트 4개: `<560` / `560~1023` / `≥1024` / `≥1280`.** 이 체계에 없는 값(특히 Tailwind 기본 `md` = 768px)을 미디어 쿼리에 쓰지 않는다 — §3에서 기본 브레이크포인트 스케일을 지우고 `sm:560 / lg:1024 / xl:1280` 3개만 남겨 **컴파일 단계에서 `md:`가 존재하지 않게** 만든다. 행 높이 전환점도 560px 하나뿐이다(`<560` → `--size-row-sm`, `≥560` → `--size-row`).
+**브레이크포인트 4개: `<560` / `560~1023` / `≥1024` / `≥1280`.** 이 체계에 없는 값(특히 Tailwind 기본 `md` = 768px)을 미디어 쿼리에 쓰지 않는다 — §3에서 기본 브레이크포인트 스케일을 지우고 `sm:560 / lg:1024 / xl:1280` 3개만 남겨 **컴파일 단계에서 `md:`가 존재하지 않게** 만든다. 카드 열 수는 이 브레이크포인트가 아니라 **보드 컨테이너 폭**(`@board-sm` 460px / `@board-md` 760px)이 정한다 — 인스펙터가 열리면 뷰포트는 그대로인데 보드만 좁아지기 때문이다.
 
 행 안의 태그 칩 개수는 **컨테이너 쿼리(`@container`)** 로 제어한다 — 행의 가용 폭은 인스펙터 개폐에 따라 달라지므로 뷰포트 폭으로 판단하면 틀린다. `100dvh` 사용, `100vh` 금지.
 
@@ -400,22 +430,28 @@ hex 반올림에 의한 hue drift는 최대 **0.81°** 다.
 | 토큰 | 값 | 적용 |
 |---|---|---|
 | `radius-chip` | 999px | 태그 칩, 필터 칩, 상태 pill |
-| `radius-control` | 6px | 버튼, 입력, 셀렉트, 아이콘 버튼 |
-| `radius-thumb` | 6px | 썸네일, 썸네일 폴백 |
-| `radius-row` | 8px | 행 hover/선택 배경 |
-| `radius-panel` | 12px | 인스펙터, 팝오버, 커맨드 팔레트, 토스트 |
-| `radius-sheet` | 16px | bottom sheet (상단 모서리만) |
+| `radius-control` | 10px | 버튼, 입력, 셀렉트, 아이콘 버튼 |
+| `radius-thumb` | 8px | 인스펙터·단축키 오버레이의 소형 이미지 슬롯 |
+| `radius-card` | 16px | **LinkCard**(2026-07-25 — 구 `radius-row` 8px를 대체) |
+| `radius-panel` | 16px | 인스펙터, 팝오버, 커맨드 팔레트, 토스트 |
+| `radius-sheet` | 20px | bottom sheet (상단 모서리만) |
+
+2026-07-25에 전 단계가 커졌다. 카드가 화면의 기본 단위가 되면 8px 모서리는 카드가 아니라 "각진 블록"으로 읽히고, 카드만 키우고 버튼·입력을 두면 한 화면에서 모서리 언어가 둘로 갈라진다. **`radius-panel`과 `radius-card`를 같은 16px로 둔 것도 의도다** — 인스펙터는 카드를 확대한 것이지 다른 종류의 면이 아니다.
 
 ### 2.5 그림자와 레이어
 
 ```css
 --ring:     0 0 0 1px var(--line-1);
---sh-panel: var(--ring), 0 8px 24px -8px rgb(13 17 22 / .18), 0 2px 6px -2px rgb(13 17 22 / .10);
---sh-sheet: var(--ring), 0 -8px 32px -12px rgb(13 17 22 / .22);
-/* dark: 그림자 알파를 각각 .55 / .35로 증폭 */
+--sh-card:  0 1px 2px rgb(13 18 16 / .05), 0 8px 24px -12px rgb(13 18 16 / .16);
+--sh-lift:  0 2px 4px rgb(13 18 16 / .06), 0 18px 40px -16px rgb(13 18 16 / .22);
+--sh-panel: var(--ring), 0 8px 24px -8px rgb(13 18 16 / .18), 0 2px 6px -2px rgb(13 18 16 / .10);
+--sh-sheet: var(--ring), 0 -8px 32px -12px rgb(13 18 16 / .22);
+/* dark: 그림자 알파를 증폭 (.40/.60 · .45/.70 · .55/.35 · .55) */
 ```
 
-- 얕은 다층 + 1px 헤어라인 링. **행에는 그림자를 쓰지 않는다**(수백 개가 깔리는 화면에서 페인트 비용과 시각 소음).
+- 얕은 다층 + 1px 헤어라인 링.
+- **카드 그림자는 2단뿐이다**: rest `--sh-card` → hover `--sh-lift`. 그 사이 단계도, 눌림 단계도 없다. 이전 명세의 "행에는 그림자를 쓰지 않는다"는 76px 행 수백 개를 전제한 규칙이었고, 카드로 오면서 폐기됐다 — 다만 그 근거였던 **페인트 비용은 그대로 유효하므로** 그림자는 `box-shadow` 2겹으로 묶고, 렌더 카드가 200개를 넘으면 가상 스크롤로 전환한다(§4.4).
+- hover에서 움직이는 것은 **그림자와 −2px 이내의 translate뿐**이다. scale 변형은 쓰지 않는다(격자에서 이웃 카드와 겹친다).
 - 유리(`backdrop-filter: blur(12px) saturate(1.6)`)는 **상단 바와 커맨드 팔레트 2곳뿐**이며, `@supports not (backdrop-filter: blur(1px))`에서 **더 불투명하게** 만든다(역방향 점진 향상).
 
 z-index 사다리 — **이 7개 밖의 z-index 금지:**
@@ -479,24 +515,37 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
   --breakpoint-*: initial;
 }
 
-/* ── 1. 원시 팔레트 + 의미 토큰 (라이트/다크) ───────────────────────── */
+/* ── 1. 원시 팔레트 + 의미 토큰 (라이트/다크) ─────────────────────────
+   중성 램프는 2026-07-25에 hue 225~257(파랑 편향) → **hue 170**으로 옮겼다.
+   각 단계의 L은 그대로 두고 C만 0.62배로 줄였으므로 명도 대비는 사실상
+   불변이고(§10 7.1), 바뀐 것은 색조뿐이다.
+
+   대가를 측정하고 받아들였다: neutral 칩 ink와 facet ink의 최소 분리가
+   deutan 1차 근사 ΔE 9.69 → 8.67(라이트) / 10.14 → 9.17(다크)로 줄어든다.
+   둘 다 §5.1 목표선 8을 넘으므로 허용 범위지만, 여유가 준 것은 사실이다.
+   **C를 여기서 더 올리면 목표선을 깬다** — 램프 채도를 만지려면 §10 5.1을
+   먼저 다시 측정할 것.
+
+   facet 6색과 accent/danger/warn은 §10 2.1.2·§5의 실측값 그대로다.
+   hue lock(craft 168 / media 112 / life 318)과 채도 상한은 CVD 분리 근거가
+   붙어 있는 하드 제약이라 이 개정에서 건드리지 않았다. */
 @layer base {
   :root {
     color-scheme: light dark;      /* 인라인 스크립트가 클래스를 심기 전의 기본값 */
 
-    /* ink scale (의미 토큰 정의부에서만 참조) */
-    --ink-0:#FCFDFE;  --ink-50:#F4F6F8;  --ink-100:#EAEDF1; --ink-200:#DBDFE6;
-    --ink-300:#C2C8D2; --ink-400:#9099A6; --ink-500:#6B7482; --ink-600:#515A67;
-    --ink-700:#3A424E; --ink-800:#262D37; --ink-900:#171C23; --ink-950:#0D1116;
+    /* ink scale — 의미 토큰 정의부에서만 참조. hue 170, C = 원본 × 0.62 */
+    --ink-0:#FCFDFD;   --ink-50:#F4F6F5;  --ink-100:#EAEEEC; --ink-200:#DBE0DE;
+    --ink-300:#C2CAC7; --ink-400:#919B97; --ink-500:#6B7672; --ink-600:#515C58;
+    --ink-700:#3A4440; --ink-800:#262F2B; --ink-900:#171D1B; --ink-950:#0D1210;
 
     /* semantic — light */
     --bg-canvas:var(--ink-50); --bg-surface:var(--ink-0); --bg-hover:var(--ink-100);
     --bg-elevated:var(--ink-0); --bg-selected:#E1F9EF;
     --fg-1:var(--ink-900); --fg-2:var(--ink-600); --fg-3:var(--ink-400); --fg-inverse:var(--ink-0);
-    --line-1:rgb(13 17 22 / .08); --line-2:rgb(13 17 22 / .14);
-    --line-control:#767F8C;           /* 컨트롤 경계 전용 — 배경 전 조합 3:1 이상 */
+    --line-1:rgb(13 18 16 / .08); --line-2:rgb(13 18 16 / .14);
+    --line-control:#77817D;           /* 컨트롤 경계 전용 — 배경 전 조합 3:1 이상 */
     --rail-progress:var(--ink-600);   /* 진행 레일 (펄스 하한에서도 3:1) */
-    --accent:#197459; --accent-hover:#096149; --accent-tint:#E1F9EF; --on-accent:#FCFDFE;
+    --accent:#197459; --accent-hover:#096149; --accent-tint:#E1F9EF; --on-accent:var(--ink-0);
     --danger:#B4232B; --danger-tint:#FCEBEA;
     --warn:#8E6400;   --warn-tint:#FDF3E2;
 
@@ -505,11 +554,14 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
     --tag-media-ink:#54570B; --tag-media-tint:#F2F5E0;
     --tag-life-ink:#4B2656;  --tag-life-tint:#FBEDFF;
 
-    /* elevation */
+    /* elevation — 카드가 화면의 기본 단위가 되면서 그림자가 2단으로 늘었다.
+       rest(sh-card) → hover(sh-lift)로만 움직이고 그 사이 단계는 없다. */
     --ring: 0 0 0 1px var(--line-1);
-    --sh-panel: var(--ring), 0 8px 24px -8px rgb(13 17 22 / .18),
-                             0 2px 6px  -2px rgb(13 17 22 / .10);
-    --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(13 17 22 / .22);
+    --sh-card: 0 1px 2px rgb(13 18 16 / .05), 0 8px 24px -12px rgb(13 18 16 / .16);
+    --sh-lift: 0 2px 4px rgb(13 18 16 / .06), 0 18px 40px -16px rgb(13 18 16 / .22);
+    --sh-panel: var(--ring), 0 8px 24px -8px rgb(13 18 16 / .18),
+                             0 2px 6px  -2px rgb(13 18 16 / .10);
+    --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(13 18 16 / .22);
   }
 
   /* 3-state 테마: <html>에는 해결된 결과 클래스가 항상 하나 붙는다.
@@ -519,11 +571,11 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
 
   .dark {
     color-scheme: dark;
-    --bg-canvas:var(--ink-950); --bg-surface:#141920; --bg-hover:#1A2029;
-    --bg-elevated:#1B222B; --bg-selected:#0F2C22;
-    --fg-1:#E8ECF1; --fg-2:#A8B1BE; --fg-3:#6E7889; --fg-inverse:#06120E;
-    --line-1:rgb(255 255 255 / .08); --line-2:rgb(255 255 255 / .14);
-    --line-control:#767F8C;           /* 라이트와 동일 값으로 양쪽 3:1을 만족한다 */
+    --bg-canvas:var(--ink-950); --bg-surface:#141A18; --bg-hover:#1A221F;
+    --bg-elevated:#1C2320; --bg-selected:#0F2C22;
+    --fg-1:#E9EDEB; --fg-2:#A9B3AF; --fg-3:#6E7B76; --fg-inverse:#06120E;
+    --line-1:rgb(233 237 235 / .08); --line-2:rgb(233 237 235 / .14);
+    --line-control:#77817D;           /* 라이트와 동일 값으로 양쪽 3:1을 만족한다 */
     --rail-progress:var(--ink-400);
     --accent:#2EB88F; --accent-hover:#37CFA1; --accent-tint:#0F2C22; --on-accent:#06120E;
     --danger:#F2706B; --danger-tint:#2A1518;
@@ -533,6 +585,9 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
     --tag-craft-ink:#84E4C1; --tag-craft-tint:#0F2C22;
     --tag-media-ink:#BFC573; --tag-media-tint:#262810;
     --tag-life-ink:#EEBBFE;  --tag-life-tint:#2E2033;
+
+    --sh-card: 0 1px 2px rgb(0 0 0 / .40), 0 8px 24px -12px rgb(0 0 0 / .60);
+    --sh-lift: 0 2px 4px rgb(0 0 0 / .45), 0 18px 40px -16px rgb(0 0 0 / .70);
     --sh-panel: var(--ring), 0 8px 24px -8px rgb(0 0 0 / .55),
                              0 2px 6px  -2px rgb(0 0 0 / .35);
     --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(0 0 0 / .55);
@@ -570,6 +625,8 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
   --color-tag-media-ink: var(--tag-media-ink);   --color-tag-media-tint: var(--tag-media-tint);
   --color-tag-life-ink:  var(--tag-life-ink);    --color-tag-life-tint:  var(--tag-life-tint);
 
+  --shadow-card:  var(--sh-card);
+  --shadow-lift:  var(--sh-lift);
   --shadow-panel: var(--sh-panel);
   --shadow-sheet: var(--sh-sheet);
   --shadow-ring:  var(--ring);
@@ -583,8 +640,14 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
                "Pretendard Variable", Pretendard, system-ui, "Segoe UI",
                "Malgun Gothic", sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  /* serif 는 시간 척추 머리글 전용이다(§10 2.2.5). Latin은 Charter/Iowan,
+     한글은 AppleMyungjo로 떨어지도록 순서를 잡는다 — 본문·라벨·컨트롤에는 쓰지 않는다. */
+  --font-serif: Charter, "Iowan Old Style", Georgia, AppleMyungjo, "Nanum Myeongjo",
+                "Apple SD Gothic Neo", serif;
 
-  /* type scale — 유틸리티: text-label / text-meta / text-body / text-title / ... */
+  /* type scale (8단). 이 개정이 추가한 것은 `card`와 `spine` 둘뿐이고 기존 6단의
+     크기·굵기·트래킹은 한 값도 바꾸지 않았다 — 트래킹은 SF의 광학 곡선을 따르고
+     (§10 2.2.2), 굵기는 400/500/600 세 개뿐이다(§10 2.2.3). */
   --text-label: 12px;
   --text-label--line-height: 16px;
   --text-label--font-weight: 500;
@@ -595,6 +658,13 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
   --text-meta--font-weight: 400;
   --text-meta--letter-spacing: -0.012em;
 
+  /* 카드 본문 — description 2줄 클램프 전용. body(15/24)를 쓰면 카드가 8px 높아지고
+     meta(13/18)를 쓰면 한글 두 줄이 붙는다. 그 사이의 한 단계다. */
+  --text-card: 13px;
+  --text-card--line-height: 20px;
+  --text-card--font-weight: 400;
+  --text-card--letter-spacing: -0.010em;
+
   --text-body: 15px;
   --text-body--line-height: 24px;
   --text-body--font-weight: 400;
@@ -604,6 +674,13 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
   --text-title--line-height: 20px;
   --text-title--font-weight: 600;
   --text-title--letter-spacing: -0.016em;
+
+  /* 시간 척추 머리글 — serif 를 쓰는 유일한 슬롯. SF 광학 트래킹 곡선은 SF에만
+     해당하므로 여기서는 0이다(serif는 그 곡선을 따르지 않는다). */
+  --text-spine: 21px;
+  --text-spine--line-height: 28px;
+  --text-spine--font-weight: 600;
+  --text-spine--letter-spacing: 0em;
 
   --text-head: 20px;
   --text-head--line-height: 26px;
@@ -621,30 +698,34 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
   --spacing-32:32px; --spacing-40:40px; --spacing-56:56px; --spacing-80:80px;
 
   /* radius — semantic only */
-  --radius-chip:999px; --radius-control:6px; --radius-thumb:6px;
-  --radius-row:8px;    --radius-panel:12px;  --radius-sheet:16px;
+  --radius-chip:999px; --radius-control:10px; --radius-thumb:8px;
+  --radius-card:16px;  --radius-panel:16px;   --radius-sheet:20px;
 
   /* easing */
   --ease-ui:    cubic-bezier(0.4, 0, 0.6, 1);
   --ease-enter: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 
-  /* motion — 허용 duration 집합의 유일한 선언부(§2.6). lint가 여기서 목록을 만든다 */
+  /* motion — 허용 duration 집합의 유일한 선언부(§2.6) */
   --dur-out:120ms; --dur-1:160ms; --dur-2:180ms; --dur-close:200ms;
-  --dur-flip:220ms; --dur-3:260ms; --dur-pulse:2400ms;
+  --dur-flip:220ms; --dur-3:260ms; --dur-fill:340ms; --dur-pulse:2400ms;
 
   /* 브레이크포인트 3개(= 구간 4개). 기본 스케일을 지웠으므로 md:(768px)는 존재하지 않는다 */
   --breakpoint-sm:  560px;
   --breakpoint-lg: 1024px;
   --breakpoint-xl: 1280px;
 
-  /* containers — 행 내부 칩 개수 판정용 */
-  --container-row-sm: 480px;
-  --container-row-md: 640px;
+  /* containers — 보드가 인스펙터 개폐로 폭이 바뀌므로 열 수는 뷰포트가 아니라
+     보드 컨테이너가 정한다(§10 2.3) */
+  --container-board-sm: 460px;
+  --container-board-md: 760px;
 
-  /* 레이아웃 상수 — 12스텝 밖의 고정 치수. h-(--size-row) 형태로만 참조한다 */
-  --size-row:76px; --size-row-sm:88px; --size-thumb:56px; --size-thumb-sm:44px;
-  --size-header:52px; --size-toolbar:44px; --size-rail:2px; --size-spark-min:3px;
-  --w-page:1152px; --w-content:768px; --w-inspector:380px; --w-list-min:480px;
+  /* 레이아웃 상수 — 12스텝 밖의 고정 치수. h-(--size-header) 형태로만 참조한다 */
+  /* 카드 슬롯 높이 — 값이 아직 없어도 자리를 비워두게 하는 상수다(CLS 0).
+     title 은 2줄 × text-title 20px, desc 는 2줄 × text-card 20px. */
+  --size-card-title:40px; --size-card-desc:40px;
+  --size-thumb:56px; --size-thumb-sm:44px;
+  --size-header:56px; --size-toolbar:44px; --size-rail:2px; --size-spark-min:3px;
+  --w-page:1200px; --w-content:768px; --w-inspector:400px; --w-list-min:480px;
   --w-search-input:480px; --w-form:560px;
   --gutter: max(env(safe-area-inset-left), clamp(16px, 2.5vw, 32px));
 
@@ -673,8 +754,10 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
     animation: none !important;
     animation-delay: 0ms !important;
   }
-  /* 무한 루프는 감소가 아니라 제거 — 정적 불투명(대비 5.94:1 / 5.57:1) */
+  /* 무한 루프는 감소가 아니라 제거 — 정적 불투명 */
   [data-reduce-motion] .rail-pulse { opacity: 1; }
+  /* 채우기 안무(S2)도 감소가 아니라 제거 — 최종 상태로 바로 간다 */
+  [data-reduce-motion] .fill-step { opacity: 1 !important; transform: none !important; }
 }
 
 @layer utilities {
@@ -690,15 +773,55 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
     filter: brightness(.92);
     box-shadow: inset 0 0 0 1px var(--line-1);
   }
-  /* 진행 레일 펄스 — 하한 .7에서도 3:1을 유지한다(§2.1.3) */
+  /* 진행 레일 펄스 — 하한 .7에서도 3:1을 유지한다(§10 2.1.3) */
   @keyframes rail-pulse { from { opacity: .7 } to { opacity: 1 } }
   .rail-pulse {
     animation: rail-pulse var(--dur-pulse) var(--ease-ui) infinite alternate;
   }
+
+  /* S2 채우기 — 워커가 끝나는 순서대로 제자리에서 켜지는 단계. 카드의 최종 치수는
+     0ms에 이미 확정돼 있으므로 이 클래스는 opacity/transform만 건드린다(CLS 0). */
+  .fill-step {
+    opacity: 0;
+    transform: translateY(4px);
+    transition:
+      opacity var(--dur-fill) var(--ease-enter),
+      transform var(--dur-fill) var(--ease-enter);
+  }
+  .fill-step[data-in="true"] { opacity: 1; transform: none; }
+
+  /* 2줄 클램프 — 카드 제목과 본문의 높이를 고정해 보드 격자를 흔들지 않는다 */
+  .clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* 히트 영역 2단계(§7.5 / §4 공통 규칙). 클릭·탭 영역만 넓히고 아이콘 크기는
+     그대로 둔다. 마우스(pointer:fine)에서는 요소 자체를 최소 24×24(WCAG 2.5.8
+     Target Size Minimum)로 키우고, 터치(pointer:coarse)에서는 시각 크기를
+     건드리지 않고 ::before로 44×44 히트 영역을 중앙 정렬로 확장한다.
+     ::before는 요소를 기준으로 앵커되므로 정적 배치 요소에는 `relative`를 함께
+     준다(이미 absolute인 요소는 그 자체가 앵커라 추가하지 않는다). */
+  @media (hover: hover) and (pointer: fine) {
+    .hit-target { min-width: 24px; min-height: 24px; }
+  }
+  @media (pointer: coarse) {
+    .hit-target::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 44px;
+      height: 44px;
+      transform: translate(-50%, -50%);
+    }
+  }
 }
 ```
 
-**토큰 참조 문법.** Tailwind에 duration 네임스페이스가 없고 레이아웃 상수도 유틸리티 스케일이 아니므로, 둘 다 CSS 변수 축약 문법으로 참조한다: `duration-(--dur-2)`, `duration-(--dur-flip)`, `h-(--size-row)`, `w-(--w-inspector)`, `max-w-(--w-page)`, `z-(--z-toast)`. **익명 임의값(`h-[76px]`, `duration-[220ms]`)은 lint 실패다** — 값이 아니라 이름을 참조한다.
+**토큰 참조 문법.** Tailwind에 duration 네임스페이스가 없고 레이아웃 상수도 유틸리티 스케일이 아니므로, 둘 다 CSS 변수 축약 문법으로 참조한다: `duration-(--dur-2)`, `duration-(--dur-fill)`, `min-h-(--size-card-desc)`, `w-(--w-inspector)`, `max-w-(--w-page)`, `z-(--z-toast)`. **익명 임의값(`h-[76px]`, `duration-[220ms]`)은 lint 실패다** — 값이 아니라 이름을 참조한다.
 
 **`@theme static`인 이유.** v4는 어떤 유틸리티도 참조하지 않는 theme 변수를 `:root`에서 제거한다(실측 확인: `static` 없이 빌드하면 `--z-toast`·`--size-thumb-sm`·`--container-row-sm`이 출력에서 사라진다). 레이아웃 상수·duration·z 사다리는 lint와 일부 JS(FLIP 계산)가 읽어야 하므로 항상 방출시킨다.
 
@@ -793,32 +916,58 @@ requestAnimationFrame(() => requestAnimationFrame(() =>
 - **제외(`excluded`) 변형은 없다.** 계약의 태그 필터는 `tag` 파라미터 **1개**(정확 일치)뿐이라 `-name` 같은 제외 문법을 보낼 수 없다. 필요해지면 `api/openapi.yaml`의 `tag` 파라미터 의미를 먼저 확장한다(11 §10의 계약 공백 목록 소관).
 - 결정 알고리즘은 §5.2, 운영 규칙은 §5.3.
 
-### 4.4 Row (링크 행) — 목록의 기본 단위. 카드 아님
+### 4.4 LinkCard — 보드의 기본 단위 (2026-07-25, 행에서 승격)
 
 ```
-[2px 레일][12][56 썸네일][12][제목(title/1줄) ─ 도메인 · 저장시각(meta/mono)] ─ [칩 최대 3][액션][16]
+┌─────────────────────────┐
+│ ▍ 커버 16:9 (썸네일 또는 생성 커버)  │   ▍ = 2px StatusRail (S1)
+├─────────────────────────┤
+│ 제목 (title / 2줄 클램프)          │
+│ 본문 (card / 2줄 클램프)           │
+│ [칩] [칩] [칩]                   │
+│ 도메인 · 저장시각 (meta/mono)  [액션] │
+└─────────────────────────┘
 ```
 
 | 항목 | 값 |
 |---|---|
-| 높이 | `--size-row` 76px 고정(**≥560**) / `--size-row-sm` 88px(`<560`) |
-| 레일↔썸네일 간격 | 12px(`space-12`). 레일은 행 좌측 경계에 붙고 좌측 패딩을 따로 두지 않는다 |
-| 썸네일 | `--size-thumb` 56×56(`<560`은 `--size-thumb-sm` 44×44), `--radius-thumb`, `object-fit: cover`, `loading="lazy"`, `decoding="async"` |
-| 썸네일 폴백 | 도메인 첫 글자 대문자 + `--bg-hover` 배경 + `--fg-3`. **색상 해시 금지** — 폴백은 태그가 아니라 도메인이고 도메인에는 facet이 없다. 해시는 §5.4에서 영구 배제다 |
-| 구분 | 카드 테두리 없음. 행 사이 `1px --line-1` 하한선만 |
-| hover | 배경 `--bg-hover` + `--radius-row`. 그림자 없음 |
-| `description` | **목록에 표시하지 않는다** — 인스펙터로 이동 |
-| `note` 존재 | 아이콘 하나로만 표시(내용은 인스펙터) |
+| 폭 | 열 수는 **보드 컨테이너 폭**이 정한다 — 1열 / `@board-sm`(460px) 2열 / `@board-md`(760px) 3열. 뷰포트가 아니라 컨테이너인 이유는 §2.3 |
+| 커버 | `aspect-ratio: 16/9`. **픽셀 높이가 아니라 종횡비**여야 모든 열 폭에서 슬롯이 예약된다 |
+| 커버 폴백 | 생성 커버(§4.5). 회색 박스도 도메인 이니셜도 아니다 (R4) |
+| 제목 슬롯 | `--size-card-title` 40px = `text-title` 20px × 2줄 |
+| 본문 슬롯 | `--size-card-desc` 40px = `text-card` 20px × 2줄. **`description`을 여기서 쓴다** — 계약이 목록 응답에 200자를 이미 주고 있다 |
+| 칩 슬롯 | 최소 24px(칩 높이). 최대 3개, 넘치면 줄바꿈 |
+| 배경·모서리 | `--bg-surface` + `--radius-card` 16px |
+| 그림자 | rest `--sh-card` → hover `--sh-lift`. **2단뿐**이고 그 사이 단계는 없다 |
+| 선택 | `ring-2` accent + `--sh-lift` (배경색을 바꾸지 않는다 — 커버가 배경을 이미 점유한다) |
+| `note` 존재 | 제목 옆 아이콘 하나로만 표시(내용은 인스펙터) |
 
-- 상태: `default` / `hover` / `focus-visible`(링) / `selected`(배경 `--bg-selected` + accent 레일) / `pending`(스켈레톤 슬롯 + 펄스 레일) / `failed`(danger 레일 + "실패" 텍스트 + 재시도 버튼) / `optimistic`(저장 직후 S2 상태).
-- **우측 액션(원문 열기·재시도·삭제)은 hover/포커스에서만 노출.** 체크박스를 상시 노출하지 않는다. `@media (hover: none)`에서는 상시 표시.
-- **행 안의 태그 칩은 `<560`에서 표시하지 않는다**(태그 아이콘 + 개수만). 터치 환경의 44×44px 히트 영역 요구와 24px 칩·6px 갭이 양립하지 않기 때문이다(§4 공통 규칙). 화면별 칩 개수는 11 §3(6).
-- `description` 2줄 제거가 밀도에 가장 크게 기여한다. 900px 뷰포트에서 약 10행이 보인다.
-- **가상 스크롤:** 렌더 행이 200개를 넘으면 `@tanstack/react-virtual`로 전환한다(목표가 10만 건). 행 높이가 고정이라 가상화 비용이 거의 없다.
+- **모든 슬롯의 높이가 마운트 시점에 확정된다.** 값이 아직 없어도 자리를 비워 두므로 워커가 채우는 동안 보드가 밀리지 않는다(CLS 0). 이것이 S2가 성립하는 전제다.
+- 상태: `default` / `hover`(그림자만 상승, transform은 −2px 이내) / `focus-visible`(링) / `selected`(accent ring) / `pending`(빈 슬롯 + 펄스 레일) / `failed`(danger 레일 + 본문 슬롯에 실패 문장 + 재시도 버튼).
+- **우측 액션(원문 열기)은 hover/포커스에서만 노출.** `@media (hover: none)`에서는 상시 표시.
+- **칩을 `<560`에서 숨기던 규칙은 폐지됐다.** 행에서는 24px 칩 3개와 44×44 히트 영역이 76px 안에서 양립하지 않았지만, 카드에서는 칩이 자기 줄을 갖는다.
+- **가상 스크롤:** 렌더 카드가 200개를 넘으면 `@tanstack/react-virtual`로 전환한다(목표가 10만 건). 카드 높이가 열 폭에 대해 결정적이라 가상화 비용은 여전히 낮다.
+- **밀도 비용을 인정한다.** 900px 뷰포트에서 행은 약 10개가 보였고 카드는 3열 기준 6~9개다. 이 개정은 스캔 밀도를 조금 내주고 **읽을 수 있는 본문 + 항상 존재하는 커버**를 얻는 거래이며, 그 판단은 2026-07-25에 내려졌다.
 
-### 4.5 Card
+### 4.5 GeneratedCover (R4)
 
-목록에는 카드가 없다. 카드는 **통계 화면과 설정 화면에만** 존재한다: 배경 `--bg-surface`, `--radius-panel`, `box-shadow: var(--ring)`, 패딩 20px. 변형은 `plain` / `interactive`(hover `--bg-hover`) 둘.
+썸네일이 없는 링크의 커버를 그린다. **"빠진 이미지의 자리 표시자"가 아니다** — `thumb: failed` + `status: done`은 정상 종단 상태이므로 상당수 링크에서 이것이 최종 커버다.
+
+| 층 | 값 |
+|---|---|
+| 바탕 | 지배 태그의 **facet tint** (`--tag-*-tint`). 태그가 없으면 `neutral` → `--bg-hover` |
+| 무늬 | facet **ink**를 alpha 0.16(`stack`만 0.13)으로. 4종: `hatch`(빗금) / `lattice`(점자) / `contour`(등고선) / `stack`(계단) |
+| 무늬 선택 | `FNV-1a(domain)`로 종류·회전(−2°~+2°)·간격(12~28px) 결정 |
+| 워드마크 | 도메인을 mono로 좌하단. **생성 커버에만** 얹는다 — 사진 위에서는 읽히지 않고, 메타 줄이 이미 도메인을 말한다 |
+
+- **지배 태그** = 칩 정렬 순서(manual 먼저 → confidence 내림 → 이름)의 첫 태그. 즉 사용자가 손으로 붙인 것이 있으면 그것, 없으면 태거가 가장 확신한 것.
+- **해시가 정하는 것은 기하뿐이다.** 색은 facet에서만 온다 — 이 경계가 §5.4의 "태그 색상 해시 영구 배제"를 그대로 살린다. 같은 도메인의 두 링크가 닮아 보이는 것은 **무늬를 공유하기 때문이지 해시가 색을 지어냈기 때문이 아니다.**
+- 구현은 canvas다. CSS 그라데이션이 아닌 이유는 §1.3이 그라데이션을 금지하기 때문이고, 무늬가 기하 도형이라 canvas가 정직하다. 테마가 바뀌면 CSS와 달리 스스로 다시 칠하지 못하므로 **해결된 테마를 구독해 다시 그린다**(`lib/theme.ts`의 스토어).
+- iOS는 같은 FNV-1a와 같은 4종 무늬를 쓴다(`ios/design/prototype.html`). 해시가 같아야 같은 도메인이 두 클라이언트에서 같은 무늬로 나온다.
+
+### 4.5.1 Panel (통계·설정 표면) — 링크를 담지 않는 면
+
+보드가 아닌 화면의 면: 배경 `--bg-surface`, `--radius-panel`, `box-shadow: var(--ring)`, 패딩 20px. 변형은 `plain` / `interactive`(hover `--bg-hover`) 둘. 링크를 담지 않으므로 커버도 레일도 없다.
 
 ### 4.6 Badge
 
@@ -833,7 +982,7 @@ requestAnimationFrame(() => requestAnimationFrame(() =>
 
 ### 4.7 StatusRail (S1)
 
-행 leading edge의 `--size-rail`(2px) 세로 획. `StatusBadge.tsx`의 5색(neutral/blue/violet/emerald/red) 매핑을 대체한다.
+카드 leading edge의 `--size-rail`(2px) 세로 획. `StatusBadge.tsx`의 5색(neutral/blue/violet/emerald/red) 매핑을 대체한다.
 
 | 상태 | 레일 | 동반 표시 |
 |---|---|---|
@@ -842,7 +991,7 @@ requestAnimationFrame(() => requestAnimationFrame(() =>
 | `failed` | `--danger` 실선 | 행 우측 "실패" 텍스트 + 재시도 버튼 + `alert-triangle` 아이콘 |
 | `selected` | `--accent` 실선 | 배경 `--bg-selected` |
 
-- **두께는 `--size-rail`(2px) 하나다.** 목록 행이든 인스펙터 상단이든 같은 값을 쓴다 — R3가 "2px 세로 획"으로 고정했고(§1.2·§1.4), §2.1.4의 채도 예산표가 유채 레일의 크기 상한을 **2px**으로 못 박았기 때문에 4px짜리 `--danger`·`--accent` 레일은 예산 위반이다. 굵기로 위계를 만들지 않고 위치(패널 상단 vs 행 leading edge)로 만든다. 익명 임의값(`w-[4px]`)은 lint 실패다.
+- **두께는 `--size-rail`(2px) 하나다.** 카드든 인스펙터 상단이든 같은 값을 쓴다 — R3가 "2px 세로 획"으로 고정했고(§1.2·§1.4), §2.1.4의 채도 예산표가 유채 레일의 크기 상한을 **2px**으로 못 박았기 때문에 4px짜리 `--danger`·`--accent` 레일은 예산 위반이다. 굵기로 위계를 만들지 않고 위치(패널 상단 vs 카드 leading edge)로 만든다. 익명 임의값(`w-[4px]`)은 lint 실패다.
 - **칩이 유채색이 되어도 레일 색 어휘는 늘지 않는다(R3).** 상태는 여전히 `--rail-progress` / `--danger` / `--accent` 3색과 투명 하나뿐이고, facet hue는 레일에 절대 등장하지 않는다.
 - **의미 토큰만 쓴다.** 레일 색을 `--ink-400` 같은 원시 팔레트로 직접 지정하면 lint 실패다(§2.1.1). 진행 레일의 의미 토큰은 `--rail-progress`(라이트 `--ink-600` / 다크 `--ink-400`)이며 §2.1.2에 등재되어 있다.
 - **펄스 하한이 `.35`가 아니라 `.7`인 이유는 대비다.** R3에 따라 배지를 폐기했으므로 레일이 진행 상태의 유일한 시각 신호이고, 따라서 WCAG 1.4.11(비텍스트 3:1) 대상이다. `.7`에서 라이트 3.38 / 다크 3.68(전 배경 최저 3.13 / 3.44)로 하한에서도 3:1을 넘는다(§2.1.3). 이전 명세의 `--ink-400` + `.35↔.8`은 라이트에서 1.38~2.22로 기준 미달이었다.
@@ -1004,6 +1153,8 @@ function chipStyle(i: ChipInput) {
 1. **`hash(name) % palette.length` — 영구 배제.** `palette.length`가 바뀌는 순간 전량이 재배치되고, `name`이 바뀌면 그 태그의 색도 뒤집힌다. 의미와 색이 무관하므로 사용자가 색에서 배울 것도 없다. 반대로 서버가 준 facet은 순수 함수의 입력이라 **같은 태그는 언제나 같은 색이고, 태그를 추가·삭제·개명해도 다른 태그의 색이 움직이지 않는다.**
 2. **개별 태그의 사용자 지정 색 — 배제.** GitHub 라벨(임의 hex + 랜덤 버튼)과 Notion select(자동 랜덤 배정)가 정확히 무지개 문제를 만들었다. Notion은 "모든 select를 회색으로 바꾸는 법" 가이드가 별도로 존재할 정도다.
 3. **파랑 패밀리(hue 205~275) — 배제.** 중성 램프가 hue 257이라 `neutral` 칩과 CVD ΔE 2.93~5.15로 붙는다(실측 — §5.1 표, §2.1.4 hue 예약표).
+
+**R4(생성 커버)와의 경계 — 2026-07-25 추가.** §4.5의 생성 커버는 도메인을 해시한다. 그것이 위 1번을 어기지 않는 이유는 **해시의 출력이 색이 아니라 기하이기 때문**이다. 무늬의 종류·회전·간격만 해시가 정하고, 바탕과 획의 색은 지배 태그의 facet 토큰에서 그대로 온다. 그래서 사전이 바뀌어도 색은 재배치되지 않고, 도메인을 바꿔도 그 링크의 facet 색은 움직이지 않는다. **해시가 색 채널에 닿는 순간 1번 위반이다.**
 
 **경위 기록.** 이전 명세에는 "태그가 100개를 넘으면 상위 그룹 6색 배정을 재개한다"는 봉인 해제 트리거가 있었다. 그 조건은 **충족되지 않았고**, 2026-07-22에 사용자가 "태그에 브랜드 색이 보였으면 한다"고 요구해 설계가 바뀐 것이다. 봉인 해제가 아니라 요구 변경이므로 그 트리거 문장은 삭제한다. 다만 당시 조건 4개 중 세 개(사전 선언 매핑 / 대비 4.5:1 통과 / 색은 보조 채널)는 그대로 살아 이 절과 §2.1.3이 만족하며, 네 번째("액센트 hue를 그룹 팔레트에서 제외")만 의도적으로 뒤집혔다 — 브랜드 hue가 최대 패밀리 `craft`를 직접 맡는 것이 개정된 R1의 핵심이다.
 

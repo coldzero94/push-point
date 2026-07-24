@@ -37,6 +37,20 @@ export function effectiveDark(): boolean {
   return pref === 'dark' || (pref === 'system' && mql.matches)
 }
 
+// Subscribers to the RESOLVED theme. Generated covers (§10 4.5) are painted to a
+// canvas from the live `--tag-*` values, so unlike CSS they cannot re-resolve
+// themselves when the theme flips — they have to be told. One store here beats a
+// MutationObserver per card.
+const listeners = new Set<() => void>()
+
+/** useSyncExternalStore subscribe. Snapshot is `effectiveDark`. */
+export function subscribeTheme(onChange: () => void): () => void {
+  listeners.add(onChange)
+  return () => {
+    listeners.delete(onChange)
+  }
+}
+
 // Resolved class is REPLACED (never a both-cleared state): exactly one of
 // `.light` / `.dark` is present after every call.
 function applyResolvedClass(): void {
@@ -44,6 +58,7 @@ function applyResolvedClass(): void {
   const root = document.documentElement
   root.classList.toggle('dark', dark)
   root.classList.toggle('light', !dark)
+  for (const l of listeners) l()
 }
 
 export function setThemePref(pref: ThemePref): void {

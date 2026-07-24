@@ -8,6 +8,8 @@ Push-Point의 iOS 클라이언트 워크스페이스다. SwiftUI 앱과 Share Ex
 ## 현재 상태
 
 아직 코드가 없다. M4 시작 시 Xcode 프로젝트를 이 디렉터리에 생성한다.
+화면 기준은 먼저 그려 뒀다 — [`design/prototype.html`](design/prototype.html)
+(공유 시트 · 목록 · 상세 · 태그 편집 + SwiftUI 변환 대응표).
 
 ## 핵심 요구
 
