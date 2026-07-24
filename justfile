@@ -57,6 +57,50 @@ dev-all:
     @command -v mprocs >/dev/null 2>&1 || { echo "mprocs 미설치 — 설치: brew install mprocs (또는 터미널 2개로 just dev + just web-dev)"; exit 1; }
     mprocs --names api,web "just dev" "just web-dev"
 
+# go 개발 도구를 핀된 버전으로 설치(재현성) + 웹 의존성. golangci-lint·mprocs는 brew
+# 관리라 여기서 다루지 않는다(just doctor가 안내). oapi-codegen은 CI와 같은 v2.8.0.
+# air는 go.mod 밖 PATH 도구로 유지한다(핫 리로드 슈퍼바이저 — 바이너리에 링크할 이유 없음).
+# 새 클론 온보딩 — 개발 도구·웹 의존성 일괄 설치(핀 버전)
+setup:
+    go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+    go install github.com/air-verse/air@v1.63.4
+    go install gotest.tools/gotestsum@v1.13.0
+    go install golang.org/x/tools/cmd/goimports@v0.48.0
+    @if [ -f frontend/package.json ]; then just web-install; else echo "frontend 스캐폴드 전 — 웹 의존성 건너뜀"; fi
+    @echo "setup 완료. 환경 점검: just doctor"
+
+# 없으면 얻는 법만 안내한다(설치는 하지 않는다 — 그건 just setup·brew).
+# 개발 환경 점검 — 필수·권장·선택 도구의 존재와 위치를 확인
+doctor:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    ok=0; miss=0
+    # 이름 존재확인 힌트 필수?  형태로 점검한다.
+    check() { # <표시명> <명령> <힌트> <필수여부(req|opt)>
+      if command -v "$2" >/dev/null 2>&1; then
+        printf '  ✅ %-14s %s\n' "$1" "$(command -v "$2")"; ok=$((ok+1))
+      else
+        printf '  ❌ %-14s 없음 — %s\n' "$1" "$3"
+        [ "$4" = req ] && miss=$((miss+1)) || true
+      fi
+    }
+    echo "필수:"
+    check go go       "https://go.dev/dl (1.25+)" req
+    check just just   "brew install just" req
+    echo "웹(프런트엔드 작업 시):"
+    check node node   "https://nodejs.org (22+)" opt
+    echo "Go 개발 도구(just setup가 핀 버전으로 설치):"
+    check oapi-codegen oapi-codegen "just setup" opt
+    check goimports  goimports  "just setup" opt
+    check gotestsum  gotestsum  "just setup (just test-watch용)" opt
+    check golangci-lint golangci-lint "brew install golangci-lint" opt
+    echo "핫 리로드·병렬 실행(선택):"
+    check air air       "go install github.com/air-verse/air@v1.63.4 (just dev 핫 리로드)" opt
+    check mprocs mprocs "brew install mprocs (just dev-all)" opt
+    echo
+    if [ "$miss" -gt 0 ]; then echo "필수 도구 $miss개 누락 — 위 힌트대로 설치하세요."; exit 1; fi
+    echo "필수 도구 OK. 선택 도구가 빠졌으면 해당 기능만 폴백됩니다."
+
 # backend/bin/pushpoint 단일 바이너리 빌드
 build:
     @if [ -d backend/cmd/pushpoint ]; then cd backend && go build -o bin/pushpoint ./cmd/pushpoint; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi
@@ -77,6 +121,11 @@ enum-lint:
 test:
     @if [ -d backend/cmd/pushpoint ]; then cd backend && go test ./...; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi
 
+# 파일 변경 시 테스트 자동 재실행 (gotestsum --watch). M3 태깅·eval 반복 루프에 유용.
+test-watch:
+    @command -v gotestsum >/dev/null 2>&1 || { echo "gotestsum 미설치 — just setup (또는 go install gotest.tools/gotestsum@v1.13.0)"; exit 1; }
+    cd backend && gotestsum --watch --format pkgname
+
 # 마이크로벤치 (p99 판정은 bench-http가 담당)
 bench:
     @if [ -d backend/cmd/pushpoint ]; then cd backend && go test -bench=. -benchmem ./...; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi
@@ -92,6 +141,18 @@ test-crash:
 # 벤치용 한영 혼합 시드 DB 생성 (고정 난수, 예: just seed 100000)
 seed n='10000':
     @if [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint seed -n {{n}}; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi
+
+# 썸네일(data/thumbs)·포트 기록은 건드리지 않는다. 로컬 dev 전용(운영 데이터 아님).
+# 개발 DB 초기화 — backend/data/의 SQLite 파일만 삭제(다음 just dev가 마이그레이션으로 재생성)
+db-reset:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    files=(backend/data/*.db backend/data/*.db-wal backend/data/*.db-shm)
+    if [ ${#files[@]} -eq 0 ]; then echo "지울 dev DB가 없습니다 (backend/data/*.db)"; exit 0; fi
+    printf '지움: %s\n' "${files[@]}"
+    rm -f "${files[@]}"
+    echo "dev DB 초기화 완료 — 다음 just dev가 마이그레이션으로 재생성합니다."
 
 # golden set 태깅 정확도 측정 — top-3 Recall, 베이스라인 병기 (M3+)
 eval:
