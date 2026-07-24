@@ -202,6 +202,7 @@ func TestFailMaxAttempts(t *testing.T) {
 	}{
 		{"scrape 확정 실패는 링크도 failed", KindScrape, true},
 		{"thumb은 best-effort — 링크 상태 불변", KindThumb, false},
+		{"tag도 best-effort — 링크 상태 불변", KindTag, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

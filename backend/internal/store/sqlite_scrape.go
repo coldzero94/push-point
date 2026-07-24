@@ -54,7 +54,11 @@ func (s *sqliteStore) ApplyScrape(ctx context.Context, linkID int64, m ScrapeRes
 		if err := reindexFTS(ctx, tx, linkID); err != nil {
 			return err
 		}
-		// og:image 있으면 thumb 잡 enqueue (best-effort — 실패해도 링크 status 불변).
+		// tag 잡 enqueue — 콘텐츠가 준비됐으므로 무조건 (best-effort: 실패해도 링크 status 불변).
+		if err := s.q.EnqueueTx(tx, queue.KindTag, linkID); err != nil {
+			return fmt.Errorf("store: tag 잡 enqueue 실패: %w", err)
+		}
+		// og:image 있으면 thumb 잡도 enqueue (best-effort).
 		if m.HasImage {
 			if err := s.q.EnqueueTx(tx, queue.KindThumb, linkID); err != nil {
 				return fmt.Errorf("store: thumb 잡 enqueue 실패: %w", err)
@@ -65,9 +69,7 @@ func (s *sqliteStore) ApplyScrape(ctx context.Context, linkID int64, m ScrapeRes
 	if err != nil {
 		return err
 	}
-	if m.HasImage {
-		s.q.Wake() // 커밋 성공 후에만 dispatcher를 깨운다
-	}
+	s.q.Wake() // 커밋 성공 후에만 dispatcher를 깨운다 (tag 잡이 항상 있으므로 무조건)
 	return nil
 }
 

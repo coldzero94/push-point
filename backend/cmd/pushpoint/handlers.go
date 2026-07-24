@@ -1,7 +1,7 @@
 package main
 
-// scrape/thumb 잡 핸들러 배선 — dispatcher가 kind별로 이 핸들러들을 호출한다.
-// (M2: scrape가 메타+status='done' 전이, thumb는 best-effort. tag 핸들러는 M3.)
+// scrape/thumb/tag 잡 핸들러 배선 — dispatcher가 kind별로 이 핸들러들을 호출한다.
+// (M2: scrape가 메타+status='done' 전이, thumb는 best-effort. M3: tag가 규칙 태거로 부착.)
 
 import (
 	"context"
@@ -13,11 +13,15 @@ import (
 	"github.com/coby/push-point/backend/internal/queue"
 	"github.com/coby/push-point/backend/internal/scraper"
 	"github.com/coby/push-point/backend/internal/store"
+	"github.com/coby/push-point/backend/internal/tagger"
 	"github.com/coby/push-point/backend/internal/thumbs"
 )
 
 // thumbConcurrency는 thumb 워커 동시성 상한 (스펙 §6: thumb 워커 2 goroutine).
 const thumbConcurrency = 2
+
+// tagConcurrency는 tag 워커 동시성 상한. 태깅은 네트워크 0인 순수 CPU 작업이라 여유 있게 둔다.
+const tagConcurrency = 4
 
 // newScrapeHandler는 scrape 잡 핸들러를 만든다. dispatcher가 잡마다 goroutine을
 // 띄우므로(동시성 상한은 핸들러 책임) 여기서 semaphore(concurrency, 기본 8)로 상한을 건다 (스펙 §6).
@@ -117,4 +121,56 @@ func newThumbHandler(sc scraper.Scraper, ts thumbs.Store, st store.Store, log *s
 		log.Debug("thumb 저장 완료", "link", job.LinkID, "path", relPath, "dur_ms", time.Since(start).Milliseconds())
 		return nil
 	}
+}
+
+// newTagHandler는 tag 잡 핸들러를 만든다 (best-effort, 순수 CPU). 처리: link_id → 콘텐츠
+// 조회 → 태그 사전 로드 → tagger.BuildDictionary + Classify → store.ApplyTags(source='rules').
+// 실패는 그대로 반환해 큐가 재시도하지만, max_attempts 소진 후에도 링크 status는 불변이다
+// (queue.Fail이 KindTag를 thumb과 함께 best-effort로 처리 — 태깅 실패가 링크를 죽이지 않는다).
+func newTagHandler(st store.Store, log *slog.Logger) queue.Handler {
+	sem := semaphore.NewWeighted(tagConcurrency)
+	return func(ctx context.Context, job *queue.Job) error {
+		if err := sem.Acquire(ctx, 1); err != nil {
+			return err
+		}
+		defer sem.Release(1)
+
+		start := time.Now()
+		content, err := st.GetLinkContent(ctx, job.LinkID)
+		if err != nil {
+			return err
+		}
+		entries, err := st.LoadTagDict(ctx)
+		if err != nil {
+			return err
+		}
+		dict := tagger.BuildDictionary(toTagEntries(entries))
+		scored := tagger.Classify(toTaggerContent(content), dict)
+		if err := st.ApplyTags(ctx, job.LinkID, toStoreScored(scored)); err != nil {
+			return err
+		}
+		log.Debug("tag 완료", "link", job.LinkID, "tags", len(scored), "dur_ms", time.Since(start).Milliseconds())
+		return nil
+	}
+}
+
+// store ↔ tagger 타입 변환 — store가 tagger를 import하지 않도록(층 분리) 핸들러가 다리를 놓는다.
+func toTagEntries(es []store.TagDictEntry) []tagger.TagEntry {
+	out := make([]tagger.TagEntry, len(es))
+	for i, e := range es {
+		out[i] = tagger.TagEntry{ID: e.ID, Name: e.Name, Aliases: e.Aliases, Facet: e.Facet}
+	}
+	return out
+}
+
+func toTaggerContent(c store.LinkContent) tagger.Content {
+	return tagger.Content{Domain: c.Domain, Title: c.Title, Description: c.Description, Note: c.Note}
+}
+
+func toStoreScored(ss []tagger.ScoredTag) []store.ScoredTag {
+	out := make([]store.ScoredTag, len(ss))
+	for i, s := range ss {
+		out[i] = store.ScoredTag{TagID: s.TagID, Confidence: s.Confidence}
+	}
+	return out
 }

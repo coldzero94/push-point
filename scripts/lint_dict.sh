@@ -9,6 +9,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# domains.json 임베드 사본 드리프트 가드 — 런타임 태거는 backend 안 사본을 go:embed하고
+# (nlu/는 backend Go 모듈 밖이라 cross-module embed 불가), 정본은 nlu/dictionary/다.
+# 둘이 어긋나면 태거가 낡은 도메인맵을 쓴다. 바이트 동일해야 통과.
+if ! diff -q "$ROOT/nlu/dictionary/domains.json" "$ROOT/backend/internal/tagger/domains.json" >/dev/null; then
+  echo "dict-lint 실패: nlu/dictionary/domains.json 과 backend/internal/tagger/domains.json 이 다름 (사본 동기화 필요: cp nlu/dictionary/domains.json backend/internal/tagger/domains.json)"
+  exit 1
+fi
+
 python3 - "$ROOT/nlu/dictionary" "$ROOT/backend/migrations" <<'PY'
 import glob
 import json

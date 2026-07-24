@@ -149,8 +149,9 @@ func (q *SQLite) Fail(ctx context.Context, id int64, jobErr error) error {
 		if err != nil {
 			return fmt.Errorf("queue: fail(job=%d) 확정 실패 기록 실패: %w", id, err)
 		}
-		// thumb은 best-effort — 링크 상태를 건드리지 않는다.
-		if Kind(kind) != KindThumb {
+		// thumb·tag은 best-effort — 링크 상태를 건드리지 않는다. scrape가 성공해 콘텐츠가
+		// 준비된 유용한 링크가, 썸네일/태깅(순수 파생물) 실패로 'failed'가 되면 안 된다.
+		if Kind(kind) != KindThumb && Kind(kind) != KindTag {
 			_, err = tx.ExecContext(ctx,
 				`UPDATE links SET status='failed', error=?, updated_at=unixepoch() WHERE id=?`,
 				msg, linkID)

@@ -67,7 +67,7 @@ type Queue interface {
 	//     run_after = unixepoch() + 30*attempts (선형 백오프).
 	//   - attempts >= max_attempts: status='failed' + finished_at 기록,
 	//     그리고 같은 트랜잭션에서 links.status='failed' + links.error에 사유 기록.
-	//     (단 kind='thumb'은 best-effort — 링크 상태를 건드리지 않는다.)
+	//     (단 kind='thumb'·'tag'는 best-effort — 링크 상태를 건드리지 않는다.)
 	Fail(ctx context.Context, id int64, jobErr error) error
 
 	// RecoverStale은 프로세스 시작 시 running → pending 일괄 복구를 수행하고
