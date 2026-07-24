@@ -5,8 +5,16 @@ import { RouterProvider } from '@tanstack/react-router'
 import { router } from './router'
 import { ToastProvider } from './components/ui'
 import { isUnauthorized } from './lib/api/client'
+import { getApiKey, setApiKey } from './lib/auth'
 import { initTheme } from './lib/theme'
 import '../tailwind.css'
+
+// Dev convenience: `just dev` starts the backend with PUSHPOINT_API_KEY=dev-key,
+// so in the Vite dev server prefill that key when none is stored — you never hit
+// the "enter an API key" wall while iterating locally. `import.meta.env.DEV` is
+// false in the production embed build, so a real deployment still requires the
+// key to be entered (no auth relaxation — frontend.md).
+if (import.meta.env.DEV && !getApiKey()) setApiKey('dev-key')
 
 initTheme()
 
