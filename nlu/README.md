@@ -8,12 +8,15 @@
 
 ## 현재 상태
 
-지금은 빈 디렉터리 구조만 존재한다 (`.gitkeep`). 자산은 M3/M5에서 채워진다.
+- `dictionary/` — 채워짐 (M3 Stage 1). `golden/` — M3 Stage 3 예정. `models/` — M5 예정 (`.gitkeep`).
 
 ## 구성
 
-- `dictionary/` — 통제된 태그 사전(30~50개) 정의·시드. name/aliases(동의어, 영문·한글 표기) 포함, 커밋 대상. (M3)
-- `golden/` — 태깅 품질 golden set. 실제 저장 링크 100개 기반 JSONL, `just eval`의 입력. 커밋 대상. (M3)
+- `dictionary/` — 통제된 태그 사전. (M3)
+  - `tags.json` — 태그 30개: `{name, facet, aliases}`. 마이그레이션 시드(`0002` aliases + `0003` facet)의 **커밋된 미러**다. 런타임 태거는 DB `tags` 테이블(마이그레이션이 시드)을 읽으므로 이 파일 자체를 임베드하지는 않지만, 사람이 읽는 정본이자 드리프트 검사 대상이다. 새 태그는 새 마이그레이션 + 이 파일 동시 갱신으로 들어온다(마이그레이션은 불변).
+  - `domains.json` — 도메인→태그 휴리스틱 맵. Phase A 태거의 강한 신호이자 `just eval`의 "도메인 휴리스틱만" 베이스라인. 값 태그는 전부 `tags.json`에 존재해야 한다.
+  - **드리프트 검사**: `just dict-lint`(CI 포함)이 `tags.json` ↔ 시드 마이그레이션, `domains.json` ↔ `tags.json`을 대조한다(`enum-lint`와 대칭).
+- `golden/` — 태깅 품질 golden set. 실제 저장 링크 100개 기반 JSONL, `just eval`의 입력. 커밋 대상. (M3 Stage 3)
 - `models/` — ONNX 변환 Python 스크립트 + 모델 아티팩트. **리포에서 Python이 허용되는 곳은 여기뿐이다.** (M5)
 
 ## 파이프라인 요약 (Phase A/B 2단계)

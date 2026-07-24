@@ -117,6 +117,10 @@ gen-check:
 enum-lint:
     scripts/lint_enums.sh
 
+# nlu/dictionary/ 자산(tags.json·domains.json) ↔ 시드 마이그레이션 일치 검사 (불일치 시 exit 1)
+dict-lint:
+    scripts/lint_dict.sh
+
 # 전체 테스트
 test:
     @if [ -d backend/cmd/pushpoint ]; then cd backend && go test ./...; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi

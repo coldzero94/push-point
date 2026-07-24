@@ -59,6 +59,7 @@ All Go recipes run inside `backend/`. Recipes for milestones that have not lande
 | `just gen` | `api/openapi.yaml` → `backend/internal/api/gen/` (oapi-codegen v2.8.0, output committed) |
 | `just gen-check` | Contract drift guard — fails if `git diff` remains after regeneration (CI) |
 | `just enum-lint` | `openapi.yaml` enums vs migration `CHECK` constraints; exit 1 on mismatch |
+| `just dict-lint` | `nlu/dictionary/` (tags.json/domains.json) vs the seed migrations; exit 1 on mismatch |
 | `just test` | `go test ./...` |
 | `just test-watch` | Re-run tests on change (`gotestsum --watch`) — handy for the M3 tagging/eval loop |
 | `just db-reset` | Delete the dev SQLite DB under `backend/data/` (next `just dev` recreates it via migrations); thumbnails and the port record are left alone |
