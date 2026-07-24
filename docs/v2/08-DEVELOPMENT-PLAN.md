@@ -32,7 +32,7 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 | M2 스크래퍼 | 3주 | 워커 풀 + 파싱(사이트 어댑터) + 썸네일 + 재시도/복구 + 북마크·Takeout 임포트 | `just test-crash` 통과, 대표 도메인 세트에서 3s 내 제목·썸네일, 실링크 300건+ 적재, **매일 실사용 시작** |
 | M3 태깅 A + 검색 | 4주 | 규칙 태거(한국어 정규화) + 태그 사전 + FTS5/LIKE 검색 + eval 하네스 | `just eval` 동작, golden set(dev/test 분할) 구축, 베이스라인 대비 측정치 기록 |
 | M4 iOS | 5주 | Share Extension(로컬 큐) + 목록 + Tailscale 실기기 (검색·상세 편집은 컷 후보) | 서버 오프라인에도 공유 저장 2초 내 성공·유실 0건, 연속 7일 하루 1건+ 저장 |
-| M5 태깅 B | 4주 | Go 토크나이저 + ONNX 베이크오프 + 앙상블 + tag_feedback 반영 | 진입: Phase A 베이스라인+15pp. 종료: 앙상블 Phase A+10pp (참고 80%) |
+| M5 태깅 B | 4주 | Go 토크나이저 + ONNX 베이크오프 + 앙상블 + tag_feedback 반영 + 추출식 요약(LLM 없이) | 진입: Phase A 베이스라인+15pp. 종료: 앙상블 Phase A+10pp (참고 80%) |
 | M6 다듬기 | 4주 | 위젯 + 성능 튜닝 + 공개 글 (Live Activity는 이후 후보) | `scripts/streak.sh` 4주 연속 일일 사용, 기술 글 1편 |
 | M-Web 웹 앱 | 병렬 트랙 | Vite+React+TS SPA, `api/openapi.yaml` 계약 소비(openapi-typescript), 6개 화면, Go embed 서빙 | `just web-gen-check` 드리프트 0 + `just web-build` 성공(단일 바이너리 embed), iOS와 대등한 기능 |
 
@@ -158,6 +158,7 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 
 **Week 3**
 - 문서 임베딩 vs 태그 임베딩 코사인 유사도 분류 → Phase A와 점수 앙상블
+- **추출식 요약(동반 기능, LLM 없이)**: 본문에서 핵심 문장 2~3개를 골라내는 extractive 요약 — 생성(abstractive)이 아니라 원문 문장 선택이라 환각 0, 순수 Go. Phase B 임베딩으로 문장 유사도를 의미 기반으로 계산해 **TextRank/LexRank**(문장 그래프 PageRank)로 중심 문장 추출한다. M3의 정규화·문장분리·TF-IDF 인프라를 재사용하고, 임베딩이 유사도 품질을 끌어올린다(베이스라인은 임베딩 없는 TF-IDF 문장 스코어링 — M3 인프라만으로도 동작). 태그 잡이 이미 본문을 읽으므로 한 번의 본문 처리로 태깅+요약을 함께 뽑는다. 저장은 `links.summary` 컬럼(신규 마이그레이션) + API 계약 `Link.summary`(3 소비자 재생성) + 웹/iOS 링크 카드·상세에 표시. **왜 M5인가**: 추출식 요약의 핵심은 문장 유사도이고, 그게 Phase B 임베딩으로 의미 기반이 될 때 품질이 확연히 좋아진다 — 인프라를 공유하는 자리다.
 
 **Week 4**
 - tag_feedback 데이터로 재랭킹 가중치 보정
