@@ -110,6 +110,29 @@ type ScrapeResult struct {
 	HasImage    bool   // og:image 존재 여부 — true면 ApplyScrape가 같은 트랜잭션에서 thumb 잡 enqueue
 }
 
+// LinkContent는 tag 잡 핸들러가 태거에 넘길 링크 콘텐츠(런타임 가용 필드만 — 본문 없음).
+type LinkContent struct {
+	Domain      string
+	Title       string
+	Description string
+	Note        string
+}
+
+// TagDictEntry는 태그 사전 한 항목(DB tags 행). 핸들러가 tagger.TagEntry로 변환한다.
+// store가 tagger를 import하지 않도록(역방향 결합 회피) store 쪽에서 자체 정의한다.
+type TagDictEntry struct {
+	ID      int64
+	Name    string
+	Aliases []string
+	Facet   string
+}
+
+// ScoredTag는 태거가 낸 태그 부착 지시(tagger.ScoredTag의 store 측 대응).
+type ScoredTag struct {
+	TagID      int64
+	Confidence float64
+}
+
 // SearchMode는 검색 경로. q 3자 이상 → FTS5, 미만 → LIKE 폴백.
 type SearchMode string
 
@@ -163,15 +186,27 @@ type Store interface {
 	GetLinkURL(ctx context.Context, linkID int64) (url, urlHash string, err error)
 
 	// ApplyScrape는 scrape 결과를 한 writer 트랜잭션으로 반영한다:
-	// links 메타데이터 UPDATE + status='done' + FTS 재색인, 그리고 m.HasImage면
-	// 같은 트랜잭션에서 thumb 잡을 EnqueueTx한다. 커밋 성공 후 (thumb enqueue 시) Wake.
-	// tag 핸들러는 M3 — 이 단계에서 tag 잡은 enqueue하지 않는다.
+	// links 메타데이터 UPDATE + status='done' + FTS 재색인 + tag 잡 EnqueueTx(무조건 —
+	// 콘텐츠가 준비됐으므로), 그리고 m.HasImage면 thumb 잡도 EnqueueTx. 커밋 성공 후 Wake.
 	// 링크가 없거나 소프트 삭제됐으면 ErrNotFound.
 	ApplyScrape(ctx context.Context, linkID int64, m ScrapeResult) error
 
 	// SetThumbPath는 thumb 잡 핸들러가 성공 시 호출 — links.thumb_path에 상대 경로를 기록한다.
 	// best-effort 경로라 실패해도 링크 상태는 불변(호출자가 판단). 링크 부재/삭제면 ErrNotFound.
 	SetThumbPath(ctx context.Context, linkID int64, relPath string) error
+
+	// GetLinkContent는 tag 잡 핸들러가 태거 입력(도메인·제목·설명·메모)을 읽는다.
+	// 소프트 삭제됐거나 없으면 ErrNotFound.
+	GetLinkContent(ctx context.Context, linkID int64) (LinkContent, error)
+
+	// LoadTagDict는 태그 사전 전체(id/name/aliases/facet)를 읽어 태거에 넘길 형태로 반환한다.
+	// 런타임 사전 = DB tags 테이블(마이그레이션 시드 + 사용자 CRUD 확장).
+	LoadTagDict(ctx context.Context) ([]TagDictEntry, error)
+
+	// ApplyTags는 tag 잡 결과를 한 writer 트랜잭션으로 반영한다: source='rules' 행을 먼저
+	// 삭제(재태깅 멱등)한 뒤 scored 태그를 INSERT(같은 태그의 manual 행은 ON CONFLICT DO
+	// NOTHING으로 보존), FTS 'tags' 컬럼 재색인. 링크 부재/삭제여도 FK로 무해(멱등).
+	ApplyTags(ctx context.Context, linkID int64, scored []ScoredTag) error
 
 	// ListLinks는 keyset 커서 목록. tag는 태그 이름 필터, status는 links.status 필터
 	// (각각 빈 문자열이면 미적용). cursor는 이전 응답의 nextCursor (첫 페이지는 "").

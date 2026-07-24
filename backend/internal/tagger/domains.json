@@ -1,0 +1,50 @@
+{
+  "_comment": "도메인 → 태그 휴리스틱 맵. Phase A 태거의 강한 신호이자 eval의 '도메인 휴리스틱만' 베이스라인. 값의 태그는 전부 tags.json에 존재해야 한다(dict-lint 검사). 호스트는 소문자, www. 접두어 없이. 서브도메인은 등록 도메인으로 매칭한다(blog.naver.com은 별도 등록).",
+
+  "github.com": ["opensource", "dev"],
+  "gitlab.com": ["opensource", "dev"],
+  "stackoverflow.com": ["dev"],
+  "dev.to": ["dev", "article"],
+  "medium.com": ["article"],
+
+  "go.dev": ["golang"],
+  "golang.org": ["golang"],
+  "kubernetes.io": ["kubernetes", "devops"],
+  "swift.org": ["swift"],
+  "developer.apple.com": ["ios"],
+  "python.org": ["python"],
+  "rust-lang.org": ["rust"],
+  "react.dev": ["frontend", "javascript"],
+  "reactjs.org": ["frontend", "javascript"],
+  "docker.com": ["devops"],
+  "postgresql.org": ["database"],
+
+  "openai.com": ["ai", "llm"],
+  "anthropic.com": ["ai", "llm"],
+  "huggingface.co": ["ai"],
+  "arxiv.org": ["science"],
+  "figma.com": ["design"],
+
+  "youtube.com": ["video"],
+  "youtu.be": ["video"],
+  "vimeo.com": ["video"],
+  "coursera.org": ["tutorial"],
+  "udemy.com": ["tutorial"],
+
+  "news.ycombinator.com": ["news"],
+  "techcrunch.com": ["news"],
+  "theverge.com": ["news"],
+  "nytimes.com": ["news"],
+  "bbc.com": ["news"],
+
+  "investopedia.com": ["finance"],
+  "bloomberg.com": ["finance", "news"],
+  "goodreads.com": ["book"],
+  "podcasts.apple.com": ["podcast"],
+  "tripadvisor.com": ["travel"],
+
+  "velog.io": ["dev", "article"],
+  "brunch.co.kr": ["article"],
+  "blog.naver.com": ["article"],
+  "tistory.com": ["article"]
+}

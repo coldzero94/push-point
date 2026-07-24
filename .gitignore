@@ -49,6 +49,9 @@ backend/internal/web/dist/
 # Orca — per-user overrides (.orca/issue-command). orca.yaml IS committed.
 .orca/
 
+# Claude Code local worktrees (agent isolation) — never committed
+.claude/worktrees/
+
 # Editor/IDE
 # .idea/
 # .vscode/

@@ -131,13 +131,13 @@ func serve() error {
 	ts := thumbs.NewDiskStore(cfg.DataDir, tsOpts...)
 
 	// dispatcher: Run 내부에서 running→pending 크래시 복구 후 claim 루프.
-	// scrape/thumb 핸들러를 Run 전에 등록한다 — 등록된 kind만 claim 대상이 된다.
-	// tag 핸들러는 M3 — KindTag 잡은 이 단계에서 enqueue되지 않으므로 미등록으로 둔다.
-	// maxInFlight = 총 워커 수(scrape + thumb) — claim을 실제 처리 용량에 묶어
+	// scrape/thumb/tag 핸들러를 Run 전에 등록한다 — 등록된 kind만 claim 대상이 된다.
+	// maxInFlight = 총 워커 수(scrape + thumb + tag) — claim을 실제 처리 용량에 묶어
 	// 무제한 running 전이(반복 크래시 시 미실행 잡 attempts 소진)를 막는다.
-	disp := queue.NewDispatcher(q, logger, cfg.ScrapeConcurrency+thumbConcurrency)
+	disp := queue.NewDispatcher(q, logger, cfg.ScrapeConcurrency+thumbConcurrency+tagConcurrency)
 	disp.Register(queue.KindScrape, newScrapeHandler(sc, st, cfg.ScrapeConcurrency, logger))
 	disp.Register(queue.KindThumb, newThumbHandler(sc, ts, st, logger))
+	disp.Register(queue.KindTag, newTagHandler(st, logger))
 	dispCtx, dispCancel := context.WithCancel(context.Background())
 	defer dispCancel()
 	dispDone := make(chan error, 1)

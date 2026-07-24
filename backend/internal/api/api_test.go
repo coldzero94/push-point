@@ -350,6 +350,23 @@ func (f *fakeStore) SetThumbPath(ctx context.Context, linkID int64, relPath stri
 	return nil
 }
 
+// tag 잡 경로는 API 테스트 범위 밖 — 인터페이스 충족용 스텁 (실경로는 store 단위 테스트가 커버).
+func (f *fakeStore) GetLinkContent(ctx context.Context, linkID int64) (store.LinkContent, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	l, ok := f.links[linkID]
+	if !ok || f.deleted[linkID] {
+		return store.LinkContent{}, store.ErrNotFound
+	}
+	return store.LinkContent{Title: l.Title, Description: l.Description}, nil
+}
+
+func (f *fakeStore) LoadTagDict(ctx context.Context) ([]store.TagDictEntry, error) { return nil, nil }
+
+func (f *fakeStore) ApplyTags(ctx context.Context, linkID int64, scored []store.ScoredTag) error {
+	return nil
+}
+
 func (f *fakeStore) Close() error { return nil }
 
 // ---- 테스트 하네스 ----
