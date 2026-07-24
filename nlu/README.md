@@ -30,6 +30,9 @@
   경량 한국어 문장 임베딩 모델을 ONNX(int8 양자화)로 변환, Go에서
   yalue/onnxruntime_go로 추론. 문서 임베딩 vs 태그 사전 임베딩 코사인
   유사도 → Phase A와 점수 앙상블.
+  - **추출식 요약(동반 기능)**: 같은 임베딩으로 문장 유사도를 계산해
+    본문에서 핵심 문장 2~3개를 뽑는다(TextRank/LexRank, LLM 없이 순수 Go —
+    원문 문장 선택이라 환각 0). 상세는 [08-DEVELOPMENT-PLAN.md](../docs/v2/08-DEVELOPMENT-PLAN.md) M5.
 
 ## 품질 게이트
 
