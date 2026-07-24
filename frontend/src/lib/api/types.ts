@@ -13,6 +13,7 @@ export type ContentType = components['schemas']['ContentType']
 export type SearchResult = components['schemas']['SearchResult']
 export type SearchPage = components['schemas']['SearchPage']
 export type Tag = components['schemas']['Tag']
+export type TagFacet = components['schemas']['TagFacet']
 export type Stats = components['schemas']['Stats']
 
 export const LINK_STATUSES: readonly LinkStatus[] = [

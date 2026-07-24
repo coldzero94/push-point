@@ -1,22 +1,17 @@
-import { getRouteApi } from '@tanstack/react-router'
+// Search (screen 3) — P1 (§9). The infinite hook (hooks/useSearch.ts) and the
+// typed ?q/?tag params are wired at the contract level, but the full toolbar +
+// results renderer land with M3, when /api/v1/search has depth (§9 P1). Until
+// then the route stays reachable inside the shell as a coming-soon state so
+// navigation and the `/` shortcut resolve somewhere consistent.
+import { EmptyState } from '../components/ui'
 
-// Typed search params (?q=&tag=) are wired; results rendering is the follow-up.
-const route = getRouteApi('/search')
-
-// TODO(M-next): full search screen.
-//  - input bound to ?q (typed search param), debounce → navigate({ search })
-//  - render results with the existing `useSearch` infinite hook (hooks/useSearch.ts)
-//  - show `mode` badge (fts vs like) and rank; reuse <LinkCard>
 export function SearchScreen() {
-  const { q } = route.useSearch()
   return (
-    <section className="space-y-3">
-      <h1 className="text-lg font-semibold">검색</h1>
-      <p className="text-sm text-neutral-500">
-        스캐폴드 스텁입니다. 무한스크롤 훅(<code>hooks/useSearch.ts</code>)은 준비돼 있고,
-        입력 UI와 결과 렌더링(<code>mode</code>·rank 표시)이 후속 작업입니다.
-      </p>
-      {q && <p className="text-sm text-neutral-400">현재 q: {q}</p>}
+    <section className="mx-auto max-w-(--w-content) pt-16">
+      <EmptyState
+        title="검색은 준비 중입니다"
+        description="M3에서 /api/v1/search가 켜지면 검색어 · 기간 · 태그 필터가 여기에서 열립니다. (P1)"
+      />
     </section>
   )
 }

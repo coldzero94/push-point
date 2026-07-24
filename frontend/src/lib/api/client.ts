@@ -1,6 +1,6 @@
 import createClient from 'openapi-fetch'
 import type { paths } from './schema'
-import { getApiKey } from '../auth'
+import { getApiKey, setAuthFailed } from '../auth'
 
 // Single typed client over the openapi.yaml contract. baseUrl is empty so every
 // request is a relative path — dev goes through the Vite proxy, prod hits the
@@ -16,10 +16,30 @@ api.use({
     if (key) request.headers.set('Authorization', `Bearer ${key}`)
     return request
   },
+  // A real 401 on any authenticated endpoint means the stored key is wrong or
+  // revoked. Raise the observed-401 flag so the missing-key banner also shows in
+  // the "key present but invalid" case (§1.4). healthz/thumbs are auth-exempt and
+  // never 401. The flag clears when a new key is saved (auth.setApiKey).
+  onResponse({ response }) {
+    if (response.status === 401) setAuthFailed(true)
+    return response
+  },
 })
 
 // Contract error body: components["schemas"]["Error"] = { error: { code, message } }.
 export type ApiError = { error: { code: string; message: string } }
+
+// The contract maps 401 ↔ error.code 'unauthorized' 1:1, so query hooks that
+// throw the openapi-fetch error body carry it here. Used to stop TanStack Query
+// from retrying an unauthorized request (§1.4: "해당 쿼리 재시도 중단").
+export function isUnauthorized(err: unknown): boolean {
+  return (
+    !!err &&
+    typeof err === 'object' &&
+    'error' in err &&
+    (err as ApiError).error?.code === 'unauthorized'
+  )
+}
 
 // Narrow an openapi-fetch error (or thrown value) to a display message.
 export function errorMessage(err: unknown, fallback = '요청에 실패했습니다.'): string {

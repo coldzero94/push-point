@@ -1,94 +1,313 @@
-import { useState } from 'react'
-import type { FormEvent } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { api, errorMessage } from '../lib/api/client'
-import { getApiKey, setApiKey } from '../lib/auth'
+// Settings — 11 §8. Single-column form (max-width --w-form): API key + 2-step
+// connection check + 3-state theme. Stats + bookmarklet are P2 (§9) — not here.
+//
+// Connection check is deliberately two calls (§8(3), §11 findings): GET /healthz
+// is auth-exempt (security: []), so a wrong key still returns 200 — it proves the
+// server is alive but NOT that the key works. Step 2 hits the lightest
+// authenticated endpoint (GET /api/v1/tags) to validate the Bearer, yielding
+// exactly three phrases: valid / mismatch(401) / unreachable. Saving the key
+// invalidates every query so results that failed with 401 under the old (or
+// missing) key refetch (§8(4)).
+//
+// The check runs against the SAVED key — the client middleware reads only
+// localStorage, never the field — so 확인 is gated behind save: a pasted-but-
+// unsaved edit disables the button (with a "먼저 저장하세요" prompt) instead of
+// validating a stale key and misreporting "키 불일치".
 
-type Health = 'idle' | 'checking' | 'ok' | 'fail'
+import { useEffect, useRef, useState } from 'react'
+import type { FormEvent, KeyboardEvent } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Eye, EyeOff } from 'lucide-react'
+import { api, errorMessage } from '../lib/api/client'
+import { Button, Icon, Input, cn } from '../components/ui'
+import { getApiKey, hasApiKey, setApiKey } from '../lib/auth'
+import { getThemePref, setThemePref } from '../lib/theme'
+import type { ThemePref } from '../lib/theme'
+
+// idle → (checking) → one terminal result. `error` carries a contract message;
+// the other three map to the three fixed phrases in §8(3).
+type CheckState = 'idle' | 'checking' | 'valid' | 'unauthorized' | 'unreachable' | 'error'
 
 export function SettingsScreen() {
-  const [key, setKey] = useState(getApiKey() ?? '')
-  const [saved, setSaved] = useState(false)
-  const [health, setHealth] = useState<Health>('idle')
-  const [healthMsg, setHealthMsg] = useState('')
   const queryClient = useQueryClient()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const [key, setKey] = useState(getApiKey() ?? '')
+  const [savedKey, setSavedKey] = useState(getApiKey() ?? '')
+  const [show, setShow] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const [state, setState] = useState<CheckState>('idle')
+  const [errMsg, setErrMsg] = useState('')
+
+  // The field diverges from the stored key (setApiKey trims, so compare trimmed).
+  // While dirty, 확인 would validate the OLD key — so we disable it and ask to
+  // save first, keeping the check honest (§8(4)).
+  const dirty = key.trim() !== savedKey
+
+  // Key not set (§8(5)): the global warn banner stays; here we just focus the
+  // field so the first keystroke lands where it should.
+  useEffect(() => {
+    if (!hasApiKey()) inputRef.current?.focus()
+  }, [])
 
   function onSave(e: FormEvent) {
     e.preventDefault()
     setApiKey(key)
-    // The Bearer token changed: drop every cached result so queries that failed
-    // with 401 under the old (or missing) key refetch.
+    setSavedKey(key.trim()) // mirror the trimmed value setApiKey actually stored
+    // The Bearer token changed: drop every cached result so queries that 401'd
+    // under the old/missing key refetch (§8(4)), and clear any prior check
+    // result — it was measured against the old key. Confirmation is an inline
+    // "저장됨" for 2s — NOT a toast (§1.4-1: in-view change).
+    setState('idle')
+    setErrMsg('')
     void queryClient.invalidateQueries()
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
   async function checkConnection() {
-    setHealth('checking')
-    setHealthMsg('')
+    if (dirty) return // save first — the middleware only sees the stored key
+    setState('checking')
+    setErrMsg('')
+
+    // Step 1 — server liveness. Auth-exempt, so this only proves the process is up.
     try {
-      const { data, error } = await api.GET('/healthz', {})
-      if (error || data?.status !== 'ok') {
-        setHealth('fail')
-        setHealthMsg(error ? errorMessage(error) : '예상치 못한 응답')
+      const { data, error, response } = await api.GET('/healthz', {})
+      if (error || !response.ok || data?.status !== 'ok') {
+        setState('unreachable')
         return
       }
-      setHealth('ok')
-    } catch (err) {
-      setHealth('fail')
-      setHealthMsg(errorMessage(err, '서버에 연결할 수 없습니다.'))
+    } catch {
+      setState('unreachable')
+      return
+    }
+
+    // Step 2 — key validation via the lightest authenticated endpoint.
+    try {
+      const { data, error, response } = await api.GET('/api/v1/tags', {})
+      if (response.status === 401) {
+        setState('unauthorized')
+        return
+      }
+      if (error || !response.ok || !data) {
+        setState('error')
+        setErrMsg(errorMessage(error))
+        return
+      }
+      // Not a throwaway probe — seed the tag-dictionary cache the chips read (§8(3)).
+      queryClient.setQueryData(['tags'], data)
+      setState('valid')
+    } catch {
+      setState('unreachable')
     }
   }
 
   return (
-    <section className="space-y-4">
-      <h1 className="text-lg font-semibold">설정</h1>
+    <section className="mx-auto max-w-(--w-form) space-y-32 py-8">
+      <h1 className="text-head text-fg-1">설정</h1>
 
-      <form onSubmit={onSave} className="space-y-3">
-        <div>
-          <label htmlFor="apikey" className="mb-1 block text-sm font-medium">
+      {/* ── 연결 ─────────────────────────────────────────────── */}
+      <div className="space-y-12">
+        <h2 className="text-title text-fg-1">연결</h2>
+
+        <form onSubmit={onSave} className="space-y-8">
+          <label htmlFor="apikey" className="block text-label text-fg-2">
             API 키
           </label>
-          <p className="mb-2 text-sm text-neutral-500">
-            서버의 <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-800">PUSHPOINT_API_KEY</code>{' '}
-            값입니다. localStorage에 저장되어 모든 요청에 <code>Authorization: Bearer</code>로 붙습니다.
+          <div className="flex items-start gap-8">
+            <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                id="apikey"
+                type={show ? 'text' : 'password'}
+                autoComplete="off"
+                spellCheck={false}
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                placeholder="dev-key"
+                className="pr-32 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShow((s) => !s)}
+                aria-label={show ? 'API 키 숨기기' : 'API 키 표시'}
+                // 24×24 meets the mouse minimum; `hit-target` adds the touch
+                // 44×44 ::before. Already `absolute`, so it anchors its own (§7.5).
+                className="hit-target absolute right-8 top-1/2 flex h-24 w-24 -translate-y-1/2 items-center justify-center rounded-control text-fg-3 hover:bg-hover hover:text-fg-2"
+              >
+                {show ? <Icon icon={EyeOff} size={16} /> : <Icon icon={Eye} size={16} />}
+              </button>
+            </div>
+            <Button type="submit" variant="primary">
+              저장
+            </Button>
+            {saved ? (
+              <span aria-live="polite" className="self-center text-meta text-fg-2">
+                저장됨
+              </span>
+            ) : null}
+          </div>
+          <p className="text-meta text-fg-3">
+            서버의 <code className="font-mono text-fg-2">PUSHPOINT_API_KEY</code> 값입니다. 이
+            브라우저의 localStorage에 저장되어 모든 요청에{' '}
+            <code className="font-mono text-fg-2">Authorization: Bearer</code>로 붙습니다.
           </p>
-          <input
-            id="apikey"
-            type="password"
-            autoComplete="off"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="dev-key"
-            className="w-full rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700"
-          />
-        </div>
+        </form>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-          >
-            저장
-          </button>
-          <button
+        <div className="flex flex-wrap items-center gap-12">
+          <Button
             type="button"
+            variant="secondary"
             onClick={checkConnection}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            loading={state === 'checking'}
+            disabled={dirty}
           >
-            연결 확인
-          </button>
-          {saved && <span className="text-sm text-emerald-600">저장됨</span>}
+            {state === 'checking' ? '확인 중…' : '연결 확인'}
+          </Button>
+          {dirty ? (
+            <p role="status" className="text-meta text-fg-3">
+              변경한 키를 먼저 저장하세요
+            </p>
+          ) : (
+            <ConnectionResult
+              state={state}
+              errMsg={errMsg}
+              onReenter={() => inputRef.current?.focus()}
+            />
+          )}
         </div>
-      </form>
+      </div>
 
-      {health !== 'idle' && (
-        <p className="text-sm">
-          {health === 'checking' && <span className="text-neutral-500">확인 중…</span>}
-          {health === 'ok' && <span className="text-emerald-600">서버 정상 (/healthz ok)</span>}
-          {health === 'fail' && <span className="text-red-600">연결 실패: {healthMsg}</span>}
-        </p>
-      )}
+      <div className="border-t border-line-2" />
+
+      {/* ── 모양 ─────────────────────────────────────────────── */}
+      <div className="space-y-12">
+        <h2 className="text-title text-fg-1">모양</h2>
+        <div className="flex items-center justify-between gap-16">
+          <span className="text-body text-fg-1">테마</span>
+          <ThemeSegment />
+        </div>
+      </div>
     </section>
+  )
+}
+
+// The three fixed phrases (§8(3)/(5)). Success is achromatic — no accent (R1);
+// only the two failure phrases carry --danger, and the sentence always repeats
+// the state so color never carries meaning alone (§2.1.5 / §7.1). The result
+// text is the one thing that transitions (§8(7), --dur-2); reduced-motion is
+// sealed globally.
+function ConnectionResult({
+  state,
+  errMsg,
+  onReenter,
+}: {
+  state: CheckState
+  errMsg: string
+  onReenter: () => void
+}) {
+  if (state === 'idle' || state === 'checking') return null
+
+  const base = 'text-meta transition-colors duration-(--dur-2) ease-ui'
+
+  if (state === 'valid') {
+    return (
+      <p role="status" className={cn(base, 'text-fg-1')}>
+        서버 정상 · 키 유효
+      </p>
+    )
+  }
+  if (state === 'unauthorized') {
+    return (
+      <p role="status" className={cn(base, 'text-danger')}>
+        서버 정상 · 키 불일치 (401)
+        <button
+          type="button"
+          onClick={onReenter}
+          className="ml-8 rounded-control text-fg-1 underline underline-offset-2 hover:text-fg-2"
+        >
+          키 다시 입력
+        </button>
+      </p>
+    )
+  }
+  if (state === 'unreachable') {
+    return (
+      <p role="status" className={cn(base, 'text-danger')}>
+        서버에 연결할 수 없습니다
+      </p>
+    )
+  }
+  // state === 'error' — contract message verbatim (§8(3) step 2 "그 외").
+  return (
+    <p role="status" className={cn(base, 'text-danger')}>
+      {errMsg}
+    </p>
+  )
+}
+
+const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
+  { value: 'light', label: '라이트' },
+  { value: 'dark', label: '다크' },
+  { value: 'system', label: '시스템' },
+]
+
+// 3-state theme segment (§8(4)/§2.1.6). `system` MUST be reachable — its absence
+// is a bug, so all three are exposed. Selection uses neutral elevation (raised
+// bg-surface thumb in a recessed bg-hover track), NOT accent fill — brand solid
+// is reserved for the four places in §2.1.4, and a segment is not one of them.
+// ARIA radiogroup with roving tabindex + arrow keys.
+function ThemeSegment() {
+  const [pref, setPref] = useState<ThemePref>(getThemePref())
+  const refs = useRef<(HTMLButtonElement | null)[]>([])
+
+  function select(i: number) {
+    const v = THEME_OPTIONS[i].value
+    setThemePref(v)
+    setPref(v)
+    refs.current[i]?.focus()
+  }
+
+  function onKeyDown(e: KeyboardEvent, i: number) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      select((i + 1) % THEME_OPTIONS.length)
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      select((i + THEME_OPTIONS.length - 1) % THEME_OPTIONS.length)
+    }
+  }
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="테마"
+      className="inline-flex gap-2 rounded-control border border-line-control bg-hover p-2"
+    >
+      {THEME_OPTIONS.map((o, i) => {
+        const checked = pref === o.value
+        return (
+          <button
+            key={o.value}
+            ref={(el) => {
+              refs.current[i] = el
+            }}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            tabIndex={checked ? 0 : -1}
+            onClick={() => select(i)}
+            onKeyDown={(e) => onKeyDown(e, i)}
+            className={cn(
+              'rounded-control px-12 py-4 text-label transition-colors duration-(--dur-out) ease-ui',
+              checked ? 'bg-surface text-fg-1 shadow-ring' : 'text-fg-2 hover:text-fg-1',
+            )}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
   )
 }

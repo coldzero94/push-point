@@ -1,35 +1,259 @@
-/* Tailwind CSS v4 — CSS-first config (@theme). Imported from src/main.tsx. */
+/* Tailwind CSS v4 — CSS-first config. Imported from src/main.tsx. */
 @import "tailwindcss";
 
-/* Dark mode: `dark:` follows the `.dark` class on <html>, which lib/theme.ts
-   toggles from (localStorage override ?? prefers-color-scheme). This keeps the
-   system default while allowing a manual toggle. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ── 0. 리셋 — 반드시 모든 정의 블록(@theme inline 포함)보다 먼저 ──────
+   v4는 @theme 을 소스 순서대로 병합하고 `--네임스페이스-*: initial` 은
+   그 시점까지 등록된 키를 전부 지운다. 이 블록이 아래로 내려가면
+   의미 색 유틸(bg-canvas / text-fg-1 / bg-accent …)이 0개 생성된다. */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Apple SD Gothic Neo",
-    "Noto Sans KR", "Segoe UI", sans-serif;
+  --color-*: initial;
+  --spacing-*: initial;
+  --spacing: initial;
+  --radius-*: initial;
+  --text-*: initial;
+  --font-*: initial;
+  --ease-*: initial;
+  --container-*: initial;
+  --breakpoint-*: initial;
 }
 
+/* ── 1. 원시 팔레트 + 의미 토큰 (라이트/다크) ───────────────────────── */
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: light dark;      /* 인라인 스크립트가 클래스를 심기 전의 기본값 */
+
+    /* ink scale (의미 토큰 정의부에서만 참조) */
+    --ink-0:#FCFDFE;  --ink-50:#F4F6F8;  --ink-100:#EAEDF1; --ink-200:#DBDFE6;
+    --ink-300:#C2C8D2; --ink-400:#9099A6; --ink-500:#6B7482; --ink-600:#515A67;
+    --ink-700:#3A424E; --ink-800:#262D37; --ink-900:#171C23; --ink-950:#0D1116;
+
+    /* semantic — light */
+    --bg-canvas:var(--ink-50); --bg-surface:var(--ink-0); --bg-hover:var(--ink-100);
+    --bg-elevated:var(--ink-0); --bg-selected:#E1F9EF;
+    --fg-1:var(--ink-900); --fg-2:var(--ink-600); --fg-3:var(--ink-400); --fg-inverse:var(--ink-0);
+    --line-1:rgb(13 17 22 / .08); --line-2:rgb(13 17 22 / .14);
+    --line-control:#767F8C;           /* 컨트롤 경계 전용 — 배경 전 조합 3:1 이상 */
+    --rail-progress:var(--ink-600);   /* 진행 레일 (펄스 하한에서도 3:1) */
+    --accent:#197459; --accent-hover:#096149; --accent-tint:#E1F9EF; --on-accent:#FCFDFE;
+    --danger:#B4232B; --danger-tint:#FCEBEA;
+    --warn:#8E6400;   --warn-tint:#FDF3E2;
+
+    /* tag facet — hue lock 168 / 112 / 318. neutral 은 토큰을 만들지 않는다(fg-2 + bg-hover) */
+    --tag-craft-ink:#004E39; --tag-craft-tint:#E1F9EF;
+    --tag-media-ink:#54570B; --tag-media-tint:#F2F5E0;
+    --tag-life-ink:#4B2656;  --tag-life-tint:#FBEDFF;
+
+    /* elevation */
+    --ring: 0 0 0 1px var(--line-1);
+    --sh-panel: var(--ring), 0 8px 24px -8px rgb(13 17 22 / .18),
+                             0 2px 6px  -2px rgb(13 17 22 / .10);
+    --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(13 17 22 / .22);
   }
+
+  /* 3-state 테마: <html>에는 해결된 결과 클래스가 항상 하나 붙는다.
+     .light 규칙이 없으면 OS 다크 + 사용자가 라이트를 고른 경로에서
+     스크롤바·폼 컨트롤만 다크로 남는다. */
+  .light { color-scheme: light; }
+
   .dark {
     color-scheme: dark;
+    --bg-canvas:var(--ink-950); --bg-surface:#141920; --bg-hover:#1A2029;
+    --bg-elevated:#1B222B; --bg-selected:#0F2C22;
+    --fg-1:#E8ECF1; --fg-2:#A8B1BE; --fg-3:#6E7889; --fg-inverse:#06120E;
+    --line-1:rgb(255 255 255 / .08); --line-2:rgb(255 255 255 / .14);
+    --line-control:#767F8C;           /* 라이트와 동일 값으로 양쪽 3:1을 만족한다 */
+    --rail-progress:var(--ink-400);
+    --accent:#2EB88F; --accent-hover:#37CFA1; --accent-tint:#0F2C22; --on-accent:#06120E;
+    --danger:#F2706B; --danger-tint:#2A1518;
+    --warn:#B28738;   --warn-tint:#292113;
+
+    /* tag facet — hue 고정, L·C만 슬롯별. "다크에서 채도 −20%" 전역 공식을 쓰지 않는다 */
+    --tag-craft-ink:#84E4C1; --tag-craft-tint:#0F2C22;
+    --tag-media-ink:#BFC573; --tag-media-tint:#262810;
+    --tag-life-ink:#EEBBFE;  --tag-life-tint:#2E2033;
+    --sh-panel: var(--ring), 0 8px 24px -8px rgb(0 0 0 / .55),
+                             0 2px 6px  -2px rgb(0 0 0 / .35);
+    --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(0 0 0 / .55);
   }
-  html,
-  body,
-  #root {
-    height: 100%;
-  }
+}
+
+/* ── 2. 유틸리티 매핑 ──────────────────────────────────────────────── */
+@theme inline {
+  /* color: inline이어야 .dark 오버라이드가 유틸리티에 전달된다 */
+  --color-canvas:      var(--bg-canvas);
+  --color-surface:     var(--bg-surface);
+  --color-hover:       var(--bg-hover);
+  --color-elevated:    var(--bg-elevated);
+  --color-selected:    var(--bg-selected);
+  --color-fg-1:        var(--fg-1);
+  --color-fg-2:        var(--fg-2);
+  --color-fg-3:        var(--fg-3);
+  --color-fg-inverse:  var(--fg-inverse);
+  --color-line-1:      var(--line-1);
+  --color-line-2:      var(--line-2);
+  --color-line-control:var(--line-control);
+  --color-rail-progress:var(--rail-progress);
+  --color-accent:      var(--accent);
+  --color-accent-hover:var(--accent-hover);
+  --color-accent-tint: var(--accent-tint);
+  --color-on-accent:   var(--on-accent);
+  --color-danger:      var(--danger);
+  --color-danger-tint: var(--danger-tint);
+  --color-warn:        var(--warn);
+  --color-warn-tint:   var(--warn-tint);
+
+  /* tag facet — 여기도 inline 이어야 .dark 오버라이드가 유틸리티에 전달된다.
+     neutral 은 매핑하지 않는다 — 클라이언트가 fg-2 / hover 를 그대로 쓴다(§5.2) */
+  --color-tag-craft-ink: var(--tag-craft-ink);   --color-tag-craft-tint: var(--tag-craft-tint);
+  --color-tag-media-ink: var(--tag-media-ink);   --color-tag-media-tint: var(--tag-media-tint);
+  --color-tag-life-ink:  var(--tag-life-ink);    --color-tag-life-tint:  var(--tag-life-tint);
+
+  --shadow-panel: var(--sh-panel);
+  --shadow-sheet: var(--sh-sheet);
+  --shadow-ring:  var(--ring);
+}
+
+/* ── 3. 모드 무관 스케일 ───────────────────────────────────────────── */
+/* static: v4는 참조되지 않은 theme 변수를 :root에서 제거한다. 레이아웃 상수와
+   duration·z 토큰은 lint와 JS가 읽어야 하므로 항상 방출시킨다. */
+@theme static {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo",
+               "Pretendard Variable", Pretendard, system-ui, "Segoe UI",
+               "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  /* type scale — 유틸리티: text-label / text-meta / text-body / text-title / ... */
+  --text-label: 12px;
+  --text-label--line-height: 16px;
+  --text-label--font-weight: 500;
+  --text-label--letter-spacing: -0.006em;
+
+  --text-meta: 13px;
+  --text-meta--line-height: 18px;
+  --text-meta--font-weight: 400;
+  --text-meta--letter-spacing: -0.012em;
+
+  --text-body: 15px;
+  --text-body--line-height: 24px;
+  --text-body--font-weight: 400;
+  --text-body--letter-spacing: -0.010em;
+
+  --text-title: 15px;
+  --text-title--line-height: 20px;
+  --text-title--font-weight: 600;
+  --text-title--letter-spacing: -0.016em;
+
+  --text-head: 20px;
+  --text-head--line-height: 26px;
+  --text-head--font-weight: 600;
+  --text-head--letter-spacing: -0.002em;
+
+  --text-display: 32px;
+  --text-display--line-height: 36px;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: 0.004em;
+
+  /* spacing — 12스텝. 유틸리티 숫자 == px (p-16 = 16px) */
+  --spacing-2:2px;   --spacing-4:4px;   --spacing-6:6px;   --spacing-8:8px;
+  --spacing-12:12px; --spacing-16:16px; --spacing-20:20px; --spacing-24:24px;
+  --spacing-32:32px; --spacing-40:40px; --spacing-56:56px; --spacing-80:80px;
+
+  /* radius — semantic only */
+  --radius-chip:999px; --radius-control:6px; --radius-thumb:6px;
+  --radius-row:8px;    --radius-panel:12px;  --radius-sheet:16px;
+
+  /* easing */
+  --ease-ui:    cubic-bezier(0.4, 0, 0.6, 1);
+  --ease-enter: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  /* motion — 허용 duration 집합의 유일한 선언부(§2.6). lint가 여기서 목록을 만든다 */
+  --dur-out:120ms; --dur-1:160ms; --dur-2:180ms; --dur-close:200ms;
+  --dur-flip:220ms; --dur-3:260ms; --dur-pulse:2400ms;
+
+  /* 브레이크포인트 3개(= 구간 4개). 기본 스케일을 지웠으므로 md:(768px)는 존재하지 않는다 */
+  --breakpoint-sm:  560px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  /* containers — 행 내부 칩 개수 판정용 */
+  --container-row-sm: 480px;
+  --container-row-md: 640px;
+
+  /* 레이아웃 상수 — 12스텝 밖의 고정 치수. h-(--size-row) 형태로만 참조한다 */
+  --size-row:76px; --size-row-sm:88px; --size-thumb:56px; --size-thumb-sm:44px;
+  --size-header:52px; --size-toolbar:44px; --size-rail:2px; --size-spark-min:3px;
+  --w-page:1152px; --w-content:768px; --w-inspector:380px; --w-list-min:480px;
+  --w-search-input:480px; --w-form:560px;
+  --gutter: max(env(safe-area-inset-left), clamp(16px, 2.5vw, 32px));
+
+  /* z ladder — 이 7개 밖의 z-index 금지 */
+  --z-header:100; --z-popover:600; --z-palette:650;
+  --z-overlay:699; --z-sheet:700; --z-toast:800; --z-tooltip:1100;
+}
+
+/* ── 4. 베이스 ────────────────────────────────────────────────────── */
+@layer base {
+  html, body, #root { height: 100%; }
   body {
     font-family: var(--font-sans);
-    background-color: var(--color-white);
-    color: var(--color-neutral-900);
+    background: var(--bg-canvas);
+    color: var(--fg-1);
+    font-variant-numeric: tabular-nums;
+    /* -webkit-font-smoothing 은 의도적으로 선언하지 않는다 */
   }
-  .dark body {
-    background-color: var(--color-neutral-950);
-    color: var(--color-neutral-100);
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  :focus:not(:focus-visible) { outline: none; }
+
+  /* 로드 봉인 + reduced-motion */
+  [data-loading] *, [data-reduce-motion] * {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    animation: none !important;
+    animation-delay: 0ms !important;
+  }
+  /* 무한 루프는 감소가 아니라 제거 — 정적 불투명(대비 5.94:1 / 5.57:1) */
+  [data-reduce-motion] .rail-pulse { opacity: 1; }
+}
+
+@layer utilities {
+  .glass {
+    background: color-mix(in oklab, var(--bg-surface) 72%, transparent);
+    backdrop-filter: blur(12px) saturate(1.6);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass { background: var(--bg-surface); }   /* 블러가 없으면 더 불투명하게 */
+  }
+  .thumb-img { filter: none; }
+  .dark .thumb-img {
+    filter: brightness(.92);
+    box-shadow: inset 0 0 0 1px var(--line-1);
+  }
+  /* 진행 레일 펄스 — 하한 .7에서도 3:1을 유지한다(§2.1.3) */
+  @keyframes rail-pulse { from { opacity: .7 } to { opacity: 1 } }
+  .rail-pulse {
+    animation: rail-pulse var(--dur-pulse) var(--ease-ui) infinite alternate;
+  }
+
+  /* 히트 영역 2단계(§7.5 / §4 공통 규칙). 클릭·탭 영역만 넓히고 아이콘 크기는
+     그대로 둔다. 마우스(pointer:fine)에서는 요소 자체를 최소 24×24(WCAG 2.5.8
+     Target Size Minimum)로 키우고, 터치(pointer:coarse)에서는 시각 크기를
+     건드리지 않고 ::before로 44×44 히트 영역을 중앙 정렬로 확장한다.
+     ::before는 요소를 기준으로 앵커되므로 정적 배치 요소에는 `relative`를 함께
+     준다(이미 absolute인 요소는 그 자체가 앵커라 추가하지 않는다). */
+  @media (hover: hover) and (pointer: fine) {
+    .hit-target { min-width: 24px; min-height: 24px; }
+  }
+  @media (pointer: coarse) {
+    .hit-target::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 44px;
+      height: 44px;
+      transform: translate(-50%, -50%);
+    }
   }
 }

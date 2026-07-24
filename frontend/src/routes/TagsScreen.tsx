@@ -1,13 +1,15 @@
-// TODO(M-next): tag dictionary screen.
-//  - GET /api/v1/tags → list with link_count; create/update/delete (POST/PATCH/DELETE)
-//  - clicking a tag navigates to `/` with ?tag=<name> (drives the list filter)
+// Tags (screen 4) — P1 (§9). Dictionary CRUD + alias editing + the facet
+// 4-choice select land with the M3 tuning loop (aliases are the cheapest lever
+// on tagging accuracy). Coming-soon inside the new shell until then.
+import { EmptyState } from '../components/ui'
+
 export function TagsScreen() {
   return (
-    <section className="space-y-3">
-      <h1 className="text-lg font-semibold">태그</h1>
-      <p className="text-sm text-neutral-500">
-        스캐폴드 스텁입니다. 태그 사전 조회·생성·수정·삭제와 목록 태그 필터 연동이 후속 작업입니다.
-      </p>
+    <section className="mx-auto max-w-(--w-content) pt-16">
+      <EmptyState
+        title="태그 사전은 준비 중입니다"
+        description="사전 편집 · 별칭 · 분류(facet) 관리가 M3 튜닝 루프와 함께 열립니다. (P1)"
+      />
     </section>
   )
 }
