@@ -56,13 +56,14 @@ func (p *DefaultParser) Match(*url.URL) bool { return true }
 
 // Fetch는 HTML을 내려받아 파싱한 메타데이터 + 추출 본문을 반환한다.
 func (p *DefaultParser) Fetch(ctx context.Context, u *url.URL) (Metadata, error) {
-	doc, body, finalURL, err := p.fetchHTML(ctx, u)
+	// 원본 바이트는 여기서 필요 없다 — 어댑터(youtube shortDescription)만 쓴다.
+	doc, _, finalURL, err := p.fetchHTML(ctx, u)
 	if err != nil {
 		return Metadata{}, err
 	}
 	m := parseMetadata(doc, finalURL)
 	m.ContentType = contentTypeFor(u.Host)
-	m.BodyText = extractBodyText(body, finalURL)
+	m.BodyText = extractBodyText(doc, finalURL)
 	return m, nil
 }
 
@@ -110,8 +111,17 @@ func (p *DefaultParser) fetchHTML(ctx context.Context, u *url.URL) (*goquery.Doc
 // 자른다. 추출 실패는 치명적이지 않다 — 본문 없이 진행하고 태거가 title/description으로
 // graceful degrade한다(비-아티클·SPA·추출 실패 시 빈 문자열). EnableFallback으로 trafilatura가
 // 실패하면 readability·domdistiller로 폴백해 정밀도를 높인다.
-func extractBodyText(htmlBytes []byte, u *url.URL) string {
-	res, err := trafilatura.Extract(bytes.NewReader(htmlBytes), trafilatura.Options{
+//
+// **이미 파싱한 goquery 문서를 넘긴다** — 바이트를 다시 읽히면 trafilatura가 자체 문자셋
+// 변환 리더를 태우는데, 정상 UTF-8 한국 기술블로그(카카오뱅크·토스·우아한형제들 등)에서
+// `transform: short internal buffer`로 실패해 본문이 통째로 비었다(실측: 0B → 4~25KB로 복구).
+// html.Parse는 그 페이지들을 문제없이 처리하므로 파싱 결과를 재사용하는 편이 옳고, 재파싱도
+// 없어진다. ExtractDocument는 내부에서 dom.Clone으로 원본을 보존하므로 doc은 변형되지 않는다.
+func extractBodyText(doc *goquery.Document, u *url.URL) string {
+	if doc == nil || len(doc.Nodes) == 0 {
+		return ""
+	}
+	res, err := trafilatura.ExtractDocument(doc.Nodes[0], trafilatura.Options{
 		OriginalURL:     u,
 		EnableFallback:  true,
 		ExcludeComments: true,

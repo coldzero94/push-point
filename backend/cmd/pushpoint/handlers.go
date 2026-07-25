@@ -13,6 +13,7 @@ import (
 	"github.com/coby/push-point/backend/internal/queue"
 	"github.com/coby/push-point/backend/internal/scraper"
 	"github.com/coby/push-point/backend/internal/store"
+	"github.com/coby/push-point/backend/internal/summarizer"
 	"github.com/coby/push-point/backend/internal/tagger"
 	"github.com/coby/push-point/backend/internal/thumbs"
 )
@@ -53,7 +54,10 @@ func newScrapeHandler(sc scraper.Scraper, st store.Store, concurrency int, log *
 			return err
 		}
 		// 잡 성공은 Debug — dev(레벨 debug)에서 잡이 도는지 보이고, 운영(info)에선 조용.
-		log.Debug("scrape 완료", "link", job.LinkID, "content_type", res.ContentType, "dur_ms", time.Since(start).Milliseconds())
+		// body_len을 함께 찍는다 — 본문 추출이 조용히 0이 되는 회귀(문자셋·SPA·차단)를
+		// dev에서 바로 보이게 하려는 것이다. 추출 실패는 에러가 아니라 빈 본문으로 나타난다.
+		log.Debug("scrape 완료", "link", job.LinkID, "content_type", res.ContentType,
+			"body_len", len(res.BodyText), "dur_ms", time.Since(start).Milliseconds())
 		return nil
 	}
 }
@@ -125,7 +129,8 @@ func newThumbHandler(sc scraper.Scraper, ts thumbs.Store, st store.Store, log *s
 }
 
 // newTagHandler는 tag 잡 핸들러를 만든다 (best-effort, 순수 CPU). 처리: link_id → 콘텐츠
-// 조회 → 태그 사전 로드 → tagger.BuildDictionary + Classify → store.ApplyTags(source='rules').
+// 조회 → 태그 사전 로드 → tagger.BuildDictionary + Classify → store.ApplyTags(source='rules')
+// → summarizer.Summarize → store.SetSummary (한 번 읽은 본문으로 태깅과 요약을 함께 한다).
 // 실패는 그대로 반환해 큐가 재시도하지만, max_attempts 소진 후에도 링크 status는 불변이다
 // (queue.Fail이 KindTag를 thumb과 함께 best-effort로 처리 — 태깅 실패가 링크를 죽이지 않는다).
 func newTagHandler(st store.Store, log *slog.Logger) queue.Handler {
@@ -150,7 +155,16 @@ func newTagHandler(st store.Store, log *slog.Logger) queue.Handler {
 		if err := st.ApplyTags(ctx, job.LinkID, toStoreScored(scored)); err != nil {
 			return err
 		}
-		log.Debug("tag 완료", "link", job.LinkID, "tags", len(scored), "dur_ms", time.Since(start).Milliseconds())
+		// 추출식 요약(M5 Phase A) — 태깅과 **같은 본문 처리**를 재사용하므로 추가 I/O가 없다.
+		// 순서가 중요하다: 태그가 코어이고 요약은 부가물이라 ApplyTags 뒤에 오고, 실패해도
+		// 잡을 실패시키지 않는다(태그는 이미 커밋됐다 — thumb의 best-effort 관용과 같은 규칙).
+		// 빈 문자열도 정상 값이다(가드 불통과 = 요약 없음).
+		sum := summarizer.Summarize(content.Body, content.Description)
+		if err := st.SetSummary(ctx, job.LinkID, sum); err != nil {
+			log.Warn("summary 기록 실패 — 태깅은 성공", "link", job.LinkID, "err", err)
+		}
+		log.Debug("tag 완료", "link", job.LinkID, "tags", len(scored),
+			"sum_len", len(sum), "dur_ms", time.Since(start).Milliseconds())
 		return nil
 	}
 }

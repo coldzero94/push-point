@@ -476,6 +476,22 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                     />
                   </Section>
 
+                  {/* 요약(추출식)은 설명 위에 온다. 둘은 경쟁이 아니라 대비다 — 위는 기계가
+                      본문에서 고른 문장(fg-1), 아래는 발행자가 쓴 설명(fg-2). 서버가 요약과
+                      설명이 사실상 같으면 요약을 빈 문자열로 주므로, 둘 다 보일 때는 서로
+                      다르다는 게 보장된다(클라이언트에 중복 판정 로직이 없는 이유). */}
+                  {link.summary ? (
+                    <Section label="요약">
+                      <div className="flex flex-col gap-6">
+                        {link.summary.split('\n').map((line, i) => (
+                          <p key={i} className="text-body text-fg-1">
+                            {line}
+                          </p>
+                        ))}
+                      </div>
+                    </Section>
+                  ) : null}
+
                   {link.description ? (
                     <Section label="설명">
                       <p className="whitespace-pre-line text-body text-fg-2">{link.description}</p>

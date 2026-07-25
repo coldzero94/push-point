@@ -11,9 +11,10 @@ import (
 // YouTube: oEmbed(title/author/thumbnail) + watch 페이지 og:description 병합, content_type=video.
 func TestYouTubeAdapter(t *testing.T) {
 	const oembedJSON = `{"title":"Go 동시성 강의","author_name":"채널이름","thumbnail_url":"https://i.ytimg.com/vi/abc/hq.jpg"}`
+	// shortDescription(전체 설명)은 페이지 JSON에 있고 og:description보다 길다 — body_text 소스.
 	const watchHTML = `<html lang="en"><head>
 		<meta property="og:description" content="이 영상은 고루틴을 다룬다.">
-		</head><body></body></html>`
+		</head><body><script>var x = {"shortDescription":"고루틴과 채널을 처음부터 설명합니다.\n\n00:00 인트로\n05:00 채널","isLive":false};</script></body></html>`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -55,6 +56,30 @@ func TestYouTubeAdapter(t *testing.T) {
 	}
 	if m.ContentType != "video" {
 		t.Errorf("ContentType = %q, want video", m.ContentType)
+	}
+	// 영상 본문 = 전체 설명(shortDescription). og:description(짧은 blurb)과 별개 필드다.
+	if !strings.Contains(m.BodyText, "고루틴과 채널을 처음부터") || !strings.Contains(m.BodyText, "05:00 채널") {
+		t.Errorf("BodyText(전체 설명) = %q", m.BodyText)
+	}
+}
+
+func TestYouTubeDescription(t *testing.T) {
+	cases := []struct {
+		name, page, want string
+	}{
+		{"기본", `{"shortDescription":"안녕하세요","x":1}`, "안녕하세요"},
+		{"이스케이프 개행", `{"shortDescription":"1줄\n2줄"}`, "1줄\n2줄"},
+		{"이스케이프 따옴표", `{"shortDescription":"그는 \"안녕\"이라 했다"}`, `그는 "안녕"이라 했다`},
+		// 설명 안에 `","`가 들어가도 깨지지 않아야 한다(정규식 축약 매칭의 실패 모드).
+		{"본문에 따옴표-쉼표", `{"shortDescription":"a\",\"b 계속","author":"x"}`, `a","b 계속`},
+		{"유니코드 이스케이프", `{"shortDescription":"가나"}`, "가나"},
+		{"키 없음", `{"other":"x"}`, ""},
+		{"닫는 따옴표 없음(잘린 페이지)", `{"shortDescription":"열린 채로`, ""},
+	}
+	for _, c := range cases {
+		if got := youtubeDescription([]byte(c.page)); got != c.want {
+			t.Errorf("%s: youtubeDescription = %q, want %q", c.name, got, c.want)
+		}
 	}
 }
 
@@ -187,3 +212,40 @@ func TestInstagramAdapterNoError(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestArxivAdapter(t *testing.T) {
+	// arXiv 초록 페이지: 초록은 blockquote.abstract에 있고, 사이드바(arXivLabs 안내)는
+	// 본문이 아니다 — 범용 추출기가 그 사이드바를 골라내던 실측 실패를 막는 어댑터다.
+	const absHTML = `<html><head><title>제목</title>
+		<meta property="og:description" content="짧은 설명"></head><body>
+		<blockquote class="abstract"><span class="descriptor">Abstract:</span>
+		이 논문은 기후 물리에 기계학습을 적용하는 방법을 다룬다. 관측 데이터와 시뮬레이션을 결합한다.</blockquote>
+		<div id="labs">Hugging Face (What is Huggingface?) arXivLabs: experimental projects</div>
+		</body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(absHTML))
+	}))
+	defer srv.Close()
+
+	a := newArxivAdapter(NewDefaultParser(newRewriteClient(t, srv.URL, nil), "test-agent"))
+	if !a.Match(mustURL(t, "https://arxiv.org/abs/2408.09627")) {
+		t.Fatal("arxiv /abs/ 가 Match되지 않음")
+	}
+	if a.Match(mustURL(t, "https://arxiv.org/list/cs.LG/recent")) {
+		t.Error("/abs/ 아닌 경로는 Match되면 안 됨")
+	}
+	m, err := a.Fetch(context.Background(), mustURL(t, "https://arxiv.org/abs/2408.09627"))
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !strings.Contains(m.BodyText, "기후 물리에 기계학습") {
+		t.Errorf("본문이 초록이어야: %q", m.BodyText)
+	}
+	if strings.HasPrefix(m.BodyText, "Abstract:") {
+		t.Errorf("'Abstract:' 라벨은 제거돼야: %q", m.BodyText)
+	}
+	if strings.Contains(m.BodyText, "Huggingface") {
+		t.Errorf("사이드바가 본문에 섞임: %q", m.BodyText)
+	}
+}

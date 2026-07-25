@@ -179,11 +179,11 @@ func (s *sqliteStore) GetLink(ctx context.Context, id int64) (*LinkDetail, error
 	err := s.db.Reader.QueryRowContext(ctx, `
 		SELECT id, url, domain, title, description, author, content_type, lang,
 		       published_at, duration_sec, word_count, thumb_path, note, status, error,
-		       created_at, updated_at
+		       created_at, updated_at, summary
 		FROM links WHERE id = ? AND deleted_at IS NULL`, id,
 	).Scan(&d.ID, &d.URL, &d.Domain, &d.Title, &d.Description, &d.Author, &d.ContentType, &d.Lang,
 		&publishedAt, &durationSec, &wordCount, &thumb, &d.Note, &d.Status, &d.Error,
-		&d.CreatedAt, &d.UpdatedAt)
+		&d.CreatedAt, &d.UpdatedAt, &d.Summary)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

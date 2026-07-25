@@ -80,6 +80,7 @@ func New(opts ...Option) *Pool {
 	reg.Register(newYouTubeAdapter(parser, o.youtubeOEmbed))
 	reg.Register(newTwitterAdapter(o.client, o.userAgent, o.twitterOEmbed))
 	reg.Register(newNaverAdapter(parser))
+	reg.Register(newArxivAdapter(parser))
 	reg.Register(newInstagramAdapter())
 
 	return &Pool{

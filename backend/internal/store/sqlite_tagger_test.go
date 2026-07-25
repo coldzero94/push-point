@@ -147,3 +147,50 @@ func TestApplyScrapeEnqueuesTag(t *testing.T) {
 		t.Errorf("tag 잡 1개 enqueue돼야, got %d", n)
 	}
 }
+
+// SetSummary 왕복 — GetLink가 쓴 값을 그대로 돌려주는지 본다. GetLink의 SELECT는 18컬럼
+// 위치 기반 Scan이라 컬럼을 하나 덧붙일 때 정렬이 어긋나기 쉬운데, 그걸 잡는 테스트다.
+func TestSetSummaryRoundTrip(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	ctx := context.Background()
+	id, _, _, _ := s.SaveLink(ctx, "https://example.com/s", "메모")
+
+	// 저장 직후엔 빈 문자열(기본값).
+	d, err := s.GetLink(ctx, id)
+	if err != nil {
+		t.Fatalf("GetLink: %v", err)
+	}
+	if d.Summary != "" {
+		t.Errorf("초기 summary = %q, want 빈 문자열", d.Summary)
+	}
+
+	const want = "첫 문장이다.\n둘째 문장이다."
+	if err := s.SetSummary(ctx, id, want); err != nil {
+		t.Fatalf("SetSummary: %v", err)
+	}
+	d, _ = s.GetLink(ctx, id)
+	if d.Summary != want {
+		t.Errorf("summary = %q, want %q", d.Summary, want)
+	}
+	// 다른 필드가 밀리지 않았는지(위치 Scan 어긋남 감지) 함께 확인한다.
+	if d.URL != "https://example.com/s" || d.Note != "메모" {
+		t.Errorf("다른 컬럼이 어긋남: url=%q note=%q", d.URL, d.Note)
+	}
+
+	// 빈 문자열로 덮어쓰기 — 재태깅에서 가드에 걸리면 이전 요약이 남으면 안 된다.
+	if err := s.SetSummary(ctx, id, ""); err != nil {
+		t.Fatalf("SetSummary(빈값): %v", err)
+	}
+	d, _ = s.GetLink(ctx, id)
+	if d.Summary != "" {
+		t.Errorf("빈값 덮어쓰기 실패: %q", d.Summary)
+	}
+
+	// 삭제된 링크는 ErrNotFound.
+	if err := s.DeleteLink(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSummary(ctx, id, "x"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("삭제된 링크 = %v, want ErrNotFound", err)
+	}
+}

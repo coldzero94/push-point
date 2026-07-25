@@ -158,6 +158,7 @@ func toAPIDetail(d *store.LinkDetail) gen.LinkDetail {
 		DurationSec: intPtr64(d.DurationSec),
 		WordCount:   intPtr64(d.WordCount),
 		Lang:        d.Lang,
+		Summary:     d.Summary, // 상세 전용 — 목록·검색 매핑에는 없다(계약이 그렇게 좁다)
 		Error:       d.Error,
 	}
 	// 잡이 아직 없는 kind는 store가 빈 문자열을 준다 → 계약상 필드 생략(nil).

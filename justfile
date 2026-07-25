@@ -158,6 +158,11 @@ db-reset:
     rm -f "${files[@]}"
     echo "dev DB 초기화 완료 — 다음 just dev가 마이그레이션으로 재생성합니다."
 
+# 추출식 요약 회귀 측정 — Recall@3·중복도·커버리지를 lead-3 베이스라인과 병기 (M5+)
+# -dump를 붙이면 사람이 읽을 스팟체크 텍스트를 낸다: just eval-summary -dump
+eval-summary *ARGS:
+    @if [ -d nlu/golden ] && [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint summary-eval {{ARGS}} ../nlu/golden; else echo "nlu/golden/ 또는 backend/cmd/pushpoint가 없습니다."; fi
+
 # golden set 태깅 정확도 측정 — top-3 Recall, 베이스라인 병기 (M3+)
 eval:
     @if [ -d nlu/golden ] && [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint eval ../nlu/golden/; else echo "nlu/golden/ 또는 backend/cmd/pushpoint가 아직 없습니다. just eval은 M3에서 활성화됩니다."; fi
