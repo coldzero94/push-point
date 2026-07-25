@@ -29,16 +29,23 @@ api.use({
 // Contract error body: components["schemas"]["Error"] = { error: { code, message } }.
 export type ApiError = { error: { code: string; message: string } }
 
-// The contract maps 401 ↔ error.code 'unauthorized' 1:1, so query hooks that
-// throw the openapi-fetch error body carry it here. Used to stop TanStack Query
-// from retrying an unauthorized request (§1.4: "해당 쿼리 재시도 중단").
-export function isUnauthorized(err: unknown): boolean {
+// True when the thrown openapi-fetch error body carries the given contract
+// error.code. The 4 codes are the whole set (§1.4); callers match on them to
+// route a failure (e.g. a duplicate-name 400 → inline `invalid_input` warn).
+export function isErrorCode(err: unknown, code: string): boolean {
   return (
     !!err &&
     typeof err === 'object' &&
     'error' in err &&
-    (err as ApiError).error?.code === 'unauthorized'
+    (err as ApiError).error?.code === code
   )
+}
+
+// The contract maps 401 ↔ error.code 'unauthorized' 1:1, so query hooks that
+// throw the openapi-fetch error body carry it here. Used to stop TanStack Query
+// from retrying an unauthorized request (§1.4: "해당 쿼리 재시도 중단").
+export function isUnauthorized(err: unknown): boolean {
+  return isErrorCode(err, 'unauthorized')
 }
 
 // Narrow an openapi-fetch error (or thrown value) to a display message.

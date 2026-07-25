@@ -23,13 +23,17 @@ const listSearchSchema = z.object({
 const searchSearchSchema = z.object({
   q: z.string().optional().default(''),
   tag: z.string().optional(),
+  // Period preset stored as a key, not raw from/to (§11 4(3)): a key stays valid
+  // as "now" moves and survives sharing, and the screen expands it to the
+  // contract's from/to at request time. Absent = 전체.
+  period: z.enum(['7d', '30d', 'year']).optional(),
   // ?link opens the inspector overlay over search results (same overlay as list).
   link: z.coerce.number().int().positive().optional(),
 })
 
 // Bookmarklet prefill (§2(4)) — fills the composer, never auto-submits. ?link
-// opens the inspector over the save screen's list (the row list below the
-// composer is the shared LinkRow renderer).
+// opens the inspector over the save screen's board (the board below the composer
+// is the shared LinkCard renderer).
 const saveSearchSchema = z.object({
   url: z.string().optional(),
   note: z.string().optional(),

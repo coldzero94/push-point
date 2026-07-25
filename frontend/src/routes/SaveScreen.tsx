@@ -1,17 +1,17 @@
-// Save route (§0 / §2) — the composer opens over the list so the S2 fill is
+// Save route (§0 / §2) — the composer opens over the board so the S2 fill is
 // visible where the save lands (a save-only page would hide its own result,
-// killing the signature). The composer inserts a filling row into the shared
-// ['links'] cache; the live list below renders it — the SAME LinkRow the home
-// list uses (no separate card) — and polling fills it in place.
+// killing the signature). The composer inserts a filling link into the shared
+// ['links'] cache; the live board below renders it — the SAME LinkCard the home
+// list uses — and polling fills it in place, slot by slot.
 
 import { useEffect, useRef } from 'react'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { SaveComposer } from '../components/SaveComposer'
-import { LinkRow } from '../components/LinkRow'
+import { BOARD_GRID, LinkCard, LinkCardSkeleton } from '../components/LinkCard'
 import { useLinks } from '../hooks/useLinks'
 import { useTags } from '../hooks/useTags'
 import { useRetryLink } from '../hooks/useLinkMutations'
-import { Button, EmptyState, Skeleton } from '../components/ui'
+import { Button, EmptyState } from '../components/ui'
 import { makeFacetResolver } from '../lib/tags/facet'
 import { errorMessage } from '../lib/api/client'
 
@@ -57,54 +57,49 @@ export function SaveScreen() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   return (
-    <section className="mx-auto flex max-w-(--w-content) flex-col gap-16 pt-16">
+    <section className="mx-auto flex max-w-(--w-content) flex-col gap-20 pt-16">
       <SaveComposer initialUrl={url} initialNote={note} />
 
-      {/* Loading: skeleton rows at the real row height (CLS 0). isPending must
-          never render an empty state (§1.7 / §4.9). */}
-      {isPending ? (
-        <ul className="@container flex flex-col" aria-hidden>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <li key={i} className="flex h-(--size-row-sm) items-center gap-12 pl-12 pr-16 sm:h-(--size-row)">
-              <span className="w-(--size-rail) shrink-0" aria-hidden />
-              <Skeleton
-                variant="thumb"
-                className="h-(--size-thumb-sm) w-(--size-thumb-sm) shrink-0 sm:h-(--size-thumb) sm:w-(--size-thumb)"
-              />
-              <div className="flex min-w-0 flex-1 flex-col gap-6">
-                <Skeleton variant="text" className="h-16 w-3/5" />
-                <Skeleton variant="text" className="h-12 w-2/5" />
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : isError ? (
-        <div className="rounded-panel bg-surface p-20 text-body text-fg-2 shadow-ring">
-          <p>{errorMessage(error)}</p>
-          <div className="mt-12">
-            <Button onClick={() => void refetch()}>다시 시도</Button>
+      {/* No time spine here: the point of this screen is "what I just saved",
+          and the composer already marks now. The board is flat and the newest
+          card sits directly under the form. */}
+      <div className="@container">
+        {isPending ? (
+          // Loading: skeleton cards at the real card dimensions (CLS 0).
+          // isPending must never render an empty state (§1.7 / §4.9).
+          <ul className={BOARD_GRID} aria-hidden>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <LinkCardSkeleton key={i} />
+            ))}
+          </ul>
+        ) : isError ? (
+          <div className="rounded-card bg-surface p-20 text-body text-fg-2 shadow-ring">
+            <p>{errorMessage(error)}</p>
+            <div className="mt-12">
+              <Button onClick={() => void refetch()}>다시 시도</Button>
+            </div>
           </div>
-        </div>
-      ) : links.length === 0 ? (
-        <EmptyState
-          title="저장된 링크가 없습니다"
-          description="URL을 붙여넣으면 제목과 태그가 자동으로 채워집니다."
-        />
-      ) : (
-        <ul className="@container flex flex-col">
-          {links.map((l) => (
-            <LinkRow
-              key={l.id}
-              link={l}
-              facetOf={facetOf}
-              selected={link === l.id}
-              onOpen={openInspector}
-              onTagClick={toggleTag}
-              onRetry={(x) => retry.mutate(x.id)}
-            />
-          ))}
-        </ul>
-      )}
+        ) : links.length === 0 ? (
+          <EmptyState
+            title="아직 모아둔 것이 없습니다"
+            description="URL을 붙여넣으면 제목과 태그가 자동으로 채워집니다."
+          />
+        ) : (
+          <ul className={BOARD_GRID}>
+            {links.map((l) => (
+              <LinkCard
+                key={l.id}
+                link={l}
+                resolveFacet={facetOf}
+                selected={link === l.id}
+                onOpen={openInspector}
+                onTagClick={toggleTag}
+                onRetry={(x) => retry.mutate(x.id)}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div ref={sentinel} className="h-2" />
       {hasNextPage && !isFetchingNextPage ? (

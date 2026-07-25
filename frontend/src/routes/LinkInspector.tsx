@@ -15,14 +15,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { getRouteApi, useNavigate, useSearch } from '@tanstack/react-router'
 import { AlertTriangle, ArrowLeft, ExternalLink, X } from 'lucide-react'
-import { Button, Chip, EmptyState, Icon, Skeleton, StatusRail, Textarea, cn, useToast } from '../components/ui'
+import { Button, Chip, EmptyState, GeneratedCover, Icon, Skeleton, StatusRail, Textarea, cn, useToast } from '../components/ui'
 import { TagCombobox } from '../components/inspector/TagCombobox'
 import type { TagComboboxHandle } from '../components/inspector/TagCombobox'
 import { useCreateTag, useLinkDetail, useTags, useUpdateLink } from '../hooks/useLinkDetail'
 import { useCreateLink, useDeleteLink, useRetryLink } from '../hooks/useLinkMutations'
 import { startPolling } from '../hooks/useSaveLink'
 import { useQueryClient } from '@tanstack/react-query'
-import { makeFacetResolver } from '../lib/tags/facet'
+import { dominantFacet, makeFacetResolver } from '../lib/tags/facet'
 import { linkDisplayTitle } from '../lib/api/types'
 import type { LinkDetail, LinkTag } from '../lib/api/types'
 import { errorMessage } from '../lib/api/client'
@@ -342,6 +342,35 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
             {link ? <StatusRail status={link.status} /> : <span className="w-(--size-rail)" aria-hidden />}
 
             <div className="min-w-0 flex-1 p-20">
+              {/* Cover header (R4) — full-bleed to the panel edges. Unlike the
+                  old thumbnail slot this is never removed: a link with no
+                  thumb_url gets a generated cover, so the panel opens with the
+                  same anchor every time (§10 4.5). */}
+              {link ? (
+                <div className="relative -mx-20 -mt-20 mb-16 aspect-[16/9] overflow-hidden bg-hover">
+                  {link.thumb_url ? (
+                    <img
+                      src={link.thumb_url}
+                      alt=""
+                      role="presentation"
+                      loading="lazy"
+                      decoding="async"
+                      className="thumb-img h-full w-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      <GeneratedCover
+                        domain={link.domain}
+                        facet={dominantFacet(link.tags, facetOf)}
+                      />
+                      <span className="absolute bottom-12 left-20 font-mono text-body text-fg-2">
+                        {link.domain}
+                      </span>
+                    </>
+                  )}
+                </div>
+              ) : null}
+
               {/* header: title + domain + close */}
               <div className="flex items-start gap-12">
                 {!isTablet ? (
@@ -381,18 +410,6 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                 <InspectorSkeleton />
               ) : (
                 <div className="mt-16 flex flex-col gap-16">
-                  {/* thumbnail — slot removed entirely when absent (no grey box) */}
-                  {link.thumb_url ? (
-                    <img
-                      src={link.thumb_url}
-                      alt=""
-                      role="presentation"
-                      loading="lazy"
-                      decoding="async"
-                      className="thumb-img aspect-video w-full rounded-thumb object-cover"
-                    />
-                  ) : null}
-
                   {/* actions */}
                   <div className="flex flex-wrap items-center gap-8">
                     <a href={link.url} target="_blank" rel="noreferrer" className={PRIMARY_ANCHOR}>
@@ -547,7 +564,8 @@ function MetaRow({ label, value, mono }: { label: string; value: string; mono?: 
 function InspectorSkeleton() {
   return (
     <div className="mt-16 flex flex-col gap-16" aria-hidden>
-      <Skeleton variant="thumb" className="aspect-video w-full" />
+      {/* No cover skeleton: the cover header renders as soon as `link` exists,
+          and this skeleton only shows while it does not. */}
       <div className="flex gap-8">
         <Skeleton className="h-32 w-1/3" />
         <Skeleton className="h-32 w-16" />

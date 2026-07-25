@@ -60,19 +60,21 @@ export function RootLayout() {
         <div className="sticky top-0 z-(--z-header)">
           <header className="glass border-b border-line-1">
             <div className="mx-auto flex h-(--size-header) max-w-(--w-page) items-center gap-16 px-(--gutter)">
-              {/* wordmark: achromatic — brand solid is reserved for 4 places (§2.1.4). Hidden < 560. */}
+              {/* wordmark: the separator dot is the ONLY accent glyph in the
+                  chrome — the brand solid stays reserved for the 4 places in
+                  §2.1.4. Hidden < 560. */}
               <Link to="/" className="hidden text-title text-fg-1 sm:block">
-                Push-Point
+                Push<span className="text-accent">·</span>Point
               </Link>
 
-              <nav className="flex items-center gap-4 text-body">
+              <nav className="flex items-center gap-2 text-body">
                 {NAV.map((n) => (
                   <Link
                     key={n.to}
                     to={n.to}
                     activeOptions={{ exact: n.to === '/' }}
                     activeProps={{ 'aria-current': 'page' }}
-                    className="rounded-control px-8 py-4 text-fg-2 transition-colors duration-(--dur-out) ease-ui hover:bg-hover data-[status=active]:font-medium data-[status=active]:text-fg-1"
+                    className="rounded-control px-12 py-6 text-fg-2 transition-colors duration-(--dur-out) ease-ui hover:bg-hover data-[status=active]:bg-accent-tint data-[status=active]:font-medium data-[status=active]:text-accent"
                   >
                     {n.label}
                   </Link>
