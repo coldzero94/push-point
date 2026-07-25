@@ -85,11 +85,19 @@ func DialContext(dialer *net.Dialer, resolver *net.Resolver) func(context.Contex
 
 // Transport returns an *http.Transport whose DialContext is the SSRF guard.
 // A fresh transport is returned each call (callers own its lifecycle/pooling).
+//
+// HTTP/2 negotiation is deliberately left off. Measured: medium.com answers Go's
+// HTTP/2 client with 403 and the same request over HTTP/1.1 with 200 (same
+// User-Agent, same headers) — its bot detection keys on the h2 client profile.
+// We fetch one page per link behind a 1 req/s per-domain limit, so multiplexing
+// buys nothing here and HTTP/1.1 costs nothing. Note this is protocol negotiation,
+// not fingerprint spoofing: we still identify ourselves honestly in User-Agent and
+// we do not attempt to imitate a browser's TLS handshake.
 func Transport() *http.Transport {
 	return &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           DialContext(nil, nil),
-		ForceAttemptHTTP2:     true,
+		ForceAttemptHTTP2:     false,
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   10,
 		IdleConnTimeout:       90 * time.Second,
