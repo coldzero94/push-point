@@ -19,17 +19,21 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	neturl "net/url"
 	"strconv"
 	"strings"
+
+	"github.com/coby/push-point/backend/internal/textutil"
 )
 
 // 센티널 에러 — API 계층이 errors.Is로 HTTP 상태에 매핑한다.
 var (
-	ErrNotFound      = errors.New("store: 리소스 없음")            // → 404 not_found
-	ErrDuplicateTag  = errors.New("store: 태그 이름 중복")          // → 400 invalid_input
-	ErrUnknownTag    = errors.New("store: 사전에 없는 태그 이름")      // → 400 invalid_input
-	ErrNotFailed     = errors.New("store: failed 상태의 링크가 아님") // → 400 invalid_input
-	ErrInvalidCursor = errors.New("store: 커서 파싱 실패")          // → 400 invalid_input
+	ErrNotFound      = errors.New("store: 리소스 없음")             // → 404 not_found
+	ErrDuplicateTag  = errors.New("store: 태그 이름 중복")           // → 400 invalid_input
+	ErrUnknownTag    = errors.New("store: 사전에 없는 태그 이름")       // → 400 invalid_input
+	ErrNotFailed     = errors.New("store: failed 상태의 링크가 아님")  // → 400 invalid_input
+	ErrInvalidCursor = errors.New("store: 커서 파싱 실패")           // → 400 invalid_input
+	ErrInvalidURL    = errors.New("store: 절대 http(s) URL이 아님") // → 400 invalid_input
 )
 
 // LinkTag는 링크에 부착된 태그 (link_tags JOIN tags).
@@ -127,6 +131,27 @@ type SaveInput struct {
 	BodyText    string // 비어 있지 않으면 body_source='client'로 표시된다
 }
 
+// Normalize는 저장 입력을 검증·정제한다. **SaveLink가 스스로 호출하므로 어떤 진입점도
+// 이걸 건너뛸 수 없다** — 이게 이 함수가 여기 있는 이유다.
+//
+// 저장은 HTTP로만 들어오지 않는다: 서버 없이 도는 iOS(임베드 모드)에서는 Share Extension이
+// 별개 프로세스라 앱의 인프로세스 서버에 붙지 못하고 App Group 큐에 직접 쓰며, 앱이 그것을
+// 드레인해 이 함수를 호출한다. 정제가 HTTP 핸들러에만 있으면 그 경로에서 통째로 사라진다.
+func (in SaveInput) Normalize() (SaveInput, error) {
+	in.URL = strings.TrimSpace(in.URL)
+	u, err := neturl.Parse(in.URL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return SaveInput{}, ErrInvalidURL
+	}
+	// 클라이언트 캡처 필드는 정제 후 **절단**한다(거부하지 않는다) — 클라이언트가 룬/바이트
+	// 경계를 서버와 똑같이 맞출 방법이 없으므로 경계에서 거부하면 정상 캡처가 조용히 실패한다.
+	// body_text만 개행을 남긴다(요약이 문장 구분에 쓴다).
+	in.Title = textutil.Clean(in.Title, textutil.MaxTitle, false)
+	in.Description = textutil.Clean(in.Description, textutil.MaxDescription, false)
+	in.BodyText = textutil.Clean(in.BodyText, textutil.MaxBodyText, true)
+	return in, nil
+}
+
 // LinkContent는 tag 잡 핸들러가 태거에 넘길 링크 콘텐츠.
 type LinkContent struct {
 	Domain      string
@@ -188,7 +213,9 @@ type Stats struct {
 // links_fts 동기화(DELETE 후 INSERT)를 같은 트랜잭션에 포함한다.
 // 목록·검색 페이지네이션은 keyset 커서 — OFFSET 금지.
 type Store interface {
-	// SaveLink는 INSERT links + scrape 잡 enqueue를 한 트랜잭션으로 커밋한다.
+	// SaveLink는 입력을 Normalize한 뒤(진입점이 HTTP든 로컬 큐 드레인이든 동일한 검증·정제를
+	// 받는다 — URL이 절대 http(s)가 아니면 ErrInvalidURL) INSERT links + scrape 잡 enqueue를
+	// 한 트랜잭션으로 커밋한다.
 	// url_hash(SHA-256 hex) 중복이면 기존 id와 duplicate=true를 반환한다.
 	// 소프트 삭제된 행과 중복이면 같은 트랜잭션에서 undelete(pending 복귀, note 교체,
 	// scrape 재-enqueue, FTS 재색인)하고 duplicate=false로 반환한다 — 신규 저장과 동일 취급.

@@ -79,10 +79,15 @@ func (f *fakeStore) setDescription(id int64, desc string) {
 }
 
 func (f *fakeStore) SaveLink(ctx context.Context, in store.SaveInput) (int64, int64, bool, error) {
+	// 실제 store와 같은 계약 — SaveLink는 자기 입력을 스스로 정규화한다(진입점 무관).
+	in, nerr := in.Normalize()
+	if nerr != nil {
+		return 0, 0, false, nerr
+	}
 	url, note := in.URL, in.Note
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.lastSave = in // 핸들러가 정제·절단해 넘긴 값을 테스트가 관찰한다
+	f.lastSave = in // 정규화까지 마친 값 — 저장 계층이 실제로 받는 것
 	if id, ok := f.byURL[url]; ok {
 		if !f.deleted[id] {
 			return id, f.links[id].CreatedAt, true, nil
