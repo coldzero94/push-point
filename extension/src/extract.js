@@ -69,7 +69,29 @@ function capture(doc, url) {
   };
 }
 
-// 주입 실행용 — executeScript는 마지막 표현식의 값을 돌려준다.
-// (모듈 시스템에 의존하지 않으려고 export 대신 이 형태를 쓴다. 같은 이유로 iOS에서도
-//  이 파일을 그대로 평가하면 결과 객체를 얻는다.)
-capture(document, location.href);
+/** captureOnce는 한 번만 캡처하고 결과를 재사용한다 — 아래 두 규약이 같은 결과를 쓴다. */
+let captured = null;
+function captureOnce() {
+  if (captured === null) captured = capture(document, location.href);
+  return captured;
+}
+
+// ── 플랫폼 어댑터 ────────────────────────────────────────────────────────────
+// 위의 캡처 규칙은 플랫폼을 모른다. 갈라지는 것은 "결과를 어떻게 돌려주는가"뿐이라
+// 그 규약만 여기 둔다 — 플랫폼을 더하려면 이 아래에 줄을 더하면 되고, 규칙 자체는
+// 건드리지 않는다.
+//
+//   iOS Safari : 공유 확장이 전역 ExtensionPreprocessingJS를 찾아 run()을 호출하고,
+//                결과는 반환값이 아니라 completionFunction으로 넘겨야 한다.
+//   Chrome MV3 : executeScript는 **마지막 표현식의 값**을 결과로 돌려준다.
+//
+// 모듈 시스템(export/import)에 의존하지 않는 이유도 같다 — 두 실행 환경 모두
+// 이 파일을 평문으로 평가한다.
+var ExtensionPreprocessingJS = { // eslint-disable-line no-var, no-unused-vars
+  run(args) {
+    args.completionFunction(captureOnce());
+  },
+  finalize() {},
+};
+
+captureOnce();

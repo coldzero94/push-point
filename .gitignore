@@ -46,6 +46,27 @@ frontend/node_modules/
 # `embed_frontend` release build (go:embed can't reach outside the package dir).
 backend/internal/web/dist/
 
+# iOS (M4) — 생성물만 제외한다. 소스는 project.yml과 Swift/entitlements이고,
+# .xcodeproj는 `just ios-gen`이 project.yml에서 만든다(pbxproj는 UUID 덩어리라
+# diff가 읽히지 않고 병합 충돌이 잦아 커밋하지 않는다).
+ios/PushPoint.xcodeproj/
+ios/*.xcworkspace/
+# gomobile 산출물 — `just ios-bind`가 backend/mobile/에서 만든다 (200MB).
+ios/Frameworks/
+# 브라우저 확장과 공유하는 캡처 규칙의 복사본 — `just ios-bind`가 넣는다.
+# 원본은 extension/src/extract.js 하나뿐이라 여기 것은 항상 생성물이다.
+ios/PushPointShare/extract.js
+# swift-openapi-generator CLI를 가져오는 보조 패키지의 빌드 캐시.
+ios/tools/openapi-gen/.build/
+ios/tools/openapi-gen/Package.resolved
+# Xcode 빌드 산출물 — `just ios-build`가 -derivedDataPath로 여기에 쓴다
+# (SPM 체크아웃까지 들어와 수백 MB + 중첩 git 저장소가 된다).
+ios/.build/
+# Xcode 사용자별 상태
+**/xcuserdata/
+**/*.xcuserstate
+DerivedData/
+
 # Orca — per-user overrides (.orca/issue-command). orca.yaml IS committed.
 .orca/
 
