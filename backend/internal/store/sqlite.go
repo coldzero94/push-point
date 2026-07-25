@@ -104,10 +104,23 @@ func (s *sqliteStore) SaveLink(ctx context.Context, in SaveInput) (int64, int64,
 			if !hasClientBody || curBodySource == "client" {
 				return nil
 			}
+			// 제목·설명은 요청이 준 경우에만 덮는다 — 셋은 각각 optional이라 본문만 실어
+			// 오는 요청(Share Extension의 일반형)이 서버가 얻어둔 제목을 지우면 안 된다.
+			// status: 스크랩이 실패해 'failed'인 링크가 이 기능의 실제 동기다. 제목·본문·태그가
+			// 다 생겼는데 UI에 "수집 실패"로 남으면 거짓이므로 done으로 올린다(queue.Fail의
+			// 같은 규약). error는 그대로 둬 진단 정보를 남긴다.
 			if _, err := tx.ExecContext(ctx, `
-				UPDATE links SET title = ?, description = ?, body_text = ?,
-				       body_source = 'client', updated_at = unixepoch()
-				WHERE id = ?`, in.Title, in.Description, in.BodyText, id); err != nil {
+				UPDATE links SET
+				       title       = CASE WHEN ? <> '' THEN ? ELSE title END,
+				       description = CASE WHEN ? <> '' THEN ? ELSE description END,
+				       body_text   = ?,
+				       body_source = 'client',
+				       status      = CASE WHEN status = 'failed' THEN 'done' ELSE status END,
+				       updated_at  = unixepoch()
+				WHERE id = ?`,
+				in.Title, in.Title,
+				in.Description, in.Description,
+				in.BodyText, id); err != nil {
 				return fmt.Errorf("store: 클라이언트 본문 보충 실패: %w", err)
 			}
 			// 본문이 새로 생겼으니 태깅·요약을 다시 돌린다(tag 핸들러가 둘 다 한다).

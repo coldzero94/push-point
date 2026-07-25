@@ -30,7 +30,8 @@ type fakeStore struct {
 	byURL     map[string]int64
 	deleted   map[int64]bool
 	tags      map[int64]*store.Tag
-	savedBody map[int64]string // SaveLink가 받은 body_text (테스트 관찰용)
+	lastSave  store.SaveInput  // 핸들러가 마지막으로 넘긴 SaveInput (테스트 관찰용)
+	savedBody map[int64]string // 링크별 클라이언트 캡처 본문
 }
 
 var _ store.Store = (*fakeStore)(nil)
@@ -81,6 +82,7 @@ func (f *fakeStore) SaveLink(ctx context.Context, in store.SaveInput) (int64, in
 	url, note := in.URL, in.Note
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.lastSave = in // 핸들러가 정제·절단해 넘긴 값을 테스트가 관찰한다
 	if id, ok := f.byURL[url]; ok {
 		if !f.deleted[id] {
 			return id, f.links[id].CreatedAt, true, nil
@@ -1078,5 +1080,44 @@ func TestTagFacet(t *testing.T) {
 	}
 	if got["dev"] != "craft" || got["신규태그"] != "neutral" || got["팟캐스트"] != "life" {
 		t.Fatalf("목록 facet = %+v", got)
+	}
+}
+
+// 클라이언트 캡처 필드는 핸들러에서 정제·절단된 뒤 store로 넘어가야 한다 — 상한 초과는
+// 400이 아니라 절단이고(클라이언트가 경계를 서버와 맞출 수 없다), body_text만 개행을 남긴다.
+func TestCreateLinkCleansCaptureFields(t *testing.T) {
+	fs, h, _ := newTestRouter(t)
+	key := testKey
+
+	long := strings.Repeat("가", 20000) // 60000바이트 — body 상한(32KB) 초과
+	payload, err := json.Marshal(map[string]string{
+		"url":         "https://cap.example/a",
+		"title":       "제목\x00제어\n줄바꿈",
+		"description": "설명\t탭",
+		"body_text":   "첫 문장이다.\n둘째 문장이다.\n" + long, // 개행은 앞쪽 — 절단 뒤에도 남아야 한다
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := do(t, h, http.MethodPost, "/api/v1/links", string(payload), key)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("상태 = %d, want 201 (본문: %s)", rec.Code, rec.Body.String())
+	}
+
+	in := fs.lastSave
+	if strings.ContainsRune(in.Title, 0) {
+		t.Errorf("제목에 제어문자가 남음: %q", in.Title)
+	}
+	if strings.Contains(in.Title, "\n") || strings.Contains(in.Description, "\t") {
+		t.Errorf("제목·설명은 개행·탭을 접어야: %q / %q", in.Title, in.Description)
+	}
+	if !strings.Contains(in.BodyText, "\n") {
+		t.Error("body_text는 개행을 유지해야 한다(요약이 문장 구분에 쓴다)")
+	}
+	if len(in.BodyText) > 32<<10 {
+		t.Errorf("body_text가 상한을 넘김: %d바이트", len(in.BodyText))
+	}
+	if !utf8.ValidString(in.BodyText) {
+		t.Error("절단이 룬 경계를 깼다")
 	}
 }
