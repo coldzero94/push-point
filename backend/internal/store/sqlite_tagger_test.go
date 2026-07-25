@@ -21,7 +21,7 @@ func TestGetLinkContent(t *testing.T) {
 	s, _, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id, _, _, err := s.SaveLink(ctx, "https://example.com/a", "내 메모")
+	id, _, _, err := s.SaveLink(ctx, SaveInput{URL: "https://example.com/a", Note: "내 메모"})
 	if err != nil {
 		t.Fatalf("SaveLink: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestLoadTagDict(t *testing.T) {
 func TestApplyTags(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
-	id, _, _, _ := s.SaveLink(ctx, "https://example.com/k", "")
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://example.com/k", Note: ""})
 	kube := tagID(t, db, "kubernetes")
 	dev := tagID(t, db, "dev")
 
@@ -137,7 +137,7 @@ func TestApplyTags(t *testing.T) {
 func TestApplyScrapeEnqueuesTag(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
-	id, _, _, _ := s.SaveLink(ctx, "https://example.com/t", "")
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://example.com/t", Note: ""})
 
 	// og:image 없어도(HasImage=false) tag 잡은 무조건 enqueue.
 	if err := s.ApplyScrape(ctx, id, ScrapeResult{Title: "t", ContentType: "article", HasImage: false}); err != nil {
@@ -153,7 +153,7 @@ func TestApplyScrapeEnqueuesTag(t *testing.T) {
 func TestSetSummaryRoundTrip(t *testing.T) {
 	s, _, _ := newTestStore(t)
 	ctx := context.Background()
-	id, _, _, _ := s.SaveLink(ctx, "https://example.com/s", "메모")
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://example.com/s", Note: "메모"})
 
 	// 저장 직후엔 빈 문자열(기본값).
 	d, err := s.GetLink(ctx, id)

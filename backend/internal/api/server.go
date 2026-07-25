@@ -36,6 +36,8 @@ func NewRouter(s *Server, apiKey string, logger *slog.Logger) http.Handler {
 	r.Use(recoverPanic(logger))
 	r.Use(requestLog(logger))
 	r.Use(thumbsCacheControl)
+	// 1MB — 클라이언트 캡처 본문(32KB 캡)에 JSON 이스케이프·여유를 크게 얹은 값.
+	r.Use(maxRequestBody(1 << 20))
 
 	strict := gen.NewStrictHandlerWithOptions(s, nil, gen.StrictHTTPServerOptions{
 		// 요청 디코드 실패(JSON 파싱 등) → 400 invalid_input

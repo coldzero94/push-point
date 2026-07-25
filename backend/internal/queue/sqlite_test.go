@@ -394,3 +394,39 @@ func TestWakeNonBlocking(t *testing.T) {
 	default:
 	}
 }
+
+// 클라이언트가 본문을 준 링크는 scrape가 확정 실패해도 'done'이다 — 제목·본문·태그가 다
+// 있는 링크를 UI에서 "실패"로 보여주는 것은 사실이 아니기 때문(error는 그대로 기록된다).
+func TestFailKeepsClientCapturedLinkDone(t *testing.T) {
+	db := newTestDB(t)
+	q := NewSQLite(db)
+	ctx := context.Background()
+	linkID := insertLink(t, db, "https://blocked.example/x")
+	if _, err := db.Exec(`UPDATE links SET body_source='client', body_text='클라 본문' WHERE id=?`, linkID); err != nil {
+		t.Fatal(err)
+	}
+	enqueue(t, db, q, KindScrape, linkID)
+
+	for i := 1; i <= 3; i++ {
+		if _, err := db.Exec(`UPDATE jobs SET run_after=unixepoch()-1`); err != nil {
+			t.Fatal(err)
+		}
+		job, err := q.Claim(ctx)
+		if err != nil || job == nil {
+			t.Fatalf("시도 %d claim: (%v, %v)", i, job, err)
+		}
+		if err := q.Fail(ctx, job.ID, fmt.Errorf("403 차단")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var status, errMsg string
+	if err := db.QueryRow(`SELECT status, error FROM links WHERE id=?`, linkID).Scan(&status, &errMsg); err != nil {
+		t.Fatal(err)
+	}
+	if status != "done" {
+		t.Errorf("클라이언트 본문 링크 status = %q, want done", status)
+	}
+	if errMsg != "403 차단" {
+		t.Errorf("실패 사유는 그대로 기록돼야: %q", errMsg)
+	}
+}

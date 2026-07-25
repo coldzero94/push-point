@@ -9,10 +9,11 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/markusmobius/go-trafilatura"
+
+	"github.com/coby/push-point/backend/internal/textutil"
 )
 
 // 스크랩 요청 공통 상수 (스펙 docs/v2/05 §4·§6).
@@ -23,9 +24,9 @@ const (
 	requestTimeout = 10 * time.Second
 	// maxBodyBytes는 응답 본문 상한(5MB) — 거대한 페이지가 메모리를 삼키지 않도록 LimitReader로 자른다.
 	maxBodyBytes = 5 << 20
-	// maxBodyText는 추출 본문 저장 상한(32KB). 보일러플레이트 제거 본문은 대개 훨씬 작아
-	// 병적 outlier만 자른다 — DB 비대화를 막되 태깅·요약에 필요한 본문은 온전히 유지한다.
-	maxBodyText = 32 << 10
+	// maxBodyText는 추출 본문 저장 상한. 저장 API의 클라이언트 캡처와 **같은 값**을 써야
+	// "어디로 들어왔느냐"에 따라 저장 형태가 달라지지 않는다 — 그래서 textutil이 원본이다.
+	maxBodyText = textutil.MaxBodyText
 )
 
 // DefaultParser는 사이트 어댑터가 매치되지 않을 때 쓰이는 범용 og 파서다.
@@ -129,20 +130,13 @@ func extractBodyText(doc *goquery.Document, u *url.URL) string {
 	if err != nil || res == nil {
 		return ""
 	}
-	return capRunes(strings.TrimSpace(res.ContentText), maxBodyText)
+	// 정제까지 textutil에 위임한다 — 스크랩 결과에도 제어문자·불완전 UTF-8이 섞일 수 있고,
+	// 클라이언트 캡처와 같은 규칙을 적용해야 저장 형태가 출처에 따라 갈라지지 않는다.
+	return textutil.Clean(res.ContentText, maxBodyText, true)
 }
 
-// capRunes는 s를 최대 limit 바이트로 자르되 UTF-8 룬 경계에서 끊는다(멀티바이트 깨짐 방지).
-func capRunes(s string, limit int) string {
-	if len(s) <= limit {
-		return s
-	}
-	cut := limit
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
-		cut--
-	}
-	return s[:cut]
-}
+// capRunes는 textutil.CapRunes의 패키지 내 별칭 (어댑터들이 쓰는 짧은 이름 유지).
+func capRunes(s string, limit int) string { return textutil.CapRunes(s, limit) }
 
 // parseMetadata는 goquery 문서에서 og:*, meta, <title>, html[lang]을 뽑는다.
 // base는 상대 og:image URL을 절대 URL로 해석하는 기준이다. ContentType은 호출자가 채운다.
