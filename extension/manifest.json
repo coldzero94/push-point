@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Push-Point 저장",
+  "version": "0.1.0",
+  "description": "보고 있는 페이지를 본문까지 함께 Push-Point에 저장합니다.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "src/service-worker.js" },
+  "options_page": "src/options.html",
+  "action": { "default_title": "Push-Point에 저장" },
+  "commands": {
+    "save-page": {
+      "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },
+      "description": "현재 페이지 저장"
+    }
+  }
+}

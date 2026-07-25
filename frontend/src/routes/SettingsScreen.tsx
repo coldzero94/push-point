@@ -35,6 +35,22 @@ export function SettingsScreen() {
   const [key, setKey] = useState(getApiKey() ?? '')
   const [savedKey, setSavedKey] = useState(getApiKey() ?? '')
   const [show, setShow] = useState(false)
+  // 확장 설정값 복사 — 실제 클릭 컨텍스트라 clipboard API가 정상 동작한다.
+  const [copied, setCopied] = useState('')
+
+  const copy = async (value: string, label: string) => {
+    if (!value) {
+      setCopied(`${label}가 비어 있습니다 — 먼저 위에서 API 키를 저장하세요`)
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(`${label}를 복사했습니다`)
+    } catch {
+      // 클립보드가 막힌 환경(비보안 컨텍스트 등) — 값을 숨기지 않고 그대로 보여준다.
+      setCopied(`복사에 실패했습니다. 직접 입력하세요: ${value}`)
+    }
+  }
   const [saved, setSaved] = useState(false)
 
   const [state, setState] = useState<CheckState>('idle')
@@ -177,6 +193,42 @@ export function SettingsScreen() {
             />
           )}
         </div>
+      </div>
+
+      <div className="border-t border-line-2" />
+
+      {/* ── 저장 도구 ─────────────────────────────────────────
+          서버가 못 가져오는 페이지(SPA·봇 차단·로그인 벽)는 브라우저 확장이 이미 렌더된
+          본문을 함께 보낸다. 여기서는 설치 안내와 확장에 넣을 값 복사만 제공한다 —
+          키는 확장 저장소로 들어가고 웹페이지는 접근할 수 없다. */}
+      <div className="space-y-12">
+        <h2 className="text-title text-fg-1">저장 도구</h2>
+        <p className="text-body text-fg-2">
+          브라우저 확장을 설치하면 보고 있는 페이지를 <strong className="text-fg-1">본문까지</strong> 저장합니다.
+          서버가 직접 가져올 수 없는 페이지(자바스크립트로 그리는 사이트, 봇 차단, 로그인이 필요한 글)도
+          그대로 담깁니다.
+        </p>
+        <ol className="ml-16 list-decimal space-y-6 text-body text-fg-2 marker:text-fg-3">
+          <li>
+            Chrome 주소창에 <code className="text-mono text-fg-1">chrome://extensions</code> 입력 → 우측 상단
+            개발자 모드 켜기
+          </li>
+          <li>“압축해제된 확장 프로그램을 로드” → 저장소의 <code className="text-mono text-fg-1">extension/</code> 폴더 선택</li>
+          <li>확장 옵션에서 아래 두 값을 붙여넣기</li>
+        </ol>
+        <div className="flex flex-wrap gap-8">
+          <Button variant="secondary" onClick={() => copy(window.location.origin, '서버 주소')}>
+            서버 주소 복사
+          </Button>
+          <Button variant="secondary" onClick={() => copy(getApiKey() ?? '', 'API 키')}>
+            API 키 복사
+          </Button>
+        </div>
+        {copied ? (
+          <p className="text-caption text-fg-2" role="status">
+            {copied}
+          </p>
+        ) : null}
       </div>
 
       <div className="border-t border-line-2" />

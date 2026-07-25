@@ -361,6 +361,11 @@ v1의 DLQ(dead letter queue)는 사라졌다. `status='failed'`인 행이 곧 DL
   반복 호출은 같은 상태로 수렴하므로 재시도 안전성은 유지된다.
 - 서버는 렌더된 HTML을 받지 않는다 — 클라이언트가 평문까지 뽑아 보낸다(요청 크기, 저장 API의
   동기 경로 예산, 적대적 HTML이 DB에 상주하지 않는 이점).
+- **캡처 규칙은 플랫폼 간 한 파일로 공유한다** — `extension/src/extract.js`는 플랫폼 API를
+  참조하지 않고 문서 하나를 받아 저장 계약을 만들며, 마지막 표현식으로 그 값을 돌려준다.
+  Chrome `executeScript`와 iOS `WKWebView.evaluateJavaScript`가 값을 받는 방식이 같으므로
+  **M4 Share Extension이 같은 파일을 그대로 쓴다.** 플랫폼을 더할 때 새로 쓰는 것은 전송
+  코드뿐이고, 빼려면 그 폴더만 지운다. 서버는 어느 플랫폼이 보냈는지 알지 못한다.
 
 ## 8. 플로우 요약
 
