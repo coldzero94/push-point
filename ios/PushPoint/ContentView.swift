@@ -13,7 +13,7 @@ struct ContentView: View {
         NavigationStack {
             Group {
                 switch backend.state {
-                case .idle:
+                case .idle, .starting:
                     ProgressView("서버 시작 중…")
                 case let .failed(message):
                     ContentUnavailableView("서버를 시작하지 못했습니다",
