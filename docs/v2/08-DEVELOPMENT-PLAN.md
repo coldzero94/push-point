@@ -1,6 +1,6 @@
 # 개발 계획
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-21
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-25
 
 이 문서는 사용자가 확정한 v2 계획의 공식 버전이다. v1의 8~10주 계획(k8s 배포·OpenAI 태깅·동기화 중심)은 폐기하고, "내가 매일 쓰는 앱"을 목표로 6개월 계획을 새로 세운다.
 
@@ -120,6 +120,48 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 
 ### M4 iOS (5주)
 
+**선행 검증 (2026-07-25 완료)** — 착수 전에 가장 깨지기 쉬운 가정 두 개를 실측으로 걷어냈다.
+
+1. **Go 백엔드가 iOS로 묶이는가** — `gomobile bind -target=ios`로 `.xcframework` 생성 확인
+   (기기 arm64 + 시뮬레이터 슬라이스). modernc sqlite·go-trafilatura가 모두 `ios/arm64`로
+   빌드된다. CGO-free 스택을 고집한 선택이 여기서 값을 했다. 참고로 `wazero`는 링크되지
+   않는다(go.mod indirect 항목일 뿐 — trafilatura의 re2go는 WASM이 아니라 생성된 Go 코드다).
+2. **확장의 메모리 예산에 들어가는가** — 아래 표.
+
+**바인드 표면을 둘로 나눈다** (`backend/mobile/`). 근거는 측정값이다 — 20,000건·97MB DB에
+콜드 프로세스로 1건 저장했을 때의 최대 RSS:
+
+| 링크한 패키지 | 최대 RSS |
+|---|---|
+| store + queue만 | 13.4 MB |
+| **+ scraper** | **64.2 MB** |
+| + summarizer | 13.2 MB |
+| + tagger | 13.4 MB |
+
+`scraper`는 **호출하지 않고 링크만 해도** +51MB다(trafilatura·readability·domdistiller·
+htmldate의 패키지 `init()`이 정규식·셀렉터 테이블을 미리 만든다). Share Extension 예산
+(~120MB)에서 시작부터 64MB를 깔면 위험하므로:
+
+- **`mobile/ppshare`** (확장용, 기기 슬라이스 19MB) — `Open`/`Save`/`Close`. scraper를
+  import하지 않는다. 본문은 `extract.js`가 DOM에서 뽑아 주므로 애초에 필요 없다. tagger·
+  summarizer는 RSS에 잡히지 않아 포함했고, 그래서 **공유 시점에 오프라인으로 태그·요약까지
+  붙어** 저장된다. 이 불변식은 의존성 그래프를 보는 테스트로 강제한다.
+- **`mobile/ppcore`** (본체용, 49MB) — `Start`/`Addr`/`Stop`. 개별 CRUD 함수를 노출하지 않고
+  **인프로세스 chi 서버를 `127.0.0.1:0`에 띄우고 주소만 돌려준다.** 함수로 내보내면 자립
+  모드의 JSON이 `api/openapi.yaml`과 갈라져 Swift가 디코더를 두 벌 갖게 되기 때문이다.
+  이 방식이면 앱은 생성된 OpenAPI 클라이언트 한 벌로 base URL만 바꾼다. 배선은
+  `internal/app`에 있어 서버 바이너리와 **같은 코드**다.
+  API 키는 앱이 실행마다 난수로 만들어 넘긴다 — iOS 루프백은 앱 샌드박스를 넘어 공유된다.
+
+SQLite `cache_size(-64000)`은 예약이 아니라 상한이라, DB가 커져도 저장 경로 RSS가 오르지
+않는다 — 별도 실행에서 97MB DB 13.8MB vs 빈 DB 14.4MB로, 차이가 방향조차 일정하지 않다.
+즉 **측정 잡음은 약 ±1MB**이고(위 표의 13.2~13.4 편차도 같은 폭), 그래서 tagger·summarizer는
+"오차 내"라고 말할 수 있고 scraper의 +51MB는 잡음과 혼동할 수 없다. 커넥션 5개×64MB=320MB
+우려는 기우였다.
+
+측정은 macOS arm64 기준이다. Go 런타임·순수 Go 의존성이 동일해 이전될 것으로 보지만,
+**Xcode 프로젝트가 생기면 실기기에서 재확인한다**(Week 2 항목).
+
 **Week 1**
 - Apple Developer Program 가입 ($99/년 — 무료 프로비저닝은 7일 만료라 매일 사용과 양립 불가)
 - ATS 결정: 서버 주소는 IP 형식(`http://100.x.y.z:8420`)만 사용 (IP는 ATS 면제). MagicDNS 이름을 쓰려면 `tailscale cert` HTTPS 필수
@@ -134,6 +176,9 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
   확인해 계약 필드에 채운다. 어느 쪽이든 App Group 큐에 **저장 계약 JSON 그대로** 적재한다.
 - 로그인 벽 사이트(인스타그램 등)를 네이티브 공유로 받을 때의 처리는 앱 내 `WKWebView` 세션
   재사용으로 풀 수 있는지 실기기에서 판정한다(§7.3.1 규칙 3). 서버는 자격증명을 갖지 않는다.
+- **확장 메모리 실기기 재측정**: 선행 검증의 13.4MB는 macOS arm64 값이다. 확장이 실제 jetsam
+  한도 안에서 도는지 `os_proc_available_memory()`로 확인하고, 예상을 벗어나면 ppshare에서
+  tagger·summarizer를 떼는 것이 첫 대응이다(scraper는 이미 빠져 있다)
 - 시뮬레이터 + localhost 서버로 저장 경로 검증
 
 **Week 3**

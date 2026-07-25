@@ -28,12 +28,9 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/mattn/go-isatty"
 
-	"github.com/coby/push-point/backend/internal/api"
+	"github.com/coby/push-point/backend/internal/app"
 	"github.com/coby/push-point/backend/internal/config"
-	"github.com/coby/push-point/backend/internal/queue"
-	"github.com/coby/push-point/backend/internal/scraper"
 	"github.com/coby/push-point/backend/internal/store"
-	"github.com/coby/push-point/backend/internal/thumbs"
 )
 
 func main() {
@@ -123,51 +120,21 @@ func serve() error {
 	logger := newLogger(cfg)
 	slog.SetDefault(logger)
 
-	db, err := store.Open(cfg.DataDir) // 마이그레이션 자동 적용 포함
+	// 배선은 internal/app에 있다 — iOS 본체 앱이 폰 안에서 **같은 서버를 인프로세스로**
+	// 띄우기 때문에(mobile/ppcore), 여기서 복제하면 두 실행 모드가 갈라진다.
+	a, err := app.Start(app.Config{
+		DataDir:           cfg.DataDir,
+		APIKey:            cfg.APIKey,
+		Addr:              cfg.Addr,
+		ScrapeConcurrency: cfg.ScrapeConcurrency,
+		AllowPrivateHosts: cfg.AllowPrivateHosts,
+	}, logger)
 	if err != nil {
 		return err
 	}
-	q := queue.NewSQLite(db.Writer)
-	st := store.New(db, q)
 
-	// M2 워커: 사이트 어댑터를 등록한 scraper Pool(singleflight·도메인 rate limit)과
-	// 디스크 썸네일 저장소. 둘 다 인터페이스 뒤에 있어 dispatcher 핸들러가 소비한다.
-	// 기본은 SSRF 가드 dial(사설/루프백/링크로컬 대상 거부) — 사용자 링크가 내부망으로
-	// 못 나가게 막는다. AllowPrivateHosts면 가드 없는 클라이언트를 주입한다
-	// (로컬 fixture·개발 전용 — 예: scripts/test_crash.sh의 127.0.0.1 fixture 스크랩).
-	var scOpts []scraper.Option
-	var tsOpts []thumbs.Option
-	if cfg.AllowPrivateHosts {
-		logger.Warn("SSRF 가드 비활성 — 사설/루프백 대상 허용 (개발/로컬 fixture 전용)")
-		scOpts = append(scOpts, scraper.WithHTTPClient(&http.Client{}))
-		tsOpts = append(tsOpts, thumbs.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}))
-	}
-	sc := scraper.New(scOpts...)
-	ts := thumbs.NewDiskStore(cfg.DataDir, tsOpts...)
-
-	// dispatcher: Run 내부에서 running→pending 크래시 복구 후 claim 루프.
-	// scrape/thumb/tag 핸들러를 Run 전에 등록한다 — 등록된 kind만 claim 대상이 된다.
-	// maxInFlight = 총 워커 수(scrape + thumb + tag) — claim을 실제 처리 용량에 묶어
-	// 무제한 running 전이(반복 크래시 시 미실행 잡 attempts 소진)를 막는다.
-	disp := queue.NewDispatcher(q, logger, cfg.ScrapeConcurrency+thumbConcurrency+tagConcurrency)
-	disp.Register(queue.KindScrape, newScrapeHandler(sc, st, cfg.ScrapeConcurrency, logger))
-	disp.Register(queue.KindThumb, newThumbHandler(sc, ts, st, logger))
-	disp.Register(queue.KindTag, newTagHandler(st, logger))
-	dispCtx, dispCancel := context.WithCancel(context.Background())
-	defer dispCancel()
-	dispDone := make(chan error, 1)
-	go func() { dispDone <- disp.Run(dispCtx) }()
-
-	router := api.NewRouter(api.NewServer(st, cfg.DataDir, logger), cfg.APIKey, logger)
-	srv := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	serveErr := make(chan error, 1)
-	go func() { serveErr <- srv.ListenAndServe() }()
 	logger.Info("pushpoint 시작",
-		"addr", cfg.Addr,
+		"addr", a.Addr(), // 실제 바인딩된 주소 (cfg.Addr의 포트가 0이면 OS가 고른 값)
 		"data_dir", cfg.DataDir,
 		"scrape_concurrency", cfg.ScrapeConcurrency,
 		"log_level", cfg.LogLevel.String(),
@@ -179,56 +146,20 @@ func serve() error {
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Wait는 서버/dispatcher 중 하나가 비정상 종료할 때만 돌아온다(fail-stop).
+	waitErr := make(chan error, 1)
+	go func() { waitErr <- a.Wait() }()
+
 	select {
-	case err := <-serveErr: // 포트 바인딩 실패 등 — 즉시 정리 후 에러 반환
-		dispCancel()
-		<-dispDone
-		if cerr := st.Close(); cerr != nil {
-			logger.Error("store close 오류", "err", cerr)
-		}
-		return fmt.Errorf("서버 실행 실패: %w", err)
-	case err := <-dispDone:
-		// 서빙 중 dispatcher 사망(결과 기록 재시도 소진 등) — 워커가 죽은 채 서빙하는
-		// 상태를 없앤다. HTTP 서버를 graceful 종료한 뒤 non-zero exit(fail-stop)하고,
-		// 재시작의 RecoverStale이 running 잡을 복구한다.
-		logger.Error("dispatcher 비정상 종료 — fail-stop", "err", err)
-		shCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if serr := srv.Shutdown(shCtx); serr != nil {
-			logger.Error("서버 셧다운 오류 — 강제 종료", "err", serr)
-			if cerr := srv.Close(); cerr != nil {
-				logger.Error("서버 강제 종료 오류", "err", cerr)
-			}
-		}
-		if cerr := st.Close(); cerr != nil {
-			logger.Error("store close 오류", "err", cerr)
-		}
-		return fmt.Errorf("dispatcher 비정상 종료: %w", err)
+	case err := <-waitErr:
+		return err
 	case <-sigCtx.Done():
 	}
 
-	// graceful shutdown 순서: 서버 먼저(새 요청 차단 + 진행 중 요청 드레인),
-	// dispatcher 다음(마지막 요청이 enqueue한 잡의 알림·기록까지 처리).
 	logger.Info("셧다운 시작")
-	shCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shCtx); err != nil {
-		// 드레인 타임아웃 — 잔여 커넥션을 강제 종료한 뒤에 dispatcher·store를 닫는다
-		// (진행 중 요청이 닫힌 DB를 만나 500이 되는 것을 막는다).
-		logger.Error("서버 셧다운 오류 — 강제 종료", "err", err)
-		if cerr := srv.Close(); cerr != nil {
-			logger.Error("서버 강제 종료 오류", "err", cerr)
-		}
-	}
-	dispCancel()
-	if err := <-dispDone; err != nil {
-		logger.Error("dispatcher 종료 오류", "err", err)
-	}
-	if err := st.Close(); err != nil {
-		logger.Error("store close 오류", "err", err)
-	}
+	err = a.Shutdown()
 	logger.Info("셧다운 완료")
-	return nil
+	return err
 }
 
 // ---- seed: 벤치용 시드 DB 생성 ----
