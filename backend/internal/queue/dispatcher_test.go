@@ -16,6 +16,27 @@ func testLogger() *slog.Logger {
 }
 
 // waitJobStatus는 잡 status가 want가 될 때까지 폴링한다 (최대 3s).
+// waitJobRetryScheduled는 "실패해서 pending으로 되돌아온" 상태를 기다린다. 초기 pending과
+// 구분하려고 attempts와 error가 기록됐는지까지 본다.
+func waitJobRetryScheduled(t *testing.T, db *sql.DB, jobID int64) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var status, errMsg string
+		var attempts int
+		if err := db.QueryRow(
+			`SELECT status, attempts, error FROM jobs WHERE id=?`, jobID,
+		).Scan(&status, &attempts, &errMsg); err != nil {
+			t.Fatalf("잡 조회 실패: %v", err)
+		}
+		if status == "pending" && attempts >= 1 && errMsg != "" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("잡 %d가 실패 후 pending으로 돌아오지 않음 (5s 초과)", jobID)
+}
+
 func waitJobStatus(t *testing.T, db *sql.DB, jobID int64, want string) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
@@ -125,7 +146,10 @@ func TestDispatcherFailsJobOnHandlerError(t *testing.T) {
 	q.Wake()
 
 	// 1차 시도 실패 → pending 복귀 + 백오프 (dispatcher가 재claim하지 못하는 미래 시각).
-	waitJobStatus(t, db, 1, "pending")
+	// **초기 pending과 구분해서 기다려야 한다** — enqueue 직후에도 status는 pending이라
+	// 상태만 보고 기다리면 dispatcher가 claim하기도 전에 통과해, 아직 비어 있는 실패 기록을
+	// 읽는다(느린 CI에서만 드러나던 경합).
+	waitJobRetryScheduled(t, db, 1)
 	r := readJob(t, db, 1)
 	if r.attempts != 1 || r.errMsg != "스크랩 실패" {
 		t.Fatalf("Fail 기록 불일치: %+v", r)
