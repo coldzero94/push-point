@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,8 +21,8 @@ const (
 
 // ---- YouTube 어댑터 ----
 //
-// oEmbed로 title/author(채널명)/thumbnail을 얻고, watch 페이지 og:description을 병합한다.
-// content_type=video. (스펙 §5 / 04-DATA-FLOW §1)
+// oEmbed로 title/author(채널명)/thumbnail을 얻고, watch 페이지에서 og:description과
+// 전체 영상 설명(body_text)을 병합한다. content_type=video. (스펙 §5 / 04-DATA-FLOW §1)
 
 type youtubeAdapter struct {
 	parser     *DefaultParser // watch 페이지 og:description 병합용 (client·UA 공유)
@@ -63,20 +64,50 @@ func (a *youtubeAdapter) Fetch(ctx context.Context, u *url.URL) (Metadata, error
 		ContentType: "video",
 	}
 	// watch 페이지 og:description 병합 — best-effort. 실패해도 oEmbed 결과는 유지한다.
-	// 본문 바이트는 무시한다 — 영상은 아티클 본문이 없다(body_text는 DefaultParser·naver만).
-	if doc, _, finalURL, err := a.parser.fetchHTML(ctx, u); err == nil {
-		page := parseMetadata(doc, finalURL)
-		if page.Description != "" {
-			m.Description = page.Description
+	if doc, page, finalURL, err := a.parser.fetchHTML(ctx, u); err == nil {
+		meta := parseMetadata(doc, finalURL)
+		if meta.Description != "" {
+			m.Description = meta.Description
 		}
 		if m.Title == "" {
-			m.Title = page.Title
+			m.Title = meta.Title
 		}
-		if page.PublishedAt != nil {
-			m.PublishedAt = page.PublishedAt
+		if meta.PublishedAt != nil {
+			m.PublishedAt = meta.PublishedAt
 		}
+		// 영상엔 아티클 본문이 없으므로 trafilatura 대신 **전체 영상 설명**을 body_text로 쓴다.
+		// og:description은 유튜브가 160자로 자르지만 페이지 JSON의 shortDescription은 전문이라
+		// 실측 6~21배 길다(932~3416자). 이미 받은 페이지에서 뽑으므로 추가 요청은 없다.
+		// 자막(timedtext)이 진짜 발화 내용이지만 유튜브가 차단한다(실측: HTTP 200 + 0바이트) —
+		// 그래서 "크리에이터가 쓴 설명"이 얻을 수 있는 최선의 내용 신호다.
+		m.BodyText = youtubeDescription(page)
 	}
 	return m, nil
+}
+
+// youtubeDescription은 watch 페이지 JSON에서 shortDescription(전체 영상 설명)을 뽑는다.
+// 값은 JSON 이스케이프 문자열이라 백슬래시를 존중하며 닫는 따옴표를 찾은 뒤 json으로 언이스케이프한다
+// (정규식 `(.*?)","`는 설명에 `","`가 들어가면 깨진다). 못 찾으면 빈 문자열 — best-effort.
+func youtubeDescription(page []byte) string {
+	const key = `"shortDescription":"`
+	i := bytes.Index(page, []byte(key))
+	if i < 0 {
+		return ""
+	}
+	start := i + len(key) - 1 // 여는 따옴표부터
+	for j := start + 1; j < len(page); j++ {
+		switch page[j] {
+		case '\\':
+			j++ // 이스케이프된 다음 바이트는 건너뛴다
+		case '"':
+			var s string
+			if err := json.Unmarshal(page[start:j+1], &s); err != nil {
+				return ""
+			}
+			return capRunes(strings.TrimSpace(s), maxBodyText)
+		}
+	}
+	return ""
 }
 
 // ---- X / Twitter 어댑터 ----

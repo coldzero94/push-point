@@ -11,9 +11,10 @@ import (
 // YouTube: oEmbed(title/author/thumbnail) + watch 페이지 og:description 병합, content_type=video.
 func TestYouTubeAdapter(t *testing.T) {
 	const oembedJSON = `{"title":"Go 동시성 강의","author_name":"채널이름","thumbnail_url":"https://i.ytimg.com/vi/abc/hq.jpg"}`
+	// shortDescription(전체 설명)은 페이지 JSON에 있고 og:description보다 길다 — body_text 소스.
 	const watchHTML = `<html lang="en"><head>
 		<meta property="og:description" content="이 영상은 고루틴을 다룬다.">
-		</head><body></body></html>`
+		</head><body><script>var x = {"shortDescription":"고루틴과 채널을 처음부터 설명합니다.\n\n00:00 인트로\n05:00 채널","isLive":false};</script></body></html>`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -55,6 +56,30 @@ func TestYouTubeAdapter(t *testing.T) {
 	}
 	if m.ContentType != "video" {
 		t.Errorf("ContentType = %q, want video", m.ContentType)
+	}
+	// 영상 본문 = 전체 설명(shortDescription). og:description(짧은 blurb)과 별개 필드다.
+	if !strings.Contains(m.BodyText, "고루틴과 채널을 처음부터") || !strings.Contains(m.BodyText, "05:00 채널") {
+		t.Errorf("BodyText(전체 설명) = %q", m.BodyText)
+	}
+}
+
+func TestYouTubeDescription(t *testing.T) {
+	cases := []struct {
+		name, page, want string
+	}{
+		{"기본", `{"shortDescription":"안녕하세요","x":1}`, "안녕하세요"},
+		{"이스케이프 개행", `{"shortDescription":"1줄\n2줄"}`, "1줄\n2줄"},
+		{"이스케이프 따옴표", `{"shortDescription":"그는 \"안녕\"이라 했다"}`, `그는 "안녕"이라 했다`},
+		// 설명 안에 `","`가 들어가도 깨지지 않아야 한다(정규식 축약 매칭의 실패 모드).
+		{"본문에 따옴표-쉼표", `{"shortDescription":"a\",\"b 계속","author":"x"}`, `a","b 계속`},
+		{"유니코드 이스케이프", `{"shortDescription":"가나"}`, "가나"},
+		{"키 없음", `{"other":"x"}`, ""},
+		{"닫는 따옴표 없음(잘린 페이지)", `{"shortDescription":"열린 채로`, ""},
+	}
+	for _, c := range cases {
+		if got := youtubeDescription([]byte(c.page)); got != c.want {
+			t.Errorf("%s: youtubeDescription = %q, want %q", c.name, got, c.want)
+		}
 	}
 }
 
