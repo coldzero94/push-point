@@ -66,11 +66,14 @@ type payload struct {
 // 그 자리에서 보여줘야 하는데 API는 그 값을 돌려주지 않기 때문이다. 즉 "자립 모드와 서버
 // 모드가 같은 JSON"이라는 원칙의 의도된 예외이고, 적용 범위는 **입력 페이로드**다.
 type result struct {
-	ID         int64 `json:"id"`
-	CreatedAt  int64 `json:"created_at"`
-	Duplicate  bool  `json:"duplicate"`
-	Tags       int   `json:"tags"`
-	SummaryLen int   `json:"summary_len"`
+	ID        int64 `json:"id"`
+	CreatedAt int64 `json:"created_at"`
+	Duplicate bool  `json:"duplicate"`
+	Tags      int   `json:"tags"`
+	// TagNames는 붙은 태그 이름. 확장 UI가 "서버 없이 태그가 붙었다"를 그 자리에서
+	// 보여주기 위해 필요하다 — 개수만으로는 무엇이 붙었는지 알 수 없다.
+	TagNames   []string `json:"tag_names"`
+	SummaryLen int      `json:"summary_len"`
 	// TagError는 **태깅 자체가 실패**했을 때만 채워진다 — 이 경우 Tags는 0이고, 링크는
 	// 태그 없이 저장된 것이다.
 	TagError string `json:"tag_error,omitempty"`
@@ -151,7 +154,7 @@ func Save(payloadJSON string) (string, error) {
 	if tr, tagErr := tagjob.Run(ctx, st, id); tagErr != nil {
 		res.TagError = tagErr.Error()
 	} else {
-		res.Tags, res.SummaryLen = tr.Tags, tr.SummaryLen
+		res.Tags, res.TagNames, res.SummaryLen = tr.Tags, tr.Names, tr.SummaryLen
 		if tr.SummaryErr != nil {
 			res.SummaryError = tr.SummaryErr.Error()
 		}

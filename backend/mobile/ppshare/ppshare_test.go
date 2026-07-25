@@ -54,7 +54,7 @@ func TestSaveResultJSONKeys(t *testing.T) {
 		t.Fatalf("결과가 JSON 객체가 아니다 (%q): %v", out, err)
 	}
 	// 성공 경로에 반드시 있어야 하는 키. tag_error·summary_error는 omitempty라 여기 없다.
-	for _, key := range []string{"id", "created_at", "duplicate", "tags", "summary_len"} {
+	for _, key := range []string{"id", "created_at", "duplicate", "tags", "tag_names", "summary_len"} {
 		if _, ok := got[key]; !ok {
 			t.Errorf("결과에 %q 키가 없다 — Swift 디코더가 조용히 0/false를 읽는다: %s", key, out)
 		}
@@ -87,6 +87,10 @@ func TestSaveTagsAndSummarizesInline(t *testing.T) {
 	// 본문에 kubernetes·golang이 있으므로 시드 사전에 반드시 걸린다.
 	if r.Tags == 0 {
 		t.Error("태그가 하나도 안 붙었다 — 인라인 태깅이 동작하지 않는다")
+	}
+	// 확장 UI가 칩으로 그리므로 이름이 개수와 맞아야 한다.
+	if len(r.TagNames) != r.Tags {
+		t.Errorf("태그 이름 수(%d)가 개수(%d)와 다르다 — UI가 빈 칩을 그린다", len(r.TagNames), r.Tags)
 	}
 	// 산문 5문장이라 요약 가드를 통과해야 한다.
 	if r.SummaryLen == 0 {

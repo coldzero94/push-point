@@ -54,6 +54,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_CFBundleDisplayName: Push-Point
+        # 알림 배너·홈 화면에 쓰이는 아이콘. 없으면 배너 왼쪽이 빈 격자로 나온다.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: PushPoint/Info.plist
       properties:
