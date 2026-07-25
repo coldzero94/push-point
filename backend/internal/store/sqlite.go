@@ -73,6 +73,11 @@ func hostOf(rawURL string) string {
 // 부착 태그 전부 제거, scrape 재-enqueue, FTS 재색인)하고 신규 저장처럼 duplicate=false로
 // 반환한다 — url_hash UNIQUE 때문에 재-INSERT가 불가능하므로 이 경로가 "삭제한 URL 재저장"이다.
 func (s *sqliteStore) SaveLink(ctx context.Context, in SaveInput) (int64, int64, bool, error) {
+	// 진입점(HTTP 핸들러 / 임베드 모드의 로컬 큐 드레인)에 무관하게 같은 검증·정제를 받는다.
+	in, err0 := in.Normalize()
+	if err0 != nil {
+		return 0, 0, false, err0
+	}
 	url, note := in.URL, in.Note
 	hasClientBody := in.BodyText != ""
 	// 클라이언트 본문이 있으면 body_source='client'로 굳힌다 — 이후 스크랩이 3필드를 덮지 않는다.
