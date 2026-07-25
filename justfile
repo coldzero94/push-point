@@ -262,9 +262,12 @@ web-build: _web-required
         echo "web-build: frontend/dist → backend/internal/web/dist 복사 완료 (릴리스: just release)"
 
 # embed_frontend 태그는 web-build가 만든 backend/internal/web/dist를 요구한다(순서 고정).
+# -ldflags "-s -w"는 배포 바이너리의 심볼 테이블·DWARF를 벗겨 크기를 줄인다(28→21MB). Go
+# 런타임 트레이스백은 그대로라 panic 스택은 계속 나온다(운영 디버깅 무손상). dev용 just build는
+# 심볼 유지(delve 등 로컬 디버깅).
 # 릴리스 빌드 — 웹 번들을 내장한 단일 바이너리 backend/bin/pushpoint
 release: web-build
-    cd backend && go build -tags embed_frontend -o bin/pushpoint ./cmd/pushpoint
+    cd backend && go build -tags embed_frontend -ldflags "-s -w" -o bin/pushpoint ./cmd/pushpoint
     @echo "release: backend/bin/pushpoint (웹 embed 포함) 빌드 완료"
 
 # 웹 정적 분석 (oxlint)
