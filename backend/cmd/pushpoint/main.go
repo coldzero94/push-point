@@ -58,10 +58,19 @@ func main() {
 			}
 			return
 		case "eval":
-			fmt.Println("eval: M3에서 구현 예정 — golden set(nlu/golden/) 태깅 정확도 측정")
+			if err := runEval(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "eval 실패:", err)
+				os.Exit(1)
+			}
+			return
+		case "golden-capture":
+			if err := runGoldenCapture(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "golden-capture 실패:", err)
+				os.Exit(1)
+			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval])\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval|golden-capture])\n", os.Args[1])
 			os.Exit(2)
 		}
 	}
