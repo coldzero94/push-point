@@ -14,6 +14,7 @@ import (
 
 	"github.com/coby/push-point/backend/internal/api/gen"
 	"github.com/coby/push-point/backend/internal/store"
+	"github.com/coby/push-point/backend/internal/textutil"
 )
 
 // Server는 StrictServerInterface 구현체. Store만 의존한다
@@ -229,11 +230,23 @@ func (s *Server) CreateLink(ctx context.Context, request gen.CreateLinkRequestOb
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return gen.CreateLink400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, "url must be absolute http(s)"))}, nil
 	}
-	note := ""
-	if request.Body.Note != nil {
-		note = *request.Body.Note
+	deref := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
 	}
-	id, createdAt, duplicate, err := s.store.SaveLink(ctx, raw, note)
+	// 클라이언트 캡처 필드는 정제 후 **절단**한다(거부하지 않는다) — 클라이언트가 룬/바이트
+	// 경계를 서버와 똑같이 맞출 방법이 없으므로 경계에서 400을 내면 정상 캡처가 조용히 실패한다.
+	// body_text만 개행을 남긴다(요약이 문장 구분에 쓴다).
+	in := store.SaveInput{
+		URL:         raw,
+		Note:        deref(request.Body.Note),
+		Title:       textutil.Clean(deref(request.Body.Title), textutil.MaxTitle, false),
+		Description: textutil.Clean(deref(request.Body.Description), textutil.MaxDescription, false),
+		BodyText:    textutil.Clean(deref(request.Body.BodyText), textutil.MaxBodyText, true),
+	}
+	id, createdAt, duplicate, err := s.store.SaveLink(ctx, in)
 	if err != nil {
 		return nil, err // → 500 internal (server.go의 ResponseErrorHandlerFunc)
 	}

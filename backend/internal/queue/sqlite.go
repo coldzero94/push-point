@@ -152,8 +152,14 @@ func (q *SQLite) Fail(ctx context.Context, id int64, jobErr error) error {
 		// thumb·tag은 best-effort — 링크 상태를 건드리지 않는다. scrape가 성공해 콘텐츠가
 		// 준비된 유용한 링크가, 썸네일/태깅(순수 파생물) 실패로 'failed'가 되면 안 된다.
 		if Kind(kind) != KindThumb && Kind(kind) != KindTag {
-			_, err = tx.ExecContext(ctx,
-				`UPDATE links SET status='failed', error=?, updated_at=unixepoch() WHERE id=?`,
+			// scrape가 확정 실패해도 **클라이언트가 본문을 준 링크는 done**이다 — 제목·설명·
+			// 본문·태그가 다 있는 링크를 UI에서 "실패"로 보여주는 것은 사실이 아니다.
+			// error는 그대로 기록하므로 진단 정보는 남는다.
+			_, err = tx.ExecContext(ctx, `
+				UPDATE links SET
+					status = CASE WHEN body_source = 'client' THEN 'done' ELSE 'failed' END,
+					error = ?, updated_at = unixepoch()
+				WHERE id = ?`,
 				msg, linkID)
 			if err != nil {
 				return fmt.Errorf("queue: fail(job=%d) 링크 %d 상태 기록 실패: %w", id, linkID, err)

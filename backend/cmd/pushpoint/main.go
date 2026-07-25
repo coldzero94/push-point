@@ -414,15 +414,43 @@ func runLoadgen(args []string) error {
 	addr := fs.String("addr", "http://localhost:8080", "서버 주소")
 	key := fs.String("key", "dev-key", "API 키")
 	n := fs.Int("n", 1000, "요청 수")
+	// 클라이언트 캡처 경로를 실제로 태우기 위한 페이로드 크기. 기본 0이면 예전과 같은
+	// ~50B 요청이라 새 경로가 게이트를 한 번도 통과하지 않은 채 그린이 유지된다 —
+	// 그러면 그린이 증거가 아니게 되므로 bench_http.sh가 캡 최대치로도 한 번 더 돈다.
+	bodyBytes := fs.Int("body-bytes", 0, "클라이언트 캡처 body_text 바이트 수 (0이면 미전송)")
+	metaBytes := fs.Int("meta-bytes", 0, "title+description 합계 바이트 수 (0이면 미전송)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	// 한글을 섞는다 — 절단·정제가 룬 경계를 다루므로 ASCII만으로는 실제 비용을 못 잰다.
+	filler := func(nBytes int) string {
+		if nBytes <= 0 {
+			return ""
+		}
+		unit := "본문 텍스트 sample body text "
+		var b strings.Builder
+		for b.Len() < nBytes {
+			b.WriteString(unit)
+		}
+		return b.String()[:nBytes]
+	}
+	capture := ""
+	if *bodyBytes > 0 || *metaBytes > 0 {
+		half := *metaBytes / 2
+		blob, err := json.Marshal(map[string]string{
+			"title": filler(half), "description": filler(*metaBytes - half), "body_text": filler(*bodyBytes),
+		})
+		if err != nil {
+			return err
+		}
+		capture = "," + string(blob[1:len(blob)-1]) // 바깥 중괄호를 벗겨 url 뒤에 이어 붙인다
 	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	nonce := time.Now().UnixNano() // 실행마다 고유 URL — 항상 신규 저장(201) 경로 측정
 	lat := make([]float64, 0, *n)
 
 	for i := 0; i < *n; i++ {
-		body := fmt.Sprintf(`{"url":"https://loadgen.example.com/%d/%d"}`, nonce, i)
+		body := fmt.Sprintf(`{"url":"https://loadgen.example.com/%d/%d"%s}`, nonce, i, capture)
 		req, err := http.NewRequest(http.MethodPost, *addr+"/api/v1/links", strings.NewReader(body))
 		if err != nil {
 			return err

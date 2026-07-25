@@ -78,4 +78,22 @@ if [ "$LOADGEN_EXIT" -eq 0 ]; then
 else
   echo "FAIL p99=${P99}ms (게이트 50ms)"
 fi
+# ⑦ 클라이언트 캡처 경로도 같은 게이트로 잰다. 기본 요청은 ~50B라 새 경로(본문 정제·절단 +
+# 큰 INSERT)를 한 번도 지나지 않으므로, 그것만 재면 그린이 증거가 되지 못한다.
+# 캡 최대치(body_text 32KB + title/description 2560B)로 500회.
+echo "--- 클라이언트 캡처 페이로드(32KB 본문) ---"
+CAPTURE_JSON="$TMP/bench_capture.json"
+set +e
+"$ROOT/backend/bin/pushpoint" loadgen -addr "$BASE" -key "$KEY" -n 500 \
+  -body-bytes 32768 -meta-bytes 2560 >"$CAPTURE_JSON"
+CAPTURE_EXIT=$?
+set -e
+cat "$CAPTURE_JSON"
+if [ "$CAPTURE_EXIT" -ne 0 ]; then
+  echo "FAIL 클라이언트 캡처 경로가 게이트를 넘김"
+  LOADGEN_EXIT="$CAPTURE_EXIT"
+else
+  echo "PASS 클라이언트 캡처 경로도 게이트 통과"
+fi
+
 exit "$LOADGEN_EXIT"

@@ -66,27 +66,56 @@ func hostOf(rawURL string) string {
 }
 
 // SaveLink는 INSERT links + scrape 잡 enqueue + FTS 색인을 한 트랜잭션으로 커밋한다.
-// url_hash 중복이면 기존 id와 duplicate=true 반환 (멱등 — 잡·색인·note 변경 없음).
+// url_hash 중복이면 기존 id와 duplicate=true 반환. 이때 저장된 본문이 서버 출처인데 요청이
+// 클라이언트 본문을 실어 오면 제목·설명·본문을 1회 보충하고 tag 잡을 재-enqueue한다
+// (이미 클라이언트 본문이면 무동작 — 반복 호출은 같은 상태로 수렴한다).
 // 소프트 삭제된 행과 중복이면 같은 트랜잭션에서 undelete(pending 복귀, note 교체,
 // 부착 태그 전부 제거, scrape 재-enqueue, FTS 재색인)하고 신규 저장처럼 duplicate=false로
 // 반환한다 — url_hash UNIQUE 때문에 재-INSERT가 불가능하므로 이 경로가 "삭제한 URL 재저장"이다.
-func (s *sqliteStore) SaveLink(ctx context.Context, url, note string) (int64, int64, bool, error) {
+func (s *sqliteStore) SaveLink(ctx context.Context, in SaveInput) (int64, int64, bool, error) {
+	url, note := in.URL, in.Note
+	hasClientBody := in.BodyText != ""
+	// 클라이언트 본문이 있으면 body_source='client'로 굳힌다 — 이후 스크랩이 3필드를 덮지 않는다.
+	bodySource := ""
+	if hasClientBody {
+		bodySource = "client"
+	}
 	hash := urlHash(url)
 	var (
 		id        int64
 		createdAt int64
 		duplicate bool
+		// backfilled: 중복 링크에 클라이언트 본문을 보충했는가 (커밋 후 Wake 여부를 정한다)
+		backfilled bool
 	)
 	err := s.withWriteTx(ctx, func(tx *sql.Tx) error {
 		// 중복 확인 — writer 단일 커넥션이라 check-then-insert가 경합 없이 안전
 		var deletedAt sql.NullInt64
+		var curBodySource string
 		err := tx.QueryRowContext(ctx,
-			`SELECT id, created_at, deleted_at FROM links WHERE url_hash = ?`, hash,
-		).Scan(&id, &createdAt, &deletedAt)
+			`SELECT id, created_at, deleted_at, body_source FROM links WHERE url_hash = ?`, hash,
+		).Scan(&id, &createdAt, &deletedAt, &curBodySource)
 		switch {
 		case err == nil && !deletedAt.Valid:
 			duplicate = true
-			return nil
+			// 단방향 보충: 저장된 본문이 서버 출처인데 이번엔 클라이언트가 본문을 줬다.
+			// 이 경로가 없으면 **이미 실패해 저장돼 있는 링크**(이 기능의 실제 동기)에
+			// 본문을 넣을 방법이 없다. 반대 방향(클라이언트 → 서버 덮어쓰기)은 하지 않는다.
+			if !hasClientBody || curBodySource == "client" {
+				return nil
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE links SET title = ?, description = ?, body_text = ?,
+				       body_source = 'client', updated_at = unixepoch()
+				WHERE id = ?`, in.Title, in.Description, in.BodyText, id); err != nil {
+				return fmt.Errorf("store: 클라이언트 본문 보충 실패: %w", err)
+			}
+			// 본문이 새로 생겼으니 태깅·요약을 다시 돌린다(tag 핸들러가 둘 다 한다).
+			if err := s.q.EnqueueTx(tx, queue.KindTag, id); err != nil {
+				return fmt.Errorf("store: 보충 후 tag 잡 enqueue 실패: %w", err)
+			}
+			backfilled = true
+			return reindexFTS(ctx, tx, id)
 		case err == nil: // 소프트 삭제된 행 — undelete 후 신규 저장과 동일하게 처리
 			// 부착 태그 전부 제거 — 신규 저장은 태그 0으로 시작한다. 시스템 동작이므로
 			// tag_feedback(사용자 수정 이력)은 남기지 않는다. 이어지는 reindexFTS가
@@ -94,34 +123,60 @@ func (s *sqliteStore) SaveLink(ctx context.Context, url, note string) (int64, in
 			if _, err := tx.ExecContext(ctx, `DELETE FROM link_tags WHERE link_id = ?`, id); err != nil {
 				return fmt.Errorf("store: undelete 태그 정리 실패: %w", err)
 			}
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE links SET deleted_at = NULL, status = 'pending', error = '',
-				        note = ?, updated_at = unixepoch() WHERE id = ?`, note, id); err != nil {
+			// body_source는 **무조건** 새 값으로 리셋한다 — 안 하면 옛 'client' 플래그가
+			// 살아남아 새 스크랩이 영원히 3필드를 못 쓴다. 3필드는 이번 요청이 준 경우에만
+			// 덮어쓴다(빈 요청이 멀쩡한 제목을 지우지 않게).
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE links SET deleted_at = NULL, status = 'pending', error = '',
+				       note = ?, body_source = ?,
+				       title       = CASE WHEN ? <> '' THEN ? ELSE title END,
+				       description = CASE WHEN ? <> '' THEN ? ELSE description END,
+				       body_text   = CASE WHEN ? <> '' THEN ? ELSE body_text END,
+				       updated_at = unixepoch()
+				WHERE id = ?`,
+				note, bodySource,
+				in.Title, in.Title,
+				in.Description, in.Description,
+				in.BodyText, in.BodyText,
+				id); err != nil {
 				return fmt.Errorf("store: 링크 undelete 실패: %w", err)
 			}
 			if err := s.q.EnqueueTx(tx, queue.KindScrape, id); err != nil {
 				return fmt.Errorf("store: scrape 잡 enqueue 실패: %w", err)
 			}
+			if hasClientBody {
+				if err := s.q.EnqueueTx(tx, queue.KindTag, id); err != nil {
+					return fmt.Errorf("store: tag 잡 enqueue 실패: %w", err)
+				}
+			}
 			return reindexFTS(ctx, tx, id)
 		case !errors.Is(err, sql.ErrNoRows):
 			return fmt.Errorf("store: url_hash 중복 확인 실패: %w", err)
 		}
-		if err := tx.QueryRowContext(ctx,
-			`INSERT INTO links (url, url_hash, domain, note) VALUES (?, ?, ?, ?) RETURNING id, created_at`,
-			url, hash, hostOf(url), note,
+		if err := tx.QueryRowContext(ctx, `
+			INSERT INTO links (url, url_hash, domain, note, title, description, body_text, body_source)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at`,
+			url, hash, hostOf(url), note, in.Title, in.Description, in.BodyText, bodySource,
 		).Scan(&id, &createdAt); err != nil {
 			return fmt.Errorf("store: links INSERT 실패: %w", err)
 		}
 		if err := s.q.EnqueueTx(tx, queue.KindScrape, id); err != nil {
 			return fmt.Errorf("store: scrape 잡 enqueue 실패: %w", err)
 		}
+		// 클라이언트 본문이 이미 있으면 스크랩을 기다리지 않고 태깅·요약을 시작한다 —
+		// 스크랩이 실패할 페이지라서 클라이언트가 준 것이므로 여기 의존하면 안 된다.
+		if hasClientBody {
+			if err := s.q.EnqueueTx(tx, queue.KindTag, id); err != nil {
+				return fmt.Errorf("store: tag 잡 enqueue 실패: %w", err)
+			}
+		}
 		return reindexFTS(ctx, tx, id)
 	})
 	if err != nil {
 		return 0, 0, false, err
 	}
-	if !duplicate {
-		s.q.Wake() // 커밋 성공 후에만 dispatcher를 깨운다
+	if !duplicate || backfilled {
+		s.q.Wake() // 커밋 성공 후에만 dispatcher를 깨운다 (보충한 경우도 깨워야 태깅이 돈다)
 	}
 	return id, createdAt, duplicate, nil
 }

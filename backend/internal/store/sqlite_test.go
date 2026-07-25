@@ -62,7 +62,7 @@ func TestSaveLink(t *testing.T) {
 	s, db, fq := newTestStore(t)
 	ctx := context.Background()
 
-	id, createdAt, dup, err := s.SaveLink(ctx, "https://example.com/a", "메모")
+	id, createdAt, dup, err := s.SaveLink(ctx, SaveInput{URL: "https://example.com/a", Note: "메모"})
 	if err != nil {
 		t.Fatalf("SaveLink 실패: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestSaveLink(t *testing.T) {
 	}
 
 	// 중복 저장 — 기존 id + duplicate=true, 잡·Wake 추가 없음 (멱등)
-	id2, _, dup2, err := s.SaveLink(ctx, "https://example.com/a", "다른 메모")
+	id2, _, dup2, err := s.SaveLink(ctx, SaveInput{URL: "https://example.com/a", Note: "다른 메모"})
 	if err != nil {
 		t.Fatalf("중복 SaveLink 실패: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestListLinks_CursorBoundary(t *testing.T) {
 	// 5건 저장 후 created_at을 겹치게 설정: id1,2,3 → 100 / id4,5 → 200
 	var ids []int64
 	for _, u := range []string{"https://a.com/1", "https://a.com/2", "https://a.com/3", "https://a.com/4", "https://a.com/5"} {
-		id, _, _, err := s.SaveLink(ctx, u, "")
+		id, _, _, err := s.SaveLink(ctx, SaveInput{URL: u, Note: ""})
 		if err != nil {
 			t.Fatalf("SaveLink 실패: %v", err)
 		}
@@ -171,8 +171,8 @@ func TestListLinks_Filters(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id1, _, _, _ := s.SaveLink(ctx, "https://f.com/1", "")
-	id2, _, _, _ := s.SaveLink(ctx, "https://f.com/2", "")
+	id1, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://f.com/1", Note: ""})
+	id2, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://f.com/2", Note: ""})
 	if _, err := s.UpdateLink(ctx, id1, nil, []string{"golang"}); err != nil {
 		t.Fatalf("태그 부착 실패: %v", err)
 	}
@@ -206,9 +206,9 @@ func TestSearch_ModeBranchAndEscape(t *testing.T) {
 	s, _, _ := newTestStore(t)
 	ctx := context.Background()
 
-	idKube, _, _, _ := s.SaveLink(ctx, "https://s.com/kube", "쿠버네티스 입문 강의")
-	idPct, _, _, _ := s.SaveLink(ctx, "https://s.com/pct", "progress 100% done")
-	idNoPct, _, _, _ := s.SaveLink(ctx, "https://s.com/nopct", "progress 1000 done")
+	idKube, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://s.com/kube", Note: "쿠버네티스 입문 강의"})
+	idPct, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://s.com/pct", Note: "progress 100% done"})
+	idNoPct, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://s.com/nopct", Note: "progress 1000 done"})
 
 	tests := []struct {
 		name     string
@@ -259,7 +259,7 @@ func TestSearch_FTSSyncOnUpdate(t *testing.T) {
 	s, _, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id, _, _, _ := s.SaveLink(ctx, "https://s.com/sync", "임시 메모")
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://s.com/sync", Note: "임시 메모"})
 
 	// note 수정 → 같은 트랜잭션 재색인 → 즉시 검색 히트
 	note := "쿠버네티스 네트워킹 정리"
@@ -288,7 +288,7 @@ func TestSearch_FTSCursor(t *testing.T) {
 	// 동일 텍스트 3건 — bm25 동점 → id 오름차순 tie-break로 커서 순회
 	var ids []int64
 	for _, u := range []string{"https://c.com/1", "https://c.com/2", "https://c.com/3"} {
-		id, _, _, err := s.SaveLink(ctx, u, "쿠버네티스 강의 노트")
+		id, _, _, err := s.SaveLink(ctx, SaveInput{URL: u, Note: "쿠버네티스 강의 노트"})
 		if err != nil {
 			t.Fatalf("SaveLink 실패: %v", err)
 		}
@@ -332,7 +332,7 @@ func TestSearch_LikeCursor(t *testing.T) {
 
 	var ids []int64
 	for _, u := range []string{"https://lc.com/1", "https://lc.com/2", "https://lc.com/3", "https://lc.com/4", "https://lc.com/5"} {
-		id, _, _, err := s.SaveLink(ctx, u, "메모 노트")
+		id, _, _, err := s.SaveLink(ctx, SaveInput{URL: u, Note: "메모 노트"})
 		if err != nil {
 			t.Fatalf("SaveLink 실패: %v", err)
 		}
@@ -380,7 +380,7 @@ func TestUpdateLink_TagReplaceAndFeedback(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id, _, _, _ := s.SaveLink(ctx, "https://u.com/1", "")
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://u.com/1", Note: ""})
 
 	// 전체 교체: dev + golang 추가 (seed 사전에 존재)
 	d, err := s.UpdateLink(ctx, id, nil, []string{"dev", "golang"})
@@ -433,7 +433,7 @@ func TestDeleteLink_Soft(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id, _, _, _ := s.SaveLink(ctx, "https://d.com/1", "쿠버네티스 삭제 테스트")
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://d.com/1", Note: "쿠버네티스 삭제 테스트"})
 	if err := s.DeleteLink(ctx, id); err != nil {
 		t.Fatalf("DeleteLink 실패: %v", err)
 	}
@@ -467,7 +467,7 @@ func TestDeleteLink_ClearsPendingFailedJobs(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id, _, _, err := s.SaveLink(ctx, "https://dj.com/1", "")
+	id, _, _, err := s.SaveLink(ctx, SaveInput{URL: "https://dj.com/1", Note: ""})
 	if err != nil {
 		t.Fatalf("SaveLink 실패: %v", err) // 저장이 pending scrape 잡 1건 생성
 	}
@@ -502,7 +502,7 @@ func TestRetryLink(t *testing.T) {
 	s, db, fq := newTestStore(t)
 	ctx := context.Background()
 
-	id, _, _, _ := s.SaveLink(ctx, "https://r.com/1", "")
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://r.com/1", Note: ""})
 
 	// failed가 아니면 거부
 	if err := s.RetryLink(ctx, id); !errors.Is(err, ErrNotFailed) {
@@ -695,7 +695,7 @@ func TestTagRenameAndDelete_ReindexFTS(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id, _, _, _ := s.SaveLink(ctx, "https://t.com/1", "")
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://t.com/1", Note: ""})
 	created, err := s.CreateTag(ctx, "옛이름", nil, "")
 	if err != nil {
 		t.Fatalf("CreateTag 실패: %v", err)
@@ -734,9 +734,9 @@ func TestStats(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id1, _, _, _ := s.SaveLink(ctx, "https://st.com/1", "")
-	id2, _, _, _ := s.SaveLink(ctx, "https://st.com/2", "")
-	id3, _, _, _ := s.SaveLink(ctx, "https://st.com/3", "")
+	id1, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://st.com/1", Note: ""})
+	id2, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://st.com/2", Note: ""})
+	id3, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://st.com/3", Note: ""})
 	if _, err := s.UpdateLink(ctx, id1, nil, []string{"dev"}); err != nil {
 		t.Fatalf("태그 부착 실패: %v", err)
 	}
@@ -785,8 +785,8 @@ func TestSearch_Filters(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id1, _, _, _ := s.SaveLink(ctx, "https://sf.com/1", "쿠버네티스 노트 하나")
-	id2, _, _, _ := s.SaveLink(ctx, "https://sf.com/2", "쿠버네티스 노트 둘")
+	id1, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://sf.com/1", Note: "쿠버네티스 노트 하나"})
+	id2, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://sf.com/2", Note: "쿠버네티스 노트 둘"})
 	if _, err := s.UpdateLink(ctx, id1, nil, []string{"kubernetes"}); err != nil {
 		t.Fatalf("태그 부착 실패: %v", err)
 	}
@@ -811,7 +811,7 @@ func TestSaveLink_ResaveAfterDelete(t *testing.T) {
 	s, db, fq := newTestStore(t)
 	ctx := context.Background()
 
-	id, createdAt, dup, err := s.SaveLink(ctx, "https://re.com/1", "원래 메모")
+	id, createdAt, dup, err := s.SaveLink(ctx, SaveInput{URL: "https://re.com/1", Note: "원래 메모"})
 	if err != nil || dup {
 		t.Fatalf("첫 저장 = (dup=%v, %v)", dup, err)
 	}
@@ -820,7 +820,7 @@ func TestSaveLink_ResaveAfterDelete(t *testing.T) {
 	}
 
 	// 재저장 — duplicate=false (201 신규처럼), 같은 행 재사용
-	id2, createdAt2, dup2, err := s.SaveLink(ctx, "https://re.com/1", "새 메모")
+	id2, createdAt2, dup2, err := s.SaveLink(ctx, SaveInput{URL: "https://re.com/1", Note: "새 메모"})
 	if err != nil {
 		t.Fatalf("재저장 실패: %v", err)
 	}
@@ -857,7 +857,7 @@ func TestSaveLink_ResaveAfterDelete(t *testing.T) {
 	}
 
 	// 재저장된 링크에 다시 저장하면 평범한 중복 (멱등)
-	id3, _, dup3, err := s.SaveLink(ctx, "https://re.com/1", "또 다른 메모")
+	id3, _, dup3, err := s.SaveLink(ctx, SaveInput{URL: "https://re.com/1", Note: "또 다른 메모"})
 	if err != nil || !dup3 || id3 != id {
 		t.Fatalf("undelete 후 중복 저장 = (id=%d, dup=%v, %v), want (id=%d, true)", id3, dup3, err, id)
 	}
@@ -871,7 +871,7 @@ func TestSaveLink_UndeleteResetsTagsAndNote(t *testing.T) {
 	s, db, _ := newTestStore(t)
 	ctx := context.Background()
 
-	id, _, _, err := s.SaveLink(ctx, "https://ud.com/1", "옛 메모")
+	id, _, _, err := s.SaveLink(ctx, SaveInput{URL: "https://ud.com/1", Note: "옛 메모"})
 	if err != nil {
 		t.Fatalf("첫 저장 실패: %v", err)
 	}
@@ -888,7 +888,7 @@ func TestSaveLink_UndeleteResetsTagsAndNote(t *testing.T) {
 		t.Fatalf("DeleteLink 실패: %v", err)
 	}
 	// 빈 note로 재저장 — 신규 저장 취급
-	id2, _, dup, err := s.SaveLink(ctx, "https://ud.com/1", "")
+	id2, _, dup, err := s.SaveLink(ctx, SaveInput{URL: "https://ud.com/1", Note: ""})
 	if err != nil || dup || id2 != id {
 		t.Fatalf("재저장 = (id=%d, dup=%v, %v), want (id=%d, dup=false)", id2, dup, err, id)
 	}
@@ -923,7 +923,7 @@ func TestCursor_ModeMismatch(t *testing.T) {
 	ctx := context.Background()
 
 	for _, u := range []string{"https://m.com/1", "https://m.com/2"} {
-		if _, _, _, err := s.SaveLink(ctx, u, "쿠버네티스 커서 노트"); err != nil {
+		if _, _, _, err := s.SaveLink(ctx, SaveInput{URL: u, Note: "쿠버네티스 커서 노트"}); err != nil {
 			t.Fatalf("SaveLink 실패: %v", err)
 		}
 	}

@@ -114,6 +114,19 @@ type ScrapeResult struct {
 	BodyText    string // links.body_text — 추출 본문(태거·요약 입력 전용, FTS·API 미노출)
 }
 
+// SaveInput은 저장 요청. url 외는 전부 optional이며, Title/Description/BodyText는
+// **클라이언트 캡처** 값이다 — 서버가 fetch할 수 없는 페이지(SPA·봇 차단·로그인 벽)에서
+// 이미 렌더된 콘텐츠를 가진 클라이언트가 함께 보낸다. 길이 절단·정제는 호출자(API 계층)가
+// 이미 끝낸 상태로 넘긴다. 위치 인자 대신 구조체인 이유: 필드가 더 붙을 자리(M4 iOS)이고,
+// 인자 순서 실수가 조용한 데이터 오염이 되기 때문이다.
+type SaveInput struct {
+	URL         string
+	Note        string
+	Title       string
+	Description string
+	BodyText    string // 비어 있지 않으면 body_source='client'로 표시된다
+}
+
 // LinkContent는 tag 잡 핸들러가 태거에 넘길 링크 콘텐츠.
 type LinkContent struct {
 	Domain      string
@@ -176,11 +189,17 @@ type Stats struct {
 // 목록·검색 페이지네이션은 keyset 커서 — OFFSET 금지.
 type Store interface {
 	// SaveLink는 INSERT links + scrape 잡 enqueue를 한 트랜잭션으로 커밋한다.
-	// url_hash(SHA-256 hex) 중복이면 기존 id와 duplicate=true를 반환 (멱등, 잡 없음).
+	// url_hash(SHA-256 hex) 중복이면 기존 id와 duplicate=true를 반환한다.
 	// 소프트 삭제된 행과 중복이면 같은 트랜잭션에서 undelete(pending 복귀, note 교체,
 	// scrape 재-enqueue, FTS 재색인)하고 duplicate=false로 반환한다 — 신규 저장과 동일 취급.
 	// createdAt은 DB가 실제로 기록한 값 (INSERT ... RETURNING / 기존 행 조회).
-	SaveLink(ctx context.Context, url, note string) (id, createdAt int64, duplicate bool, err error)
+	//
+	// in.BodyText가 있으면(클라이언트 캡처): 3필드를 함께 저장하고 body_source='client'로
+	// 표시하며, **tag 잡도 같은 트랜잭션에서 enqueue**한다 — 그러지 않으면 스크랩이 실패하는
+	// 바로 그 페이지에서 태그·요약이 영원히 안 생긴다(tag 잡의 유일한 생성 지점이 ApplyScrape다).
+	// 중복(미삭제) 링크라도 저장된 본문이 서버 출처면 **1회 보충**한다(이미 클라이언트 본문이면
+	// 무동작) — 반복 호출은 같은 상태로 수렴하므로 재시도 안전성은 유지된다.
+	SaveLink(ctx context.Context, in SaveInput) (id, createdAt int64, duplicate bool, err error)
 
 	// GetLink는 상세 조회. 소프트 삭제됐거나 없으면 ErrNotFound.
 	GetLink(ctx context.Context, id int64) (*LinkDetail, error)

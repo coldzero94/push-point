@@ -32,14 +32,27 @@ func (s *sqliteStore) GetLinkURL(ctx context.Context, linkID int64) (string, str
 // 넘겨야 한다 — 빈 값이면 UPDATE가 CHECK 위반으로 실패하며, 이는 숨기지 않고 그대로 반환한다.
 func (s *sqliteStore) ApplyScrape(ctx context.Context, linkID int64, m ScrapeResult) error {
 	err := s.withWriteTx(ctx, func(tx *sql.Tx) error {
+		// 클라이언트 캡처 값은 스크랩이 덮지 않는다(body_source='client'): 서버가 못 가져오는
+		// 페이지라서 클라이언트가 준 것이므로 서버 재시도 결과는 항상 더 나쁘다.
+		// 그리고 body_source와 **무관하게** 빈 추출 결과로 기존 본문을 지우지 않는다 —
+		// scrapeResult가 추출 실패를 ""로 넘기는데, 그대로 덮으면 멀쩡한 본문이 사라진다
+		// (클라이언트 캡처와 무관한 순수 서버 경로의 버그였다).
 		res, err := tx.ExecContext(ctx, `
 			UPDATE links SET
-				title = ?, description = ?, author = ?, content_type = ?, lang = ?,
-				published_at = ?, duration_sec = ?, word_count = ?, body_text = ?,
+				title       = CASE WHEN body_source = 'client' THEN title       ELSE ? END,
+				description = CASE WHEN body_source = 'client' THEN description ELSE ? END,
+				body_text   = CASE WHEN body_source = 'client' OR ? = '' THEN body_text ELSE ? END,
+				body_source = CASE WHEN body_source = 'client' THEN body_source
+				                   WHEN ? <> '' THEN 'server' ELSE body_source END,
+				author = ?, content_type = ?, lang = ?,
+				published_at = ?, duration_sec = ?, word_count = ?,
 				status = 'done', error = '', updated_at = unixepoch()
 			WHERE id = ? AND deleted_at IS NULL`,
-			m.Title, m.Description, m.Author, m.ContentType, m.Lang,
-			m.PublishedAt, m.DurationSec, m.WordCount, m.BodyText, linkID)
+			m.Title, m.Description,
+			m.BodyText, m.BodyText,
+			m.BodyText,
+			m.Author, m.ContentType, m.Lang,
+			m.PublishedAt, m.DurationSec, m.WordCount, linkID)
 		if err != nil {
 			return fmt.Errorf("store: 스크랩 결과 UPDATE 실패: %w", err)
 		}

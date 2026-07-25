@@ -23,23 +23,25 @@ import (
 // 핸들러 계층 테스트가 sqlite 구현과 결합하지 않도록 store.Store 계약만 흉내 낸다.
 
 type fakeStore struct {
-	mu      sync.Mutex
-	nextID  int64
-	nextTag int64
-	links   map[int64]*store.LinkDetail
-	byURL   map[string]int64
-	deleted map[int64]bool
-	tags    map[int64]*store.Tag
+	mu        sync.Mutex
+	nextID    int64
+	nextTag   int64
+	links     map[int64]*store.LinkDetail
+	byURL     map[string]int64
+	deleted   map[int64]bool
+	tags      map[int64]*store.Tag
+	savedBody map[int64]string // SaveLink가 받은 body_text (테스트 관찰용)
 }
 
 var _ store.Store = (*fakeStore)(nil)
 
 func newFakeStore() *fakeStore {
 	f := &fakeStore{
-		links:   make(map[int64]*store.LinkDetail),
-		byURL:   make(map[string]int64),
-		deleted: make(map[int64]bool),
-		tags:    make(map[int64]*store.Tag),
+		links:     make(map[int64]*store.LinkDetail),
+		byURL:     make(map[string]int64),
+		deleted:   make(map[int64]bool),
+		tags:      make(map[int64]*store.Tag),
+		savedBody: make(map[int64]string),
 	}
 	f.mustAddTag("dev", store.FacetCraft)
 	f.mustAddTag("golang", store.FacetCraft)
@@ -75,7 +77,8 @@ func (f *fakeStore) setDescription(id int64, desc string) {
 	f.links[id].Description = desc
 }
 
-func (f *fakeStore) SaveLink(ctx context.Context, url, note string) (int64, int64, bool, error) {
+func (f *fakeStore) SaveLink(ctx context.Context, in store.SaveInput) (int64, int64, bool, error) {
+	url, note := in.URL, in.Note
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if id, ok := f.byURL[url]; ok {

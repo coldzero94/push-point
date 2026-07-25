@@ -119,7 +119,11 @@ paths:
                 status: pending
                 created_at: 1752980000
         "200":
-          description: 동일 `url_hash`가 이미 존재 — 새로 만들지 않고 기존 id 반환 (멱등)
+          description: >-
+            동일 `url_hash`가 이미 존재 — 새로 만들지 않고 기존 id를 반환한다. 저장된 본문이
+            서버 출처인데 요청이 클라이언트 본문(body_text)을 실어 오면 제목·설명·본문을 **1회
+            보충**하고 태깅을 다시 돌린다(이미 클라이언트 본문이면 아무것도 하지 않는다).
+            반복 호출은 같은 상태로 수렴하므로 재시도는 여전히 안전하다.
           content:
             application/json:
               schema:
@@ -676,7 +680,11 @@ components:
 
     LinkInput:
       type: object
-      description: 링크 저장 요청
+      description: >-
+        링크 저장 요청. title·description·body_text는 **클라이언트 캡처**용 optional 필드다 —
+        서버가 fetch할 수 없는 페이지(SPA·봇 차단·로그인 벽)에서 이미 렌더된 콘텐츠를 가진
+        클라이언트(브라우저 확장·iOS Share Extension)가 함께 보낸다. 서버는 길이를 **절단**할 뿐
+        초과를 400으로 거부하지 않는다(클라이언트가 룬/바이트 경계를 서버와 맞출 방법이 없다).
       required: [url]
       properties:
         url:
@@ -684,6 +692,18 @@ components:
         note:
           type: string
           description: 개인 메모 (optional)
+        title:
+          type: string
+          description: 클라이언트가 캡처한 제목 (optional, 512바이트로 절단)
+        description:
+          type: string
+          description: 클라이언트가 캡처한 설명 (optional, 2048바이트로 절단)
+        body_text:
+          type: string
+          description: >-
+            클라이언트가 추출한 본문 평문 (optional, 32KB로 절단). 값이 있으면 서버는 이 링크의
+            본문 출처를 'client'로 표시하고, 이후 스크랩이 제목·설명·본문을 덮어쓰지 않는다.
+            태깅·요약이 이 본문을 입력으로 쓴다 — 그래서 스크랩이 실패해도 태그·요약이 나온다.
 
     LinkUpdateInput:
       type: object

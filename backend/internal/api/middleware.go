@@ -115,3 +115,17 @@ func (w *cacheControlWriter) Write(b []byte) (int, error) {
 	}
 	return w.ResponseWriter.Write(b)
 }
+
+// maxRequestBody는 요청 바디를 n바이트로 제한한다. 클라이언트 캡처가 본문을 실어 오면서
+// 바디가 커졌으므로(32KB 캡 + 여유), 무제한 읽기로 메모리를 태우지 못하게 막는다.
+// 인증 그룹 **밖**에 둬서 미인증 요청도 상한을 받는다.
+func maxRequestBody(n int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, n)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
