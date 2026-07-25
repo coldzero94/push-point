@@ -1,3 +1,4 @@
+import OSLog
 import PPShare
 import UIKit
 import UniformTypeIdentifiers
@@ -11,6 +12,9 @@ import UniformTypeIdentifiers
 /// scraper가 빠진 최소 프레임워크(PPShare)만 링크한다 — 확장의 메모리 예산이 이유다
 /// (docs/v2/08-DEVELOPMENT-PLAN.md M4 선행 검증).
 final class ShareViewController: UIViewController {
+    /// 확장은 화면이 곧 닫히고 Go 쪽은 반환 JSON 말고 통로가 없다 — os_log가 사후에
+    /// 무슨 일이 있었는지 알 수 있는 유일한 수단이다(콘솔.app에서 조회).
+    private static let log = Logger(subsystem: "com.pushpoint.app", category: "share")
     private let label = UILabel()
 
     override func viewDidLoad() {
@@ -23,9 +27,19 @@ final class ShareViewController: UIViewController {
         do {
             let payload = try await extractPayload()
             let result = try save(payload)
-            show(result.duplicate ? "이미 저장된 링크입니다" : "저장했습니다\(result.tagSuffix)")
+            show(result.message)
+            // 확장의 실패는 이 로그가 아니면 어디에도 남지 않는다 — 화면은 곧 닫히고,
+            // Go 쪽은 반환 JSON 말고 다른 통로가 없다. os_log는 콘솔.app으로 꺼내 볼 수 있다.
+            Self.log.info("저장 완료 id=\(result.id) dup=\(result.duplicate) tags=\(result.tags) sum=\(result.summaryLen)")
+            if let tagError = result.tagError, !tagError.isEmpty {
+                Self.log.error("태깅 실패 id=\(result.id): \(tagError)")
+            }
+            if let summaryError = result.summaryError, !summaryError.isEmpty {
+                Self.log.error("요약 기록 실패 id=\(result.id): \(summaryError)")
+            }
         } catch {
             show("저장 실패: \(error.localizedDescription)")
+            Self.log.error("저장 실패: \(error.localizedDescription)")
         }
         // 사용자가 결과를 읽을 최소 시간만 두고 닫는다 — 공유는 2초 안에 끝나야 한다.
         try? await Task.sleep(for: .milliseconds(700))
@@ -116,21 +130,40 @@ final class ShareViewController: UIViewController {
 }
 
 /// PpshareSave가 돌려주는 JSON.
+///
+/// 키 이름은 Go 쪽 `ppshare.result`와 맞춰야 한다 — Swift는 키로 디코드하므로 한쪽만
+/// 바뀌면 조용히 0/false를 읽는다. Go 쪽에 그 드리프트를 잡는 테스트가 있다.
 private struct SaveResult: Decodable {
     let id: Int64
     let duplicate: Bool
     let tags: Int
     let summaryLen: Int
+    /// 태깅 자체가 실패했을 때만 채워진다 — 이 경우 tags는 0이고 링크는 태그 없이 저장됐다.
     let tagError: String?
+    /// 태깅은 됐지만 요약 기록만 실패했을 때 채워진다.
+    let summaryError: String?
 
     enum CodingKeys: String, CodingKey {
         case id, duplicate, tags
         case summaryLen = "summary_len"
         case tagError = "tag_error"
+        case summaryError = "summary_error"
     }
 
-    /// 태그가 붙었으면 그 사실을 보여준다 — 확장이 오프라인에서 태깅까지 했다는 증거다.
-    var tagSuffix: String { tags > 0 ? " · 태그 \(tags)개" : "" }
+    /// 사용자에게 보여줄 한 줄.
+    ///
+    /// 태깅 실패를 굳이 드러내는 이유: 본문 없이 URL만 공유된 링크에는 재시도 잡이 없어서
+    /// **그 실패가 영구적**이다(ppshare.Save 주석의 두 번째·세 번째 경로). "저장했습니다"만
+    /// 보여주면 사용자는 태그가 영영 안 붙는 줄 모른 채 넘어간다.
+    /// 반대로 요약 실패는 부가물이 하나 빠진 것뿐이라 화면을 차지할 값어치가 없다 —
+    /// 대신 로그로 남긴다.
+    var message: String {
+        if let tagError, !tagError.isEmpty {
+            return duplicate ? "이미 저장됨 · 태그 실패" : "저장했습니다 · 태그 실패"
+        }
+        if duplicate { return "이미 저장된 링크입니다" }
+        return tags > 0 ? "저장했습니다 · 태그 \(tags)개" : "저장했습니다"
+    }
 }
 
 private enum ShareError: LocalizedError {
