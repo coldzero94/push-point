@@ -1,7 +1,6 @@
-package main
+package app
 
 // scrape/thumb/tag 잡 핸들러 배선 — dispatcher가 kind별로 이 핸들러들을 호출한다.
-// (M2: scrape가 메타+status='done' 전이, thumb는 best-effort. M3: tag가 규칙 태거로 부착.)
 
 import (
 	"context"
@@ -13,19 +12,18 @@ import (
 	"github.com/coby/push-point/backend/internal/queue"
 	"github.com/coby/push-point/backend/internal/scraper"
 	"github.com/coby/push-point/backend/internal/store"
-	"github.com/coby/push-point/backend/internal/summarizer"
-	"github.com/coby/push-point/backend/internal/tagger"
+	"github.com/coby/push-point/backend/internal/tagjob"
 	"github.com/coby/push-point/backend/internal/thumbs"
 )
 
-// thumbConcurrency는 thumb 워커 동시성 상한 (스펙 §6: thumb 워커 2 goroutine).
+// thumbConcurrency는 thumb 워커 동시성 상한 (02-TECH-SPEC.md §4: tagger/thumb 워커 각 2 goroutine).
 const thumbConcurrency = 2
 
 // tagConcurrency는 tag 워커 동시성 상한. 태깅은 네트워크 0인 순수 CPU 작업이라 여유 있게 둔다.
 const tagConcurrency = 4
 
 // newScrapeHandler는 scrape 잡 핸들러를 만든다. dispatcher가 잡마다 goroutine을
-// 띄우므로(동시성 상한은 핸들러 책임) 여기서 semaphore(concurrency, 기본 8)로 상한을 건다 (스펙 §6).
+// 띄우므로(동시성 상한은 핸들러 책임) 여기서 semaphore(concurrency, 기본 8)로 상한을 건다 (02-TECH-SPEC.md §4).
 // 처리: link_id → 원본 URL 조회 → scraper.Fetch(어댑터 라우팅) → store.ApplyScrape로
 // 메타+status='done' 반영. og:image가 있으면 ApplyScrape가 같은 트랜잭션에서 thumb 잡을 enqueue한다.
 // 네트워크·파싱 실패는 감추지 않고 그대로 반환 — 재시도/확정 실패 판정은 큐 몫이다.
@@ -128,9 +126,10 @@ func newThumbHandler(sc scraper.Scraper, ts thumbs.Store, st store.Store, log *s
 	}
 }
 
-// newTagHandler는 tag 잡 핸들러를 만든다 (best-effort, 순수 CPU). 처리: link_id → 콘텐츠
-// 조회 → 태그 사전 로드 → tagger.BuildDictionary + Classify → store.ApplyTags(source='rules')
-// → summarizer.Summarize → store.SetSummary (한 번 읽은 본문으로 태깅과 요약을 함께 한다).
+// newTagHandler는 tag 잡 핸들러를 만든다 (best-effort, 순수 CPU). 실제 파이프라인은
+// internal/tagjob에 있다 — iOS Share Extension(mobile/ppshare)이 서버 없이 같은 처리를
+// 해야 해서, 순서와 실패 관용이 갈라지지 않도록 한 곳에 뒀다. 여기서는 워커 관심사
+// (동시성 상한·로깅)만 얹는다.
 // 실패는 그대로 반환해 큐가 재시도하지만, max_attempts 소진 후에도 링크 status는 불변이다
 // (queue.Fail이 KindTag를 thumb과 함께 best-effort로 처리 — 태깅 실패가 링크를 죽이지 않는다).
 func newTagHandler(st store.Store, log *slog.Logger) queue.Handler {
@@ -142,50 +141,15 @@ func newTagHandler(st store.Store, log *slog.Logger) queue.Handler {
 		defer sem.Release(1)
 
 		start := time.Now()
-		content, err := st.GetLinkContent(ctx, job.LinkID)
+		res, err := tagjob.Run(ctx, st, job.LinkID)
 		if err != nil {
 			return err
 		}
-		entries, err := st.LoadTagDict(ctx)
-		if err != nil {
-			return err
+		if res.SummaryErr != nil {
+			log.Warn("summary 기록 실패 — 태깅은 성공", "link", job.LinkID, "err", res.SummaryErr)
 		}
-		dict := tagger.BuildDictionary(toTagEntries(entries))
-		scored := tagger.Classify(toTaggerContent(content), dict)
-		if err := st.ApplyTags(ctx, job.LinkID, toStoreScored(scored)); err != nil {
-			return err
-		}
-		// 추출식 요약(M5 Phase A) — 태깅과 **같은 본문 처리**를 재사용하므로 추가 I/O가 없다.
-		// 순서가 중요하다: 태그가 코어이고 요약은 부가물이라 ApplyTags 뒤에 오고, 실패해도
-		// 잡을 실패시키지 않는다(태그는 이미 커밋됐다 — thumb의 best-effort 관용과 같은 규칙).
-		// 빈 문자열도 정상 값이다(가드 불통과 = 요약 없음).
-		sum := summarizer.Summarize(content.Body, content.Description)
-		if err := st.SetSummary(ctx, job.LinkID, sum); err != nil {
-			log.Warn("summary 기록 실패 — 태깅은 성공", "link", job.LinkID, "err", err)
-		}
-		log.Debug("tag 완료", "link", job.LinkID, "tags", len(scored),
-			"sum_len", len(sum), "dur_ms", time.Since(start).Milliseconds())
+		log.Debug("tag 완료", "link", job.LinkID, "tags", res.Tags,
+			"sum_len", res.SummaryLen, "dur_ms", time.Since(start).Milliseconds())
 		return nil
 	}
-}
-
-// store ↔ tagger 타입 변환 — store가 tagger를 import하지 않도록(층 분리) 핸들러가 다리를 놓는다.
-func toTagEntries(es []store.TagDictEntry) []tagger.TagEntry {
-	out := make([]tagger.TagEntry, len(es))
-	for i, e := range es {
-		out[i] = tagger.TagEntry{ID: e.ID, Name: e.Name, Aliases: e.Aliases, Facet: e.Facet}
-	}
-	return out
-}
-
-func toTaggerContent(c store.LinkContent) tagger.Content {
-	return tagger.Content{Domain: c.Domain, Title: c.Title, Description: c.Description, Note: c.Note, Body: c.Body}
-}
-
-func toStoreScored(ss []tagger.ScoredTag) []store.ScoredTag {
-	out := make([]store.ScoredTag, len(ss))
-	for i, s := range ss {
-		out[i] = store.ScoredTag{TagID: s.TagID, Confidence: s.Confidence}
-	}
-	return out
 }
