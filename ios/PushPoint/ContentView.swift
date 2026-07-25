@@ -7,22 +7,31 @@ import SwiftUI
 /// 회상의 단서는 대개 "언제"이므로 날짜로 끊는다 — keyset 커서가 `(created_at, id)`
 /// 정렬이라 페이지 경계와 섹션 경계가 자연스럽게 맞는다.
 struct ContentView: View {
+    /// 태그 이름 → facet. 탭 컨테이너(RootView)가 받아 두 탭이 나눠 쓴다 —
+    /// 탭마다 따로 받으면 같은 태그가 화면마다 다른 색이 될 수 있다.
+    let facets: [String: PP.Facet]
+    /// 통계에서 넘어온 필터. 켜져 있으면 목록이 좁혀지고 해제 칩이 뜬다.
+    @Binding var filter: ListFilter?
+
     @EnvironmentObject private var backend: Backend
     @State private var links: [Components.Schemas.Link] = []
-    /// 태그 이름 → facet. 계약의 `LinkTag`에 facet이 없어서 사전에서 한 번 받아 둔다.
-    @State private var facets: [String: PP.Facet] = [:]
     @State private var loadError: String?
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                content.padding(.horizontal, 16).padding(.bottom, 24)
+                VStack(alignment: .leading, spacing: 12) {
+                    if let filter { filterBar(filter) }
+                    content
+                }
+                .padding(.horizontal, 16).padding(.bottom, 24)
             }
             .background(PP.Palette.canvas)
             .navigationTitle("Push-Point")
             .refreshable { await load() }
         }
         .task(id: backend.state) { await load() }
+        .task(id: filter) { await load() }
     }
 
     @ViewBuilder
@@ -59,7 +68,7 @@ struct ContentView: View {
                         } label: {
                             LinkCard(link: link,
                                      facetOf: { facets[$0] ?? .neutral },
-                                     activeTag: nil,
+                                     activeTag: activeTagName,
                                      resolveThumb: backend.absoluteURL)
                         }
                         .buttonStyle(.plain)
@@ -68,6 +77,35 @@ struct ContentView: View {
             }
         }
         .padding(.top, 8)
+    }
+
+    /// 켜진 필터를 화면에 남긴다. 통계에서 넘어왔는데 목록이 조용히 좁아져 있으면
+    /// 사용자는 링크가 사라졌다고 읽는다 — 무엇이 걸려 있는지와 푸는 법이 같이 있어야 한다.
+    private func filterBar(_ active: ListFilter) -> some View {
+        HStack(spacing: 8) {
+            Text(label(for: active))
+                .font(PP.Typo.label)
+                .foregroundStyle(PP.Palette.fg2)
+            Button { filter = nil } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(PP.Typo.label)
+                    .foregroundStyle(PP.Palette.fg3)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(PP.Palette.hover)
+        .clipShape(Capsule())
+        .overlay(Capsule().strokeBorder(PP.Palette.lineControl, lineWidth: 1))
+    }
+
+    private func label(for active: ListFilter) -> String {
+        switch active {
+        case let .tag(name): "태그: \(name)"
+        case .failed: "수집 실패만"
+        }
     }
 
     /// 시간 척추 — serif 머리글 + 건수 + 하한선. serif가 쓰이는 유일한 자리다(§2.2.5).
@@ -82,6 +120,11 @@ struct ContentView: View {
                 .foregroundStyle(PP.Palette.fg3)
             Rectangle().fill(PP.Palette.line1).frame(height: 1)
         }
+    }
+
+    private var activeTagName: String? {
+        if case let .tag(name) = filter { return name }
+        return nil
     }
 
     // MARK: - 구간
@@ -121,15 +164,14 @@ struct ContentView: View {
     private func load() async {
         guard case .running = backend.state, let client = backend.client else { return }
         do {
-            let list = try await client.listLinks(.init(query: .init(limit: 50)))
+            var query = Operations.listLinks.Input.Query(limit: 50)
+            switch filter {
+            case let .tag(name): query.tag = name
+            case .failed: query.status = .failed
+            case nil: break
+            }
+            let list = try await client.listLinks(.init(query: query))
             links = try list.ok.body.json.links
-            // 사전은 30개 남짓이라 매번 받아도 부담이 없고, 태그가 추가돼도 화면이 즉시
-            // 따라간다. 목록 응답에 facet이 없는 것을 여기서 메운다.
-            let dict = try await client.listTags(.init())
-            facets = Dictionary(
-                uniqueKeysWithValues: try dict.ok.body.json
-                    .map { ($0.name, PP.Facet(apiValue: $0.facet.rawValue)) }
-            )
             loadError = nil
         } catch {
             loadError = error.localizedDescription
