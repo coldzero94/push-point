@@ -9,11 +9,13 @@ import (
 )
 
 // 요약 파이프라인 상수. 값은 golden 100건 실측에서 왔고, 재측정 경로는 just eval-summary다.
+// 가드 임계값은 **공개**한다 — eval 하네스가 "왜 요약이 없었는가"를 같은 값으로 세야
+// 하고(중복 리터럴은 조용히 어긋난다), 그 분해가 임계값을 사람에게 계속 보이게 한다.
 const (
-	// minBodyRunes 미만이면 요약하지 않는다 — 본문이 사실상 없는 SPA 블로그(velog·toss·brunch)다.
-	minBodyRunes = 200
-	// minProseSents 미만이면 요약하지 않는다 — 고를 문장이 없다.
-	minProseSents = 3
+	// MinBodyRunes 미만이면 요약하지 않는다 — 본문이 사실상 없는 SPA 블로그(velog·toss·brunch)다.
+	MinBodyRunes = 200
+	// MinProseSents 미만이면 요약하지 않는다 — 고를 문장이 없다.
+	MinProseSents = 3
 	// rankThreshold 미만이면 그래프가 거의 완전그래프라 중심성이 무의미하다 → 문서 순서를 쓴다.
 	rankThreshold = 5
 	// k3Threshold 이상이면 3문장, 아니면 2문장.
@@ -22,9 +24,9 @@ const (
 	maxSents = 200
 	// maxSummaryRunes는 요약 총 길이 상한 — 인스펙터 폭 기준 약 6줄.
 	maxSummaryRunes = 450
-	// descDropRatio: 요약이 description과 이만큼 겹치면 통째로 버린다. 같은 말을 두 번 하는
+	// DescDropRatio: 요약이 description과 이만큼 겹치면 통째로 버린다. 같은 말을 두 번 하는
 	// 화면을 막는 **제품 규칙**이며, 랭킹을 바꾸는 손잡이가 아니다(발동 건수는 eval이 노출).
-	descDropRatio = 0.8
+	DescDropRatio = 0.8
 )
 
 // Summarize는 본문에서 핵심 문장 2~3개를 골라 개행으로 이어 돌려준다.
@@ -34,19 +36,24 @@ const (
 // 5겹 가드: 본문 길이 → 산문 게이트 → 산문 문장 수 → 길이 캡 → description 중복.
 // 실측상 저장 링크의 약 71%에서 요약이 나오고 나머지는 빈 문자열이다(태거와 같은 graceful degrade).
 func Summarize(body, description string) string {
-	if utf8.RuneCountInString(body) < minBodyRunes {
+	if utf8.RuneCountInString(body) < MinBodyRunes {
 		return ""
 	}
+	// 완전히 같은 문장은 한 번만 담는다 — 반복되는 보일러플레이트가 서로 완전 유사한
+	// clique를 만들어 중심성을 독식하는 것을 그래프 구성 전에 없앤다.
 	var prose []string
+	seen := make(map[string]bool)
 	for _, s := range Split(body) {
-		if IsProse(s) {
-			prose = append(prose, s)
-			if len(prose) == maxSents {
-				break
-			}
+		if !IsProse(s) || seen[s] {
+			continue
+		}
+		seen[s] = true
+		prose = append(prose, s)
+		if len(prose) == maxSents {
+			break
 		}
 	}
-	if len(prose) < minProseSents {
+	if len(prose) < MinProseSents {
 		return ""
 	}
 
@@ -86,7 +93,7 @@ func Summarize(body, description string) string {
 	summary := strings.Join(out, "\n")
 
 	// 최종 노출 게이트: description과 사실상 같은 말이면 보여주지 않는다.
-	if Containment(contentTokens(summary), descTok) >= descDropRatio {
+	if Containment(contentTokens(summary), descTok) >= DescDropRatio {
 		return ""
 	}
 	return summary

@@ -34,7 +34,8 @@ type summaryMetrics struct {
 	descDup     float64 // description과의 평균 겹침 (낮을수록 좋음)
 	intraDup    float64 // 선택 문장 간 최대 겹침 평균 (낮을수록 좋음)
 	compression float64 // len(요약)/len(본문) 평균
-	tagRecall   float64 // 요약만 본문으로 준 태거의 Recall@3
+	tagRecall   float64 // 요약만 본문으로 준 태거의 Recall@3 (두 시스템 공통 산출분 기준)
+	tagRecallN  int     // ④의 분모 — 두 시스템이 **모두** 요약을 낸 건수
 	stable      float64 // 같은 입력 2회 → 바이트 동일 비율
 }
 
@@ -67,38 +68,62 @@ func runSummaryEval(args []string) error {
 	fmt.Println("가독성·논지 포착·문맥 단절은 `summary-eval -dump` 출력을 사람이 읽어야 판정된다.")
 
 	var gateErr error
+	devMeasured := false
 	for _, name := range []string{"dev", "test"} {
 		entries, err := loadGolden(filepath.Join(dir, name+".jsonl"))
 		if err != nil {
-			if os.IsNotExist(err) {
-				fmt.Printf("\n(%s 없음 — 건너뜀)\n", name)
+			// dev가 없으면 게이트를 잴 수 없다 — 조용한 통과는 게이트가 아니다.
+			// (test는 동결 세트라 출력 전용이므로 부재를 허용한다.)
+			if os.IsNotExist(err) && name == "test" {
+				fmt.Printf("\n(test 없음 — 건너뜀)\n")
 				continue
 			}
-			return err
+			return fmt.Errorf("dev golden을 읽지 못해 게이트를 판정할 수 없다 (%s): %w",
+				filepath.Join(dir, name+".jsonl"), err)
 		}
-		tr := measureSummaries(entries, dict, id2name, false)
-		lead := measureSummaries(entries, dict, id2name, true)
+		if len(entries) == 0 && name == "dev" {
+			return fmt.Errorf("dev golden이 비어 있어 게이트를 판정할 수 없다")
+		}
+		cmp := comparableMask(entries)
+		tr := measureSummaries(entries, dict, id2name, false, cmp)
+		lead := measureSummaries(entries, dict, id2name, true, cmp)
 		reportSummary(strings.ToUpper(name), entries, tr, lead)
 		reportByLang(entries, dict, id2name)
 		reportExtraction(entries)
 		if name == "dev" {
+			devMeasured = true
 			gateErr = checkSummaryGates(tr, lead)
 		}
 	}
 	if gateErr != nil {
 		return gateErr
 	}
+	if !devMeasured {
+		return fmt.Errorf("dev 세트를 측정하지 못했다 — 게이트 미판정")
+	}
 	fmt.Println("\ndev 게이트 통과 (test는 동결 — 출력만).")
 	return nil
 }
 
 // measureSummaries는 한 세트에 대해 TextRank(또는 lead-3 베이스라인) 지표를 계산한다.
-func measureSummaries(entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string, useLead bool) summaryMetrics {
+// comparable은 TextRank와 lead-3가 **둘 다** 요약을 낸 항목의 마스크다. ④(태그 보존)의
+// 분모는 반드시 이 집합이어야 한다 — lead-3에는 가드가 없어 커버리지가 구조적으로 높은데,
+// 전체 건수로 나누면 "가드를 가진 쪽"이 가드 때문에 손해를 본다(그건 ①이 재는 축이다).
+func comparableMask(entries []goldenEntry) []bool {
+	out := make([]bool, len(entries))
+	for i, e := range entries {
+		b, d := e.Snapshot.BodyText, e.Snapshot.Description
+		out[i] = summarizer.Summarize(b, d) != "" && summarizer.LeadN(b, summaryLeadN) != ""
+	}
+	return out
+}
+
+func measureSummaries(entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string, useLead bool, comparable []bool) summaryMetrics {
 	m := summaryMetrics{n: len(entries)}
 	var descSum, intraSum, compSum float64
 	var hits, stable int
 
-	for _, e := range entries {
+	for i, e := range entries {
 		body, desc := e.Snapshot.BodyText, e.Snapshot.Description
 		s := summarizeWith(body, desc, useLead)
 		if s == summarizeWith(body, desc, useLead) {
@@ -116,17 +141,21 @@ func measureSummaries(entries []goldenEntry, dict *tagger.Dictionary, id2name ma
 			compSum += float64(utf8.RuneCountInString(s)) / float64(n)
 		}
 		// 태그 신호 보존: 요약만 본문으로 준 태거가 expected_tags를 맞히는가.
-		pred := classifyTop(tagger.Content{
-			Domain: hostOf(e.URL), Title: e.Snapshot.Title, Description: desc, Body: s,
-		}, dict, id2name)
-		hits += hit(pred, toSet(e.ExpectedTags))
+		// 두 시스템이 모두 요약을 낸 항목에서만 센다(공정 비교 — comparableMask 주석 참고).
+		if comparable[i] {
+			m.tagRecallN++
+			pred := classifyTop(tagger.Content{
+				Domain: hostOf(e.URL), Title: e.Snapshot.Title, Description: desc, Body: s,
+			}, dict, id2name)
+			hits += hit(pred, toSet(e.ExpectedTags))
+		}
 	}
 
 	if m.produced > 0 {
 		p := float64(m.produced)
 		m.descDup, m.intraDup, m.compression = descSum/p, intraSum/p, compSum/p
 	}
-	m.tagRecall = ratio(hits, m.n)
+	m.tagRecall = ratio(hits, m.tagRecallN)
 	m.stable = ratio(stable, m.n)
 	return m
 }
@@ -179,7 +208,7 @@ func maxPairContainment(sents []string) float64 {
 func guardBreakdown(entries []goldenEntry) (thinBody, fewProse, descDrop int) {
 	for _, e := range entries {
 		body := e.Snapshot.BodyText
-		if utf8.RuneCountInString(body) < 200 {
+		if utf8.RuneCountInString(body) < summarizer.MinBodyRunes {
 			thinBody++
 			continue
 		}
@@ -189,7 +218,7 @@ func guardBreakdown(entries []goldenEntry) (thinBody, fewProse, descDrop int) {
 				prose++
 			}
 		}
-		if prose < 3 {
+		if prose < summarizer.MinProseSents {
 			fewProse++
 			continue
 		}
@@ -206,13 +235,20 @@ func reportSummary(name string, entries []goldenEntry, tr, lead summaryMetrics) 
 	fmt.Printf("%-22s %10.3f %10.3f   (요약이 나온 비율)\n", "① 커버리지", tr.coverage(), lead.coverage())
 	fmt.Printf("%-22s %10.3f %10.3f   (낮을수록 좋음 — 설명과 같은 말 반복)\n", "② desc 중복도", tr.descDup, lead.descDup)
 	fmt.Printf("%-22s %10.3f %10.3f   (낮을수록 좋음 — 문장끼리 중복)\n", "③ intra 중복도", tr.intraDup, lead.intraDup)
-	fmt.Printf("%-22s %10.3f %10.3f   (요약만 본문으로 준 태거 Recall@3)\n", "④ 태그 신호 보존", tr.tagRecall, lead.tagRecall)
+	fmt.Printf("%-22s %10.3f %10.3f   (요약만 본문으로 준 태거 Recall@3, 공통 산출 %d건)\n",
+		"④ 태그 신호 보존", tr.tagRecall, lead.tagRecall, tr.tagRecallN)
 	fmt.Printf("%-22s %10.3f %10.3f   (요약/본문 길이비)\n", "⑤ 압축률", tr.compression, lead.compression)
 	fmt.Printf("%-22s %10.3f %10.3f   (같은 입력 2회 바이트 동일)\n", "⑦ 결정성", tr.stable, lead.stable)
 
 	thin, few, drop := guardBreakdown(entries)
-	fmt.Printf("⑥ 가드 발동: 본문<200룬 %d건 · 산문<3문장 %d건 · desc중복≥0.8 %d건 (합 %d = 요약 없음)\n",
-		thin, few, drop, thin+few+drop)
+	fmt.Printf("⑥ 가드 발동: 본문<%d룬 %d건 · 산문<%d문장 %d건 · desc중복≥%.1f %d건 (합 %d = 요약 없음)\n",
+		summarizer.MinBodyRunes, thin, summarizer.MinProseSents, few, summarizer.DescDropRatio, drop,
+		thin+few+drop)
+	// 항등식이 깨지면 분해가 Summarize와 어긋난 것이다 — 조용히 틀린 표를 내지 않는다.
+	if want := tr.n - tr.produced; thin+few+drop != want {
+		fmt.Printf("   ⚠️ 가드 분해 불일치: 합 %d ≠ 요약 없음 %d — guardBreakdown이 Summarize와 어긋났다\n",
+			thin+few+drop, want)
+	}
 	fmt.Println("   ※ ④는 같은 사전·토크나이저로 만든 요약을 같은 태거로 재는 순환 지표다 — 최적화 대상으로 삼으면 망가진다.")
 }
 
@@ -289,7 +325,7 @@ func reportByLang(entries []goldenEntry, dict *tagger.Dictionary, id2name map[in
 		if len(g.set) == 0 {
 			continue
 		}
-		m := measureSummaries(g.set, dict, id2name, false)
+		m := measureSummaries(g.set, dict, id2name, false, comparableMask(g.set))
 		fmt.Printf("  %-8s %5d %10.3f %10.3f %10.3f\n", g.name, m.n, m.coverage(), m.descDup, m.tagRecall)
 	}
 }

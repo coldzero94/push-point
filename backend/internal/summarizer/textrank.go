@@ -15,6 +15,10 @@ const (
 	lambda = 0.7
 	// mmrCandidates는 MMR이 검토할 중심성 상위 문장 수 — 하위 문장은 어차피 안 뽑힌다.
 	mmrCandidates = 10
+	// maxPickedOverlap: 이미 고른 문장과 이만큼 겹치는 후보는 **점수와 무관하게 제외**한다.
+	// λ 가중 감점만으로는 부족하다 — 반복되는 보일러플레이트(구독 안내 등)는 서로 완전
+	// 유사해 중심성이 1.0으로 몰리므로, 감점 상한(1-λ)을 써도 distinct 문장을 계속 이긴다.
+	maxPickedOverlap = 0.8
 )
 
 // similarity는 두 문장의 어휘 겹침 유사도(원논문 식): 공통 토큰 수를 로그 길이 합으로
@@ -121,12 +125,20 @@ func selectMMR(tokens [][]string, cent []float64, descTok []string, k int) []int
 			if used[c] {
 				continue
 			}
-			// 중복 페널티 = (이미 고른 문장들과의 최대 겹침, description과의 겹침) 중 큰 값.
-			redundancy := Containment(tokens[c], descTok)
+			// 이미 고른 문장과의 겹침은 감점이 아니라 **배제** 기준이다(위 상수 주석 참고).
+			pickedMax := 0.0
 			for _, p := range picked {
-				if r := Containment(tokens[c], tokens[p]); r > redundancy {
-					redundancy = r
+				if r := Containment(tokens[c], tokens[p]); r > pickedMax {
+					pickedMax = r
 				}
+			}
+			if pickedMax >= maxPickedOverlap {
+				continue
+			}
+			// description과의 겹침은 감점(배제하면 설명이 긴 글에서 뽑을 문장이 없어진다).
+			redundancy := Containment(tokens[c], descTok)
+			if pickedMax > redundancy {
+				redundancy = pickedMax
 			}
 			s := lambda*cent[c] - (1-lambda)*redundancy
 			if s > bestScore {

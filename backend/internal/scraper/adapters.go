@@ -236,6 +236,12 @@ func (a *arxivAdapter) Fetch(ctx context.Context, u *url.URL) (Metadata, error) 
 	// "Abstract:" 접두는 라벨이라 떼어낸다 — 문장 분리·요약 입력을 깨끗하게 유지한다.
 	abstract := strings.TrimSpace(doc.Find("blockquote.abstract").First().Text())
 	abstract = strings.TrimSpace(strings.TrimPrefix(abstract, "Abstract:"))
+	if abstract == "" {
+		// 페이지 구조가 바뀌었거나 인터스티셜이다 — 조용히 빈 본문을 내지 말고
+		// 범용 추출로 폴백한다(전용 어댑터가 기본 경로보다 나빠지는 것을 막는다).
+		m.BodyText = extractBodyText(doc, finalURL)
+		return m, nil
+	}
 	m.BodyText = capRunes(strings.Join(strings.Fields(abstract), " "), maxBodyText)
 	return m, nil
 }

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -140,6 +141,11 @@ func TestMigration0005_Summary_Reversible(t *testing.T) {
 
 	if hasSummary() != 1 {
 		t.Fatal("Open 직후 links.summary가 없다 — 0005가 적용되지 않았다")
+	}
+	// 상위 마이그레이션(0006+)이 생겨도 이 테스트가 0005만 검증하도록 먼저 5로 내린다.
+	// 이미 5가 top이면 ErrNoChange가 나오는데 그건 정상이다.
+	if err := m.Migrate(5); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		t.Fatalf("버전 5로 이동 실패: %v", err)
 	}
 	if err := m.Steps(-1); err != nil {
 		t.Fatalf("0005 down 실패: %v", err)
