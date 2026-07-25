@@ -15,6 +15,19 @@ import { effectiveDark, subscribeTheme } from '../../lib/theme'
 import type { TagFacet } from '../../lib/tags/facet'
 import { cn } from './cn'
 
+// facet → tint background utility. This is a CSS FLOOR under the canvas: if the
+// 2D paint fails entirely (null context on a long scrolled board, GPU context
+// loss, a hardened browser that disables canvas), the cover still shows the
+// facet color instead of the parent's bg-hover grey — R4's "never a grey box"
+// held at the CSS layer, where nothing can silently no-op it. Literal classes so
+// Tailwind's scanner emits them.
+const TINT_BG: Record<TagFacet, string> = {
+  craft: 'bg-tag-craft-tint',
+  media: 'bg-tag-media-tint',
+  life: 'bg-tag-life-tint',
+  neutral: 'bg-hover',
+}
+
 export type GeneratedCoverProps = {
   /** the link's domain — the only input to the pattern */
   domain: string
@@ -60,7 +73,7 @@ export function GeneratedCover({ domain, facet, className }: GeneratedCoverProps
     <canvas
       ref={ref}
       aria-hidden
-      className={cn('block h-full w-full', className)}
+      className={cn('block h-full w-full', TINT_BG[facet], className)}
     />
   )
 }

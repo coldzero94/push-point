@@ -25,7 +25,7 @@ export type CoverPattern = {
   rotate: number
   /** 12..28px — pattern density */
   step: number
-  /** 0..4 — a second axis some patterns use (e.g. where `contour` centers its arcs) */
+  /** 0..4 — a second axis only `contour` reads (where it centers its arcs) */
   variant: number
 }
 
@@ -75,11 +75,22 @@ const CSS_VAR: Record<string, string> = {
 
 export type CoverColors = { ground: string; stroke: string }
 
-/** Resolve the facet's two colors from the live theme (light/dark aware). */
+/**
+ * Resolve the facet's two colors from the live theme (light/dark aware).
+ *
+ * A resolved value can legitimately be `''` — a `CSS_VAR` value typo, a token
+ * map that drifted from `FACET_TOKENS`, or (in dev) CSS not yet applied. Handing
+ * `''` to `ctx.fillStyle` is silently ignored by the canvas API, which would
+ * paint black or a stale color with no signal, so `read` never returns `''`: it
+ * falls back to a neutral grey. The facet tint is ALSO set as the canvas's CSS
+ * background (GeneratedCover), so a fully-failed paint still lands on the facet
+ * color rather than this grey — the grey is the last-resort floor, not the
+ * expected path.
+ */
 export function coverColors(facet: TagFacet, el: Element): CoverColors {
   const style = getComputedStyle(el)
   const t = FACET_TOKENS[facet]
-  const read = (token: string) => style.getPropertyValue(CSS_VAR[token] ?? '--fg-2').trim()
+  const read = (token: string) => style.getPropertyValue(CSS_VAR[token] ?? '--fg-2').trim() || '#808D86'
   return { ground: read(t.tint), stroke: read(t.ink) }
 }
 
@@ -144,11 +155,16 @@ export function drawCover(
       ctx.arc(cx, cy, r, Math.PI, Math.PI * 2)
       ctx.stroke()
     }
-  } else {
+  } else if (kind === 'stack') {
     const s = step * 1.4
     for (let i = 0; i * s < w + h; i++) {
       ctx.fillRect(i * s - h, i * s * 0.55, s * 0.62, h * 2)
     }
+  } else {
+    // Exhaustiveness: adding a CoverPatternKind fails the build here (as it
+    // already does at ALPHA), instead of silently rendering as `stack`.
+    const _never: never = kind
+    void _never
   }
   ctx.restore()
 }

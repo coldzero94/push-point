@@ -90,7 +90,7 @@ export function SaveScreen() {
               <LinkCard
                 key={l.id}
                 link={l}
-                facetOf={facetOf}
+                resolveFacet={facetOf}
                 selected={link === l.id}
                 onOpen={openInspector}
                 onTagClick={toggleTag}

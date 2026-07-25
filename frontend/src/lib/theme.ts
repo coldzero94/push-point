@@ -58,7 +58,17 @@ function applyResolvedClass(): void {
   const root = document.documentElement
   root.classList.toggle('dark', dark)
   root.classList.toggle('light', !dark)
-  for (const l of listeners) l()
+  // Snapshot + isolate: a subscriber that unsubscribes during notify must not
+  // mutate the set mid-iteration, and one throwing subscriber must not starve
+  // the covers ordered after it (a partial, insertion-order-dependent theme
+  // desync) or unwind the theme toggle itself.
+  for (const l of [...listeners]) {
+    try {
+      l()
+    } catch {
+      // a subscriber's own concern — never break the theme flip for the rest
+    }
+  }
 }
 
 export function setThemePref(pref: ThemePref): void {

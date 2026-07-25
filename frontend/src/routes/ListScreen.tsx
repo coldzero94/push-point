@@ -215,7 +215,7 @@ export function ListScreen() {
                     <LinkCard
                       key={l.id}
                       link={l}
-                      facetOf={facetOf}
+                      resolveFacet={facetOf}
                       selected={link === l.id}
                       activeTag={tag}
                       onOpen={openInspector}

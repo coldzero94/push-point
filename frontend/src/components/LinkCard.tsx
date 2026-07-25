@@ -1,9 +1,11 @@
 // LinkCard — the board's atomic unit (§10 4.4). Replaces LinkRow.
 //
-// Layout (every slot's height is fixed at mount, so the board never reflows as
-// the worker fills a card in — CLS 0):
+// Layout (every slot's height is RESERVED at mount — aspect-ratio + min-height +
+// 2-line clamp, so the worker filling a card in does not reflow the board, CLS 0.
+// The one caveat: the chips slot reserves a single row, so three chips wrapping
+// to a second row at a narrow column can still grow it):
 //   [ cover 16:9 ][ title 2줄 ][ description 2줄 ][ chips ][ domain · time ]
-// The 3px StatusRail (S1) runs down the leading edge and shows NOTHING when the
+// The 2px StatusRail (S1) runs down the leading edge and shows NOTHING when the
 // link is done. The cover is the thumbnail when there is one and a GeneratedCover
 // (R4) when there is not — never a grey box, never a bare initial.
 //
@@ -20,7 +22,7 @@
 import { useMemo } from 'react'
 import { ExternalLink, Play, StickyNote } from 'lucide-react'
 import { Button, Chip, GeneratedCover, Icon, Skeleton, StatusRail } from './ui'
-import { dominantFacet, sortLinkTags } from '../lib/tags/facet'
+import { sortLinkTags } from '../lib/tags/facet'
 import type { TagFacet } from '../lib/tags/facet'
 import type { Link, LinkTag } from '../lib/api/types'
 import { linkDisplayTitle } from '../lib/api/types'
@@ -36,8 +38,13 @@ export const BOARD_GRID = 'grid grid-cols-1 gap-16 @board-sm:grid-cols-2 @board-
 
 export type LinkCardProps = {
   link: Link
-  /** resolves a LinkTag's facet from the tag-dictionary cache (makeFacetResolver) */
-  facetOf: (tag: Pick<LinkTag, 'id'>) => TagFacet
+  /**
+   * Resolves a LinkTag's facet from the tag-dictionary cache
+   * (makeFacetResolver, keyed by tag id). Named `resolveFacet` rather than
+   * `facetOf` to avoid colliding with `facet.ts`'s `facetOf(tag)`, which reads a
+   * dictionary Tag's `.facet` field directly — a different function.
+   */
+  resolveFacet: (tag: Pick<LinkTag, 'id'>) => TagFacet
   /** this card is the one currently open in the inspector (?link === id) */
   selected: boolean
   /** the active ?tag filter — a matching chip renders fill 2 (solid) */
@@ -52,7 +59,7 @@ export type LinkCardProps = {
 
 export function LinkCard({
   link,
-  facetOf,
+  resolveFacet,
   selected,
   activeTag,
   onOpen,
@@ -62,7 +69,10 @@ export function LinkCard({
   const title = linkDisplayTitle(link)
   const tags = useMemo(() => sortLinkTags(link.tags), [link.tags])
   const failed = link.status === 'failed'
-  const coverFacet = dominantFacet(link.tags, facetOf)
+  // The dominant tag is the first in chip order (manual first, then confidence).
+  // `tags` is already that order, so read it directly instead of re-sorting via
+  // dominantFacet (which the inspector uses where no sorted list exists).
+  const coverFacet: TagFacet = tags[0] ? resolveFacet(tags[0]) : 'neutral'
 
   // S2 gates. The cover is "settled" once the pipeline is terminal — a done link
   // with no thumb_url is not still waiting, it simply has a generated cover.
@@ -94,14 +104,18 @@ export function LinkCard({
           className="absolute inset-0 scroll-mt-80 rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
 
-        {/* S1 rail — leading edge, full card height, 3px (§10 4.7). */}
+        {/* S1 rail — leading edge, full card height, 2px (§10 4.7). */}
         <span className="pointer-events-none absolute inset-y-0 left-0 z-10 flex">
           <StatusRail status={link.status} selected={selected} />
         </span>
 
         {/* Cover. aspect-ratio (not a pixel height) is what keeps the slot
-            reserved at every column width. */}
-        <div className="relative aspect-[16/9] w-full shrink-0 overflow-hidden bg-hover">
+            reserved at every column width. `pointer-events-none`: the cover and
+            the whole content column below are later positioned/transformed
+            siblings of the stretched trigger, so without this they paint OVER it
+            and swallow the click. Everything is click-through to the trigger
+            except the interactive leaves, which re-enable pointer events. */}
+        <div className="pointer-events-none relative aspect-[16/9] w-full shrink-0 overflow-hidden bg-hover">
           <div className="fill-step absolute inset-0" data-in={coverSettled}>
             {link.thumb_url ? (
               <img
@@ -159,8 +173,9 @@ export function LinkCard({
             ) : null}
           </div>
 
-          {/* Description — the field the row design never used (§10 진단 1). On a
-              failed link this slot carries the failure sentence instead. */}
+          {/* Description — the field the old row list never showed but the
+              contract already returns (200 chars in the list response, §11 3(3)).
+              On a failed link this slot carries the failure sentence instead. */}
           <p
             className="fill-step clamp-2 min-h-(--size-card-desc) text-card text-fg-2"
             data-in={descFilled}
@@ -179,7 +194,7 @@ export function LinkCard({
             {tags.slice(0, 3).map((t) => (
               <Chip
                 key={t.id}
-                facet={facetOf(t)}
+                facet={resolveFacet(t)}
                 role="readonly"
                 source={t.source}
                 selected={t.name === activeTag}
