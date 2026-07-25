@@ -73,6 +73,9 @@ type LinkDetail struct {
 	Error       string
 	UpdatedAt   int64
 	Jobs        JobSummary
+	// Summary는 추출식 요약(M5). 목록(Link)이 아니라 **상세에만** 있다 — 목록·검색 경로가
+	// summary를 모르게 두는 것이 linkCols·scanLink·sqlite_search.go 무변경의 근거다.
+	Summary string
 }
 
 // facet 값 — tags.facet CHECK 제약(migrations/0003_tag_facet.up.sql)과
@@ -204,6 +207,10 @@ type Store interface {
 	// LoadTagDict는 태그 사전 전체(id/name/aliases/facet)를 읽어 태거에 넘길 형태로 반환한다.
 	// 런타임 사전 = DB tags 테이블(마이그레이션 시드 + 사용자 CRUD 확장).
 	LoadTagDict(ctx context.Context) ([]TagDictEntry, error)
+
+	// SetSummary는 tag 잡이 추출식 요약을 기록한다(best-effort — 실패해도 태그는 이미 커밋됨).
+	// 빈 문자열도 정상 값이다(가드 불통과 = 요약 없음). FTS 재색인은 하지 않는다.
+	SetSummary(ctx context.Context, linkID int64, summary string) error
 
 	// ApplyTags는 tag 잡 결과를 한 writer 트랜잭션으로 반영한다: source='rules' 행을 먼저
 	// 삭제(재태깅 멱등)한 뒤 scored 태그를 INSERT(같은 태그의 manual 행은 ON CONFLICT DO

@@ -207,6 +207,39 @@ func (a *naverAdapter) Fetch(ctx context.Context, u *url.URL) (Metadata, error) 
 	return a.parser.Fetch(ctx, &rewritten)
 }
 
+// ---- arXiv 어댑터 ----
+//
+// 논문 초록 페이지(arxiv.org/abs/*)는 **초록이 곧 본문**인데, 범용 추출기는 사이드바의
+// arXivLabs 안내("Hugging Face (What is Huggingface?)" 등)를 본문으로 골라낸다(실측).
+// 초록은 `blockquote.abstract`에 항상 통째로 있으므로 그것만 본문으로 쓴다.
+// 나머지(제목·og·published)는 기본 파서 결과를 그대로 쓴다.
+
+type arxivAdapter struct {
+	parser *DefaultParser
+}
+
+var _ Adapter = (*arxivAdapter)(nil)
+
+func newArxivAdapter(parser *DefaultParser) *arxivAdapter { return &arxivAdapter{parser: parser} }
+
+func (a *arxivAdapter) Match(u *url.URL) bool {
+	return hostMatches(u.Host, "arxiv.org") && strings.Contains(u.Path, "/abs/")
+}
+
+func (a *arxivAdapter) Fetch(ctx context.Context, u *url.URL) (Metadata, error) {
+	doc, _, finalURL, err := a.parser.fetchHTML(ctx, u)
+	if err != nil {
+		return Metadata{}, err
+	}
+	m := parseMetadata(doc, finalURL)
+	m.ContentType = "article"
+	// "Abstract:" 접두는 라벨이라 떼어낸다 — 문장 분리·요약 입력을 깨끗하게 유지한다.
+	abstract := strings.TrimSpace(doc.Find("blockquote.abstract").First().Text())
+	abstract = strings.TrimSpace(strings.TrimPrefix(abstract, "Abstract:"))
+	m.BodyText = capRunes(strings.Join(strings.Fields(abstract), " "), maxBodyText)
+	return m, nil
+}
+
 // ---- Instagram 어댑터 ----
 //
 // 로그인·봇 차단으로 og 메타가 없는 경우가 많다 → 메타 부재를 에러가 아니라 정상으로 본다.

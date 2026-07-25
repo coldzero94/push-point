@@ -63,6 +63,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "summary-eval":
+			if err := runSummaryEval(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "summary-eval 실패:", err)
+				os.Exit(1)
+			}
+			return
 		case "golden-capture":
 			if err := runGoldenCapture(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "golden-capture 실패:", err)
@@ -70,7 +76,7 @@ func main() {
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval|golden-capture])\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval|summary-eval|golden-capture])\n", os.Args[1])
 			os.Exit(2)
 		}
 	}

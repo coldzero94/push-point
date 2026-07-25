@@ -367,6 +367,8 @@ func (f *fakeStore) ApplyTags(ctx context.Context, linkID int64, scored []store.
 	return nil
 }
 
+func (f *fakeStore) SetSummary(ctx context.Context, linkID int64, summary string) error { return nil }
+
 func (f *fakeStore) Close() error { return nil }
 
 // ---- 테스트 하네스 ----

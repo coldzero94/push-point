@@ -158,7 +158,11 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 
 **Week 3**
 - 문서 임베딩 vs 태그 임베딩 코사인 유사도 분류 → Phase A와 점수 앙상블
-- **추출식 요약(동반 기능, LLM 없이)**: 본문에서 핵심 문장 2~3개를 골라내는 extractive 요약 — 생성(abstractive)이 아니라 원문 문장 선택이라 환각 0, 순수 Go. Phase B 임베딩으로 문장 유사도를 의미 기반으로 계산해 **TextRank/LexRank**(문장 그래프 PageRank)로 중심 문장 추출한다. M3의 정규화·문장분리·TF-IDF 인프라를 재사용하고, 임베딩이 유사도 품질을 끌어올린다(베이스라인은 임베딩 없는 TF-IDF 문장 스코어링 — M3 인프라만으로도 동작). 태그 잡이 이미 본문을 읽으므로 한 번의 본문 처리로 태깅+요약을 함께 뽑는다. 저장은 `links.summary` 컬럼(신규 마이그레이션) + API 계약 `Link.summary`(3 소비자 재생성) + 웹/iOS 링크 카드·상세에 표시. **왜 M5인가**: 추출식 요약의 핵심은 문장 유사도이고, 그게 Phase B 임베딩으로 의미 기반이 될 때 품질이 확연히 좋아진다 — 인프라를 공유하는 자리다.
+- **추출식 요약 Phase A (구현 완료, LLM 없이)**: 본문에서 핵심 문장 2~3개를 고르는 extractive 요약 — 생성이 아니라 원문 문장 선택이라 환각 0, 순수 Go(`backend/internal/summarizer`). **TextRank**(어휘 겹침 유사도 기반 문장 그래프 PageRank) + **description-aware MMR**로 중심 문장을 뽑되 설명과 겹치는 문장을 눌러, 인스펙터에서 같은 말을 두 번 하지 않게 한다. M3의 `tagger.Tokenize`(조사 정규화)를 재사용하고, tag 잡이 이미 본문을 읽으므로 **한 번의 본문 처리로 태깅+요약**을 함께 한다(추가 I/O 0).
+  - 저장·노출: `links.summary`(마이그레이션 0005) + 계약 **`LinkDetail.summary`만** — 목록(`Link`)·검색(`SearchResult`)에는 싣지 않는다. 웹은 **인스펙터의 「요약」 섹션**(설명 바로 위)에만 그리고 **카드는 바꾸지 않는다**: 요약은 원문 대체재가 아니라 "열까 말까"의 판단 보조이고, 목록 응답을 가볍게 유지한다. 계약이 좁은 덕에 목록·검색 store 경로(`linkCols`/`scanLink`/`sqlite_search.go`)를 한 글자도 건드리지 않는다. `links_fts` 미색인(가상 테이블 재생성 위험 — 재검토는 아래 stage 2).
+  - 품질 가드 5겹: 본문 200룬 미만 / 산문 3문장 미만 / 문장별 산문 게이트(목차·코드·이메일 목록 제거) / 총 450룬 캡 / description과 0.8 이상 겹치면 통째로 폐기. 불통과면 빈 문자열이고 UI는 아무것도 그리지 않는다.
+  - 측정(`just eval-summary`, golden dev/test 각 50건): **정답 요약이 없어 ROUGE는 불가**하므로 lead-3 베이스라인 대비 상대 게이트만 건다(desc 중복도 · 태그 신호 보존 · 결정성). 실측은 [nlu/golden/README.md](../../nlu/golden/README.md)에 기록한다.
+  - **stage 2 후보**(이번 범위 밖): Phase B 임베딩으로 문장 유사도 교체(골격은 그대로 — `similarity()` 하나만 바뀐다), `links_fts`에 summary 색인(desc-aware MMR 덕에 요약 토큰의 대부분이 description 밖이라 진짜 새 검색 표면이다), 카드 본문 슬롯 백필(`description || summary`) — 재검토 트리거는 "description 빈 링크 25% 초과 또는 요약 커버리지 85% 초과".
 
 **Week 4**
 - tag_feedback 데이터로 재랭킹 가중치 보정

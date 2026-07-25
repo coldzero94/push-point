@@ -270,6 +270,8 @@ export interface components {
         /** @description 링크 상세 — 목록 항목 전체 필드 + 메타·에러·잡 요약 */
         LinkDetail: components["schemas"]["Link"] & {
             author: string;
+            /** @description 본문에서 고른 핵심 문장 2~3개를 개행으로 이은 추출식 요약 (LLM 없이 원문 문장을 그대로 선택하므로 환각 0). 본문이 얇거나 산문이 부족하거나 description과 사실상 같으면 빈 문자열이며, 그때 클라이언트는 요약 영역을 그리지 않는다. 목록(Link)·검색(SearchResult)에는 싣지 않는다 — 요약은 원문 대체재가 아니라 "열까 말까"의 판단 보조다 */
+            summary: string;
             published_at: components["schemas"]["EpochSecondsNullable"];
             duration_sec: number | null;
             word_count: number | null;

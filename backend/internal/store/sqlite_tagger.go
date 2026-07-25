@@ -72,3 +72,25 @@ func (s *sqliteStore) ApplyTags(ctx context.Context, linkID int64, scored []Scor
 		return reindexFTS(ctx, tx, linkID)
 	})
 }
+
+// SetSummary는 추출식 요약을 기록한다. 빈 문자열도 정상 값이라 그대로 저장한다 —
+// 가드에 걸려 요약이 없다는 사실 자체가 상태이고, UI는 그때 섹션을 그리지 않는다.
+// links_fts는 건드리지 않는다(요약은 색인 대상이 아니다 — 05 §2 참고).
+func (s *sqliteStore) SetSummary(ctx context.Context, linkID int64, summary string) error {
+	return s.withWriteTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE links SET summary = ?, updated_at = unixepoch()
+			 WHERE id = ? AND deleted_at IS NULL`, summary, linkID)
+		if err != nil {
+			return fmt.Errorf("store: summary UPDATE 실패: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("store: RowsAffected 실패: %w", err)
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
+}

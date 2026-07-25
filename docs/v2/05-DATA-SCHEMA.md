@@ -69,8 +69,10 @@ CREATE TABLE links (
   created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at   INTEGER NOT NULL DEFAULT (unixepoch()),
   deleted_at   INTEGER,
-  body_text    TEXT NOT NULL DEFAULT ''         -- 0004에서 ALTER ADD COLUMN (그래서 맨 뒤).
-);                                              -- 본문 추출(go-trafilatura). 태거·요약 입력 전용 — FTS·API 미노출
+  body_text    TEXT NOT NULL DEFAULT '',        -- 0004에서 ALTER ADD COLUMN (그래서 맨 뒤).
+                                                  -- 본문 추출(go-trafilatura). 태거·요약 입력 전용 — FTS·API 미노출
+  summary      TEXT NOT NULL DEFAULT ''         -- 0005에서 ALTER ADD COLUMN. 추출식 요약(M5 Phase A)
+);
 CREATE INDEX idx_links_list   ON links(created_at DESC, id DESC) WHERE deleted_at IS NULL;
 CREATE INDEX idx_links_status ON links(status) WHERE deleted_at IS NULL;
 
@@ -151,6 +153,7 @@ CREATE VIRTUAL TABLE links_fts USING fts5(
 | `thumb_path` | `data/thumbs/` 이하 상대 경로. thumb 잡 실패 시 NULL 유지 (best-effort) |
 | `note` | 개인 메모. v1의 `notes` 테이블을 흡수 — 단일 사용자·1:1 관계라 컬럼이면 충분 |
 | `body_text` | 스크래퍼가 `go-trafilatura`로 추출한 **본문 텍스트**(보일러플레이트 제거). **규칙 태거(M3)·추출식 요약(M5)의 입력 전용** — `links_fts`에 넣지 않고(trigram 3자 윈도우가 본문에 폭증) `api/openapi.yaml`에도 노출하지 않는다(내부 파생물). 길이 상한(32KB, 룬 경계)으로 병적 outlier만 자른다. 추출 실패·SPA·비-아티클(video/post)이면 빈 문자열 — 태거는 title/description으로 graceful degrade |
+| `summary` | body_text에서 고른 핵심 문장 2~3개를 개행으로 이은 **추출식 요약**(M5 Phase A — LLM 없이 원문 문장 선택이라 환각 0). tag 잡이 태깅과 같은 본문 처리에서 함께 쓴다. **`LinkDetail`에만 노출**하고 목록(`Link`)·검색(`SearchResult`)에는 싣지 않는다 — 요약은 원문 대체재가 아니라 "열까 말까"의 판단 보조다. `links_fts`에도 넣지 않는다(가상 테이블 재생성 위험 — 재검토는 stage 2). 본문이 얇거나(200룬 미만) 산문이 3문장 미만이거나 description과 사실상 같으면(겹침 0.8 이상) 빈 문자열이고, 그때 UI는 아무것도 그리지 않는다 |
 | `status` / `error` | 처리 파이프라인 상태와 최종 실패 사유 (§4 참고) |
 | `created_at` / `updated_at` / `deleted_at` | epoch 초. 삭제는 소프트 삭제 |
 

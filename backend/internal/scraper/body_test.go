@@ -22,7 +22,11 @@ func TestExtractBodyText(t *testing.T) {
 <footer>저작권 2026 테스트회사</footer>
 </body></html>`
 
-	got := extractBodyText([]byte(html), nil)
+	doc, err := ParseHTML(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("ParseHTML: %v", err)
+	}
+	got := extractBodyText(doc, nil)
 	if !strings.Contains(got, "오토스케일링") {
 		t.Errorf("본문에 '오토스케일링'이 있어야: %q", got)
 	}

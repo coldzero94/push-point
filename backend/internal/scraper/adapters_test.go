@@ -212,3 +212,40 @@ func TestInstagramAdapterNoError(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestArxivAdapter(t *testing.T) {
+	// arXiv 초록 페이지: 초록은 blockquote.abstract에 있고, 사이드바(arXivLabs 안내)는
+	// 본문이 아니다 — 범용 추출기가 그 사이드바를 골라내던 실측 실패를 막는 어댑터다.
+	const absHTML = `<html><head><title>제목</title>
+		<meta property="og:description" content="짧은 설명"></head><body>
+		<blockquote class="abstract"><span class="descriptor">Abstract:</span>
+		이 논문은 기후 물리에 기계학습을 적용하는 방법을 다룬다. 관측 데이터와 시뮬레이션을 결합한다.</blockquote>
+		<div id="labs">Hugging Face (What is Huggingface?) arXivLabs: experimental projects</div>
+		</body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(absHTML))
+	}))
+	defer srv.Close()
+
+	a := newArxivAdapter(NewDefaultParser(newRewriteClient(t, srv.URL, nil), "test-agent"))
+	if !a.Match(mustURL(t, "https://arxiv.org/abs/2408.09627")) {
+		t.Fatal("arxiv /abs/ 가 Match되지 않음")
+	}
+	if a.Match(mustURL(t, "https://arxiv.org/list/cs.LG/recent")) {
+		t.Error("/abs/ 아닌 경로는 Match되면 안 됨")
+	}
+	m, err := a.Fetch(context.Background(), mustURL(t, "https://arxiv.org/abs/2408.09627"))
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if !strings.Contains(m.BodyText, "기후 물리에 기계학습") {
+		t.Errorf("본문이 초록이어야: %q", m.BodyText)
+	}
+	if strings.HasPrefix(m.BodyText, "Abstract:") {
+		t.Errorf("'Abstract:' 라벨은 제거돼야: %q", m.BodyText)
+	}
+	if strings.Contains(m.BodyText, "Huggingface") {
+		t.Errorf("사이드바가 본문에 섞임: %q", m.BodyText)
+	}
+}

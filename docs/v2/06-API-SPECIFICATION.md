@@ -190,6 +190,7 @@ GET /api/v1/links/{id}
   "duration_sec": 1420,
   "word_count": null,
   "lang": "ko",
+  "summary": "쿠버네티스는 컨테이너를 선언적으로 운영하는 오케스트레이터다.\n파드가 배포의 최소 단위이고, 서비스가 트래픽을 분산한다.",
   "error": "",
   "jobs": {
     "scrape": "done",
@@ -199,7 +200,8 @@ GET /api/v1/links/{id}
 }
 ```
 
-- 목록 항목의 전체 필드에 `author`, `published_at`, `duration_sec`, `word_count`, `lang`, `error`가 추가된다. `published_at`·`duration_sec`·`word_count`는 값이 없으면 `null`, `author`·`lang`·`error`는 빈 문자열이다 (05 스키마의 NOT NULL DEFAULT '' 정의와 일치).
+- 목록 항목의 전체 필드에 `author`, `published_at`, `duration_sec`, `word_count`, `lang`, `summary`, `error`가 추가된다. `published_at`·`duration_sec`·`word_count`는 값이 없으면 `null`, `author`·`lang`·`error`는 빈 문자열이다 (05 스키마의 NOT NULL DEFAULT '' 정의와 일치).
+- `summary`는 본문에서 고른 핵심 문장 2~3개를 개행으로 이은 **추출식 요약**이다 (M5 Phase A — LLM 없이 원문 문장을 그대로 선택하므로 환각이 없다). 본문이 얇거나(200룬 미만) 산문이 3문장 미만이거나 `description`과 사실상 같으면 **빈 문자열**이고, 그때 클라이언트는 요약 영역을 그리지 않는다. **목록(`Link`)과 검색(`SearchResult`)에는 실리지 않는다** — 요약은 원문 대체재가 아니라 "열까 말까"의 판단 보조이고, 목록 응답을 가볍게 유지한다.
 - `jobs`는 이 링크에 연결된 잡의 상태 요약 `{scrape, tag, thumb: status}`다. 각 값은 `pending` | `running` | `done` | `failed`. 해당 kind의 잡이 아직 없으면 필드가 생략된다 — `scrape` 잡은 저장 트랜잭션에서 항상 함께 생성되므로 항상 존재하고, `tag`는 scrape 성공 후, `thumb`은 og:image가 있을 때만 생긴다 (M1에서는 `scrape`만 있고, M2에서는 tagger가 아직 없어 scrape 성공 시 `tag` 잡을 만들지 않고 `links.status`가 `scraping`에서 곧바로 `done`이 된다 — `tag` 필드와 `tagging` 상태는 M3에서 tagger 핸들러가 등록돼야 도달한다). 위 예시처럼 `thumb`이 `failed`여도 링크 `status`는 `done`일 수 있다 — 썸네일 잡은 best-effort이며 실패해도 링크 상태에 영향을 주지 않는다 (`thumb_url`만 `null`로 남는다).
 
 **상태 코드**: 200 / 400(`invalid_input` — 정수가 아닌 id) / 404(`not_found`)

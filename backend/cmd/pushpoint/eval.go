@@ -126,6 +126,8 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 	fmt.Printf("Recall@%d:  full=%.3f   no-body=%.3f (Δbody %+.3f)   baseline(도메인만)=%.3f (Δrules %+.3f)\n",
 		evalTopK, float64(fullHit)/n, float64(noBodyHit)/n, float64(fullHit-noBodyHit)/n,
 		float64(baseHit)/n, float64(fullHit-baseHit)/n)
+	// 언어별 — 이 앱은 한국어와 영어를 대등하게 지원해야 하므로 한쪽만 잘 되는 회귀를 드러낸다.
+	reportTagRecallByLang(entries, dict, id2name)
 
 	// 태그별 표 — golden에 등장했거나 예측된 태그만, golden 빈도 내림차순.
 	tags := map[string]bool{}
@@ -155,6 +157,35 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 		r := ratio(tp[t], tp[t]+fn[t])
 		fmt.Printf("  %-13s %5.2f %5.2f %6d\n", t, p, r, goldN[t])
 	}
+}
+
+// reportTagRecallByLang은 한국어/영어 부분집합의 Recall@3를 나란히 낸다.
+func reportTagRecallByLang(entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {
+	var ko, en []goldenEntry
+	for _, e := range entries {
+		if isKoreanEntry(e) {
+			ko = append(ko, e)
+		} else {
+			en = append(en, e)
+		}
+	}
+	line := func(label string, set []goldenEntry) {
+		if len(set) == 0 {
+			return
+		}
+		hits := 0
+		for _, e := range set {
+			pred := classifyTop(tagger.Content{
+				Domain: hostOf(e.URL), Title: e.Snapshot.Title,
+				Description: e.Snapshot.Description, Body: e.Snapshot.BodyText,
+			}, dict, id2name)
+			hits += hit(pred, toSet(e.ExpectedTags))
+		}
+		fmt.Printf("  %-8s %3d건  Recall@%d=%.3f\n", label, len(set), evalTopK, ratio(hits, len(set)))
+	}
+	fmt.Println("언어별:")
+	line("한국어", ko)
+	line("영어", en)
 }
 
 // classifyTop은 Content를 분류해 상위 evalTopK 태그 이름을 돌려준다.

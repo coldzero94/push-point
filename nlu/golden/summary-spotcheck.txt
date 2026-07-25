@@ -1,0 +1,53 @@
+# 요약 스팟체크 (dev, URL 정렬 상위 10건)
+# 자동 지표가 못 잡는 것을 사람이 본다: 가독성 · 논지 포착 · 문맥 단절 · 제목 접착.
+
+## https://arxiv.org/abs/2408.09627
+[설명] An exponential growth in computing power, which has brought more sophisticated and higher resolution simulations of the climate system, and an exponential incre…
+[요약] (없음 — 가드)
+
+## https://blog.cloudflare.com/deep-dive-cloudflare-autonomous-edge-ddos-protection/
+[설명] Introducing our autonomous DDoS (Distributed Denial of Service) protection system, globally deployed to all of Cloudflare’s 200+ data centers, and is actively p…
+[요약] Autonomous protection at the edge To protect our customers quickly and with precision against DDoS attacks, we built an autonomous edge detection and mitigation system that can make decisions on its own without seeking a centralized consensus.
+[요약] Together, dosd, gatebot, and flowtrackd analyze samples they receive and apply mitigation rules when DDoS attacks are detected.
+
+## https://brunch.co.kr/@17d063616aff40e/436
+[설명] 조금 긴 여행을 했었어 독후감 | 여행 에세이를 자주 읽는다. 팬데믹으로 이동하지 못하는 욕구를 활자로 푸는 듯하다. 워낙 많은 여행 서적을 읽다보니 대충 어떤 컨셉인지 느낌이 잡히긴 한다. 이 책 또한 그러리라 생각했다. 겉표지에는 '소설가의 세계 여행 에세이'라고 적혀 있다. 소설가…
+[요약] 이 책은 책과 사진, 모두가 박재현 작가의 것이다.
+[요약] 우리가 가야 할 목적지로 알고 있는 다수는 사실 '경유지'에 불과하다.
+[요약] 미국과 유럽과 같은 선진국들을 인접하고 있었다면 우리 국민의 다수는 해외여행을 쉽게 경험해 못했을 지도 모른다.
+
+## https://brunch.co.kr/@friday/50
+[설명] 이직이 필요한 순간, 내가 성장하고 있다는 징후 | 오늘은 2016년에 퇴사한 회사의 부사장님을 몇 년 만에 만났다. 내가 가장 존경하는 사람 중 하나이고, 평생 연락하며 지내고 싶은 분이다. 재택근무 위주로 생활하다 보니 외출만으로도 흥분이 되는데, 테헤란로가 아닌 을지로라니! 강남에…
+[요약] 부사장님 방에서 일과 삶, 그리고 내가 그동안 했던 투자 얘기까지 모두 털어놓았다.
+[요약] 이후 사장님께 인사드리고, 내가 근무하던 시절부터 지금까지 회사에 다니고 있는 동료 4명과도 따로 얘기를 나눴다.
+[요약] 원래는 이 정도로만 마무리하고 다시 일상으로 돌아가는 것이 맞겠지만, 내가 번아웃이 올 정도로 몸과 마음을 바쳤던 곳이라 사람에 대한 정이 아직 남아 있는 것 같다.
+
+## https://brunch.co.kr/@pliossun/61
+[설명] 디자인 시스템에 대한 생각 | 내가 어릴 때는 전집의 시대였다. 전집이라는 것은 책을 한두권 사는 것이 아니라 수십 권을 한 번에 사는 방식이다. 우리집엔 윤석중 전집이란 것이 있었다. 그림이 이쁘지 않았지만, 글을 읽게 되면서 여러 권 보게 되었다. 그중에 청기와 장수라는 동화가 있었…
+[요약] 하지만 디자인 가이드는 재미없고 융통성 없는 자서전 같은 것이 되어 아무도 보지 않는다.
+[요약] 디자인 시스템 디자인을 하기 위해 방법과 가이드, 참고 자료로 다양한 디자인 시스템(design system)이 공개되고 있다.
+[요약] 디자인 시스템은 목적에 따라 콘텐츠를 해석하는 것부터, 비주얼, 사용자 피드백 방법까지 다양한 것들을 포함하고 있고, 웹을 통해 누구나 접근할 수 있다.
+
+## https://brunch.co.kr/@uxflower/7
+[설명] 매일의 해외 아티클 수집 여행기 | 오늘은 어떤 아티클을 만날까? Article 아티클 : (신문·잡지의) 글, 기사 매일 설레는 수집 여행 출근길 설레는 마음으로 하루를 시작합니다. 오늘 만나는 아티클은 어떤 이야기를 전해줄까?! 평소에 관심 있거나 궁금했던 내용, 혹은 흥미로운 관점…
+[요약] 디자인에 관심 있는 모든 분들에게 유용한 해외 아티클 정보를 매일 큐레이션 합니다.
+[요약] Daily News Service 매일 일정 양의 최신 아티클을 선정하여 제공하는 서비스입니다. webdesignernews 디자이너를 위한 최고의 큐레이션 뉴스이며, 웹디자이너와 개발자들에게 가장 중요한 최신 기사를 한 곳에서 찾을 수 있는 서비스입니다. sidebar 매일 5가지 가장 흥미로운 디자인 관련 링크를 선별합니다.
+[요약] 단순히 아이콘을 다운로드할 수 있는 사이트 이상이며, 블로그에서 디자인, 개발, 아이콘, 사진, 사용성 등의 주제로 아티클을 제공합니다.
+
+## https://developer.apple.com/documentation/swiftui
+[설명] Declare the user interface and behavior for your app on every platform.
+[요약] (없음 — 가드)
+
+## https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide
+[설명] The JavaScript Guide shows you how to use JavaScript and gives an overview of the language. If you need exhaustive information about a language feature, have a …
+[요약] (없음 — 가드)
+
+## https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises
+[설명] A Promise is an object representing the eventual completion or failure of an asynchronous operation. Since most people are consumers of already-created promises…
+[요약] The API design of promises makes this great, because callbacks are attached to the returned promise object, instead of being passed into a function.
+[요약] Note: async / await has the same concurrency semantics as normal promise chains. await within one async function does not stop the entire program, only the parts that depend on its value, so other async jobs can still run while the await is pending.
+
+## https://developers.openai.com/api/docs/guides/function-calling
+[설명] Learn how function calling enables large language models to connect to external data and systems.
+[요약] If your application has many functions or large schemas, you can pair function calling with tool search to defer rarely used tools and load them only when the model needs them.
+[요약] The response has an array of tool_calls , each with an id (used later to submit the function result) and a function containing a name and JSON-encoded arguments .

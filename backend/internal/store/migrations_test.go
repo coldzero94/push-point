@@ -78,7 +78,7 @@ func TestMigration0003_TagFacet_Reversible(t *testing.T) {
 }
 
 // TestMigration0004_BodyText_Reversible은 0004 down.sql(DROP COLUMN body_text)이
-// 되감기는지 본다 — 0004가 top이라 Steps(-1)이 곧 0004 down이다.
+// 되감기는지 본다.
 func TestMigration0004_BodyText_Reversible(t *testing.T) {
 	db, err := Open(t.TempDir())
 	if err != nil {
@@ -100,6 +100,10 @@ func TestMigration0004_BodyText_Reversible(t *testing.T) {
 	if hasBody() != 1 {
 		t.Fatal("Open 직후 links.body_text가 없다 — 0004가 적용되지 않았다")
 	}
+	// 상위 마이그레이션(0005+)을 먼저 내려 0004를 top으로 만든다 — 0003 테스트와 같은 이유.
+	if err := m.Migrate(4); err != nil {
+		t.Fatalf("버전 4로 이동 실패: %v", err)
+	}
 	if err := m.Steps(-1); err != nil {
 		t.Fatalf("0004 down 실패: %v", err)
 	}
@@ -111,5 +115,42 @@ func TestMigration0004_BodyText_Reversible(t *testing.T) {
 	}
 	if hasBody() != 1 {
 		t.Fatal("재-up 후 links.body_text가 없다")
+	}
+}
+
+// TestMigration0005_Summary_Reversible은 0005 down.sql(DROP COLUMN summary)이
+// 되감기는지 본다 — 0005가 top이라 Steps(-1)이 곧 0005 down이다.
+func TestMigration0005_Summary_Reversible(t *testing.T) {
+	db, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open 실패: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	m := newMigrator(t, db)
+
+	hasSummary := func() int {
+		t.Helper()
+		var n int
+		if err := db.Writer.QueryRow(
+			`SELECT COUNT(*) FROM pragma_table_info('links') WHERE name = 'summary'`).Scan(&n); err != nil {
+			t.Fatalf("pragma_table_info 실패: %v", err)
+		}
+		return n
+	}
+
+	if hasSummary() != 1 {
+		t.Fatal("Open 직후 links.summary가 없다 — 0005가 적용되지 않았다")
+	}
+	if err := m.Steps(-1); err != nil {
+		t.Fatalf("0005 down 실패: %v", err)
+	}
+	if hasSummary() != 0 {
+		t.Fatal("down 후에도 links.summary가 남아 있다")
+	}
+	if err := m.Steps(1); err != nil {
+		t.Fatalf("0005 재-up 실패: %v", err)
+	}
+	if hasSummary() != 1 {
+		t.Fatal("재-up 후 links.summary가 없다")
 	}
 }
