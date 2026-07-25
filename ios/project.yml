@@ -32,6 +32,17 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: NO
 
 targets:
+  # 웹과 값이 갈라지면 안 되는 것들(생성 커버 해시)을 고정하는 자리.
+  # 화면 코드가 아니라 규칙을 테스트한다.
+  PushPointTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [PushPointTests, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pushpoint.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+
   PushPoint:
     type: application
     platform: iOS

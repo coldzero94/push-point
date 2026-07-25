@@ -146,8 +146,8 @@ func (in SaveInput) Normalize() (SaveInput, error) {
 	// 클라이언트 캡처 필드는 정제 후 **절단**한다(거부하지 않는다) — 클라이언트가 룬/바이트
 	// 경계를 서버와 똑같이 맞출 방법이 없으므로 경계에서 거부하면 정상 캡처가 조용히 실패한다.
 	// body_text만 개행을 남긴다(요약이 문장 구분에 쓴다).
-	in.Title = textutil.Clean(in.Title, textutil.MaxTitle, false)
-	in.Description = textutil.Clean(in.Description, textutil.MaxDescription, false)
+	in.Title = textutil.CleanMeta(in.Title, textutil.MaxTitle)
+	in.Description = textutil.CleanMeta(in.Description, textutil.MaxDescription)
 	in.BodyText = textutil.Clean(in.BodyText, textutil.MaxBodyText, true)
 	return in, nil
 }

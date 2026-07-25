@@ -5,6 +5,7 @@
 package textutil
 
 import (
+	"html"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -71,4 +72,19 @@ func Clean(s string, limit int, allowNewline bool) string {
 	}
 	s = CapRunes(s, limit)
 	return CapRunes(strings.TrimSpace(SanitizeText(s, allowNewline)), limit)
+}
+
+// CleanMeta는 제목·설명처럼 **HTML 메타 필드에서 온 짧은 텍스트**를 정제한다.
+// Clean이 하는 일에 더해 HTML 엔티티를 한 번 더 푼다.
+//
+// 왜 한 번 더인가 — 실사용에서 발견했다. 네이버 블로그의 og:description은
+// `&amp;quot;`로 **이중 인코딩**돼 있어서, 브라우저(extract.js의 getAttribute)나
+// goquery가 한 번 디코딩해도 `&quot;`가 남고 그게 그대로 화면에 보인다. 두 경로 모두
+// 한 번씩만 풀기 때문에 같은 증상이 나온다.
+//
+// **본문(body_text)에는 적용하지 않는다.** 본문에는 코드 블록에 `&quot;` 같은 문자열이
+// 정당하게 들어 있을 수 있고, 그걸 풀면 원문을 왜곡한다. 메타 필드는 사람이 읽을 한
+// 문장이라 그 위험이 사실상 없고, 이중 인코딩이 흔한 자리다.
+func CleanMeta(s string, limit int) string {
+	return Clean(html.UnescapeString(Clean(s, limit, false)), limit, false)
 }
