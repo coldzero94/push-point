@@ -23,6 +23,9 @@ type Result struct {
 	// 다를 수 있다 — 같은 태그에 manual 행이 이미 있으면 ON CONFLICT DO NOTHING으로
 	// 건너뛴다(수동 태그 보존이 의도다).
 	Tags int
+	// Names는 붙은 태그 이름(Tags와 같은 순서). iOS 확장이 저장 직후 화면에 태그를
+	// 보여주려면 개수만으로는 부족하다 — 서버 왕복 없이 그 자리에서 필요한 값이다.
+	Names []string
 	// SummaryLen은 **DB에 기록된** 요약의 길이다. SummaryErr가 nil이 아니면 0이다 —
 	// 기록되지 않은 요약의 길이를 돌려주면 호출자(특히 확장 UI)가 "요약됨"으로 읽는다.
 	SummaryLen int
@@ -56,7 +59,17 @@ func Run(ctx context.Context, st store.Store, linkID int64) (Result, error) {
 
 	// 빈 문자열도 정상 값이다(가드 불통과 = 요약 없음).
 	sum := summarizer.Summarize(content.Body, content.Description)
-	res := Result{Tags: len(scored)}
+	byID := make(map[int64]string, len(entries))
+	for _, e := range entries {
+		byID[e.ID] = e.Name
+	}
+	names := make([]string, 0, len(scored))
+	for _, sc := range scored {
+		if n, ok := byID[sc.TagID]; ok {
+			names = append(names, n)
+		}
+	}
+	res := Result{Tags: len(scored), Names: names}
 	// SummaryLen은 기록에 **성공한 뒤에만** 채운다. 미리 채우면 실패했을 때
 	// "길이가 있는데 DB에는 없는" 상태가 되고, 확장 UI가 그걸 요약 있음으로 읽는다.
 	if err := st.SetSummary(ctx, linkID, sum); err != nil {

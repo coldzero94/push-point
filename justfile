@@ -293,3 +293,45 @@ lint:
 fmt:
     gofmt -l -w backend
     @if command -v goimports >/dev/null 2>&1; then goimports -l -w backend; else echo "goimports가 설치되어 있지 않습니다. 설치: go install golang.org/x/tools/cmd/goimports@latest"; fi
+
+# ---- iOS (M4) ----
+# 소스는 ios/project.yml · Swift · entitlements 뿐이고, .xcodeproj·Frameworks·extract.js
+# 사본은 전부 생성물이다(.gitignore). 체크아웃 직후 필요한 순서: ios-bind → ios-gen → ios-build
+
+# 바인드를 둘로 나눈 이유는 Share Extension의 메모리 예산이다 — scraper를 링크만 해도
+# RSS가 13.4MB → 64.2MB로 뛴다(docs/v2/08-DEVELOPMENT-PLAN.md M4 선행 검증).
+
+# Go 백엔드 → iOS 프레임워크 2종(PPCore·PPShare) + 캡처 규칙 사본
+ios-bind:
+    @command -v gomobile >/dev/null 2>&1 || { echo "gomobile이 없습니다. 설치: go install golang.org/x/mobile/cmd/gomobile@latest && gomobile init"; exit 1; }
+    mkdir -p ios/Frameworks
+    cd backend && gomobile bind -target=ios -o ../ios/Frameworks/PPCore.xcframework ./mobile/ppcore
+    cd backend && gomobile bind -target=ios -o ../ios/Frameworks/PPShare.xcframework ./mobile/ppshare
+    # 캡처 규칙은 extension/src/extract.js 하나가 원본이다 — 사파리 공유용으로 복사만 한다.
+    # 복사가 아니라 각자 관리하면 브라우저와 iOS의 저장 결과가 조용히 갈라진다.
+    cp extension/src/extract.js ios/PushPointShare/extract.js
+    @echo "ios-bind: PPCore/PPShare.xcframework + extract.js 준비 완료"
+
+# ios/project.yml → ios/PushPoint.xcodeproj (XcodeGen)
+ios-gen:
+    @command -v xcodegen >/dev/null 2>&1 || { echo "xcodegen이 없습니다. 설치: brew install xcodegen"; exit 1; }
+    cd ios && xcodegen generate
+
+# ad-hoc 서명("-")을 쓴다. 서명을 꺼버리면(CODE_SIGNING_ALLOWED=NO) entitlement가
+# 적용되지 않아 App Group 컨테이너 조회가 "client is not entitled"로 실패하고,
+# 확장과 본체가 같은 DB를 볼 수 없다 — 이 앱의 핵심 경로가 통째로 죽는다.
+# ad-hoc이면 Apple 계정 없이도 시뮬레이터에서 entitlement가 살아 있다.
+
+# 시뮬레이터용 앱 + 확장 빌드 (ad-hoc 서명 — 계정 불요, App Group 동작)
+ios-build device="iPhone 17": ios-gen
+    cd ios && xcodebuild -project PushPoint.xcodeproj -scheme PushPoint \
+        -destination 'platform=iOS Simulator,name={{device}}' \
+        -derivedDataPath .build \
+        CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES build
+
+# 시뮬레이터에 설치·실행 (부팅 포함)
+ios-run device="iPhone 17": (ios-build device)
+    xcrun simctl boot "{{device}}" 2>/dev/null || true
+    open -a Simulator
+    xcrun simctl install booted ios/.build/Build/Products/Debug-iphonesimulator/PushPoint.app
+    xcrun simctl launch booted com.pushpoint.app

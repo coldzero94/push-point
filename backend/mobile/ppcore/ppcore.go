@@ -18,8 +18,6 @@ package ppcore
 import (
 	"errors"
 	"fmt"
-	"log/slog"
-	"os"
 	"sync"
 
 	"github.com/coby/push-point/backend/internal/app"
@@ -66,7 +64,7 @@ func Start(dataDir, apiKey string) (string, error) {
 		return inst.Addr(), nil
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := newLogger(dataDir)
 	a, err := app.Start(app.Config{
 		DataDir: dataDir,
 		APIKey:  apiKey,
@@ -82,7 +80,8 @@ func Start(dataDir, apiKey string) (string, error) {
 	}
 	inst, instDir, instKey = a, dataDir, apiKey
 
-	// 서버나 dispatcher가 죽으면 조용히 사라지지 않게 남긴다(Xcode 콘솔에서 보인다).
+	// 서버나 dispatcher가 죽으면 조용히 사라지지 않게 남긴다(dataDir/pushpoint.log —
+	// 기기에서 stderr는 버려지므로 파일이어야 한다. logger.go 참조).
 	// 핸들을 비워 둬야 앱이 다음 Start 호출로 복구할 수 있다.
 	go func() {
 		if werr := a.Wait(); werr != nil {
