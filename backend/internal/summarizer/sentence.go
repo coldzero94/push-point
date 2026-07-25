@@ -65,21 +65,66 @@ var abbreviations = map[string]bool{
 //
 // 한국어 종결어미 사전은 쓰지 않는다: 실측상 한국어 문서도 마침표 종결이 압도적이라
 // (`다.` 38~101회 vs 마침표 없는 `다 ` 0~7회) 사전은 정밀도만 깎는다.
+// unwrap은 문장 내부에 남은 개행(소프트 랩)을 공백으로 편다.
+var unwrap = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
+
+// isBlockBreak는 rs[i]의 개행이 **문단/블록 경계**인지 본다. 둘 중 하나면 경계다:
+//
+//   - 빈 줄이 이어진다(개행 뒤 공백들을 건너뛰면 또 개행) — 문단 구분.
+//   - 앞이 문장 종결 부호다(닫는 기호는 건너뛴다) — 문장이 끝난 자리의 줄바꿈.
+//
+// 나머지는 원문이 폭을 맞추려 접은 소프트 랩이므로 문장이 계속된다고 본다.
+func isBlockBreak(rs []rune, i int) bool {
+	for j := i + 1; j < len(rs); j++ {
+		if rs[j] == '\n' {
+			return true // 빈 줄 — 문단 경계
+		}
+		if rs[j] != ' ' && rs[j] != '\t' && rs[j] != '\r' {
+			break
+		}
+	}
+	for j := i - 1; j >= 0; j-- {
+		if isCloser(rs[j]) {
+			continue // 따옴표·괄호는 종결 부호 뒤에 올 수 있다
+		}
+		if rs[j] == ' ' || rs[j] == '\t' || rs[j] == '\r' {
+			continue
+		}
+		return isTerminator(rs[j])
+	}
+	return false
+}
+
 func Split(text string) []string {
 	rs := []rune(text)
 	n := len(rs)
 	var out []string
 	start := 0
 	cut := func(end int) {
-		if s := strings.TrimSpace(string(rs[start:end])); s != "" {
+		// 문장 안에 남은 소프트 랩 개행은 공백으로 편다 — 요약은 문장을 개행으로 이어
+		// 붙이므로, 문장 내부에 개행이 남으면 한 문장이 여러 줄로 보인다.
+		s := strings.TrimSpace(unwrap.Replace(string(rs[start:end])))
+		if s != "" {
 			out = append(out, s)
 		}
 	}
 
 	for i := 0; i < n; i++ {
-		// R0: 개행은 무조건 경계. 현재 trafilatura 출력엔 개행이 없지만, 스크래퍼가
-		// 블록 경계를 살리도록 개선되면 그날 바로 이득을 본다(1줄 비용의 선행 대비).
+		// R0: 개행이 **문단 경계일 때만** 자른다.
+		//
+		// 예전에는 개행을 무조건 경계로 봤다. trafilatura 출력에는 문장 중간 개행이
+		// 없어서 안전했지만, 클라이언트 캡처(extension/src/extract.js)는 innerText를
+		// 쓰기 때문에 **원문의 하드 줄바꿈이 그대로 들어온다** — 블로그가 80자에서
+		// 줄을 접으면 문장 한복판에 개행이 생기고, 무조건 자르면 문장이 조각난다.
+		// 실제로 go.dev 글에서 "http.Request, are added to a Logger..." 같은 조각이
+		// 요약에 뽑혔다(첫 실사용에서 발견).
+		//
+		// 그래서 소프트 랩(문장이 이어지는 개행)은 공백처럼 넘기고, 빈 줄이 끼거나
+		// 종결 부호 뒤에 오는 개행만 경계로 본다.
 		if rs[i] == '\n' {
+			if !isBlockBreak(rs, i) {
+				continue // 소프트 랩 — cut에서 공백으로 펴진다
+			}
 			cut(i)
 			start = i + 1
 			continue
