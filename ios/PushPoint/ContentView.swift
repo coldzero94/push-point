@@ -28,6 +28,12 @@ struct ContentView: View {
     /// 적은 이유를 알 수 있게 화면에 남긴다 — 계약이 이걸 알려주는 이유가 그것이다.
     @State private var searchMode: String?
     @State private var searching = false
+    /// 검색 실패. **loadError와 따로 둔다** — searchContent는 loadError를 읽지 않고,
+    /// 검색이 실패했다고 목록 화면 전체를 오류로 바꾸면 저장한 것이 사라진 것처럼 보인다.
+    @State private var searchError: String?
+    /// 검색 결과 다음 장 실패. 첫 장 실패와 화면에서 다뤄야 할 자리가 다르다 —
+    /// 이쪽은 이미 보이는 결과 아래에 붙는 푸터다.
+    @State private var searchMoreError: String?
     /// 다음 페이지 커서. nil이면 마지막 페이지다 — 계약이 그렇게 말한다.
     /// **페이지 번호가 아니다.** keyset 커서라 목록에 쓰기가 일어나도 항목이 건너뛰거나
     /// 중복되지 않는다(.claude/rules/ios.md).
@@ -111,6 +117,19 @@ struct ContentView: View {
     private var searchContent: some View {
         if searching && results.isEmpty {
             refreshableState { ProgressView().padding(.top, 60) }
+        } else if let searchError {
+            // **빈 결과보다 먼저 본다.** 순서가 뒤바뀌면 실패가 "결과가 없습니다"라는
+            // 단정문으로 위장되고, 그건 사용자에게 "이 검색어로는 저장한 게 없다"는
+            // 거짓말이 된다 — 아카이브에서 가장 나쁜 실패 방식이다.
+            refreshableState {
+                ContentUnavailableView {
+                    Label("검색하지 못했습니다", systemImage: "wifi.exclamationmark")
+                } description: {
+                    Text(searchError)
+                } actions: {
+                    Button("다시 시도") { Task { await runSearch(debounce: false) } }
+                }
+            }
         } else if results.isEmpty {
             refreshableState {
                 ContentUnavailableView("결과가 없습니다", systemImage: "magnifyingglass",
@@ -132,6 +151,20 @@ struct ContentView: View {
                         .onAppear {
                             if link.id == results.last?.id { Task { await searchMore() } }
                         }
+                }
+                // 다음 장 실패는 화면상 "여기가 끝"과 구분되지 않는다. 커서는 보존돼
+                // 있으므로 같은 자리에서 그대로 재시도된다.
+                if let searchMoreError {
+                    HStack(spacing: 10) {
+                        Text(searchMoreError)
+                            .font(PP.Typo.meta)
+                            .foregroundStyle(PP.Palette.danger)
+                        Button("다시 시도") { Task { await searchMore() } }
+                            .font(PP.Typo.label)
+                            .foregroundStyle(PP.Palette.accent)
+                        Spacer()
+                    }
+                    .plainRow(top: 10, bottom: 10)
                 }
             }
             .listStyle(.plain)
@@ -390,18 +423,22 @@ struct ContentView: View {
     /// `.task(id:)`는 id가 바뀌면 이전 작업을 **취소**하므로, 앞에 슬립을 두면 그것만으로
     /// 디바운스가 된다 — 타이머도 상태도 필요 없다. 취소된 작업은 슬립에서 죽고 요청까지
     /// 가지 않는다.
-    private func runSearch() async {
+    private func runSearch(debounce: Bool = true) async {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else {
             results = []
             searchMode = nil
             searchCursor = nil
+            searchError = nil
+            searchMoreError = nil
             return
         }
-        do {
-            try await Task.sleep(for: .milliseconds(250))
-        } catch {
-            return // 취소됨 — 다음 글자가 들어왔다
+        if debounce {
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return // 취소됨 — 다음 글자가 들어왔다
+            }
         }
         guard case .running = backend.state, let client = backend.client else { return }
         searching = true
@@ -417,13 +454,17 @@ struct ContentView: View {
             results = page.links.map(\.value1)
             searchCursor = page.next_cursor
             searchMode = page.mode.rawValue
-            loadError = nil
+            searchError = nil
+            searchMoreError = nil
         } catch {
             // 검색 실패를 목록 오류 자리에 쓰지 않는다 — 목록은 멀쩡한데 화면 전체가
-            // 오류로 바뀌면 사용자는 저장한 것이 사라졌다고 읽는다.
+            // 오류로 바뀌면 사용자는 저장한 것이 사라졌다고 읽는다. 대신 **검색 화면에서**
+            // 드러낸다. 이걸 안 하면 실패가 "결과가 없습니다"라는 단정문이 되어,
+            // 저장해 둔 것이 없다는 거짓말을 하게 된다.
             results = []
             searchMode = nil
             searchCursor = nil
+            searchError = error.localizedDescription
         }
     }
 
@@ -442,10 +483,17 @@ struct ContentView: View {
         var q2 = Operations.search.Input.Query(q: q, limit: 50)
         q2.cursor = cursor
         if case let .tag(name) = filter { q2.tag = name }
-        guard let page = try? await client.search(.init(query: q2)).ok.body.json else { return }
-        let known = Set(results.map(\.id))
-        results.append(contentsOf: page.links.map(\.value1).filter { !known.contains($0.id) })
-        searchCursor = page.next_cursor
+        do {
+            let page = try await client.search(.init(query: q2)).ok.body.json
+            let known = Set(results.map(\.id))
+            results.append(contentsOf: page.links.map(\.value1).filter { !known.contains($0.id) })
+            searchCursor = page.next_cursor
+            searchMoreError = nil
+        } catch {
+            // 삼키면 "여기가 끝"과 구분되지 않는다 — 이 함수의 주석이 경고하는 바로 그
+            // 오해를 만들게 된다. searchCursor를 그대로 두므로 재시도가 같은 자리에서 이어진다.
+            searchMoreError = "다음 결과를 불러오지 못했습니다"
+        }
     }
 
     // MARK: - 로드
