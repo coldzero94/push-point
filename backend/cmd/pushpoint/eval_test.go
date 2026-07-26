@@ -55,6 +55,18 @@ func TestLoadGolden(t *testing.T) {
 	if got[1].Snapshot.BodyText != "" || len(got[1].ExpectedTags) != 2 {
 		t.Errorf("둘째 항목 파싱 불일치: %+v", got[1])
 	}
+
+	// **깨진 줄은 건너뛰지 않고 에러다.** 조용히 건너뛰면 세트가 줄어든 채로 Recall이
+	// 계산되고, 분모가 바뀐 것을 아무도 모른다. 잘린 파일이 오히려 더 좋은 수를 내기도 한다.
+	bad := filepath.Join(dir, "bad.jsonl")
+	if err := os.WriteFile(bad, []byte(`{"url":"https://a.com","expected_tags":["dev"]}
+{"url": 깨진 JSON
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadGolden(bad); err == nil {
+		t.Error("깨진 JSONL 줄을 조용히 건너뛰었다 — 에러여야 한다")
+	}
 }
 
 func TestClassifyTop(t *testing.T) {
@@ -199,5 +211,115 @@ func TestIsThinSnapshot(t *testing.T) {
 	// 반대쪽: 합이 150자면 어느 필드에 흩어져 있든 빈약이다.
 	if !isThinSnapshot(short, short, short) {
 		t.Error("합이 150자면 빈약이다")
+	}
+}
+
+// measureSet은 리포트되는 **모든 수**의 출처다. 예전에는 계산이 Printf와 한 함수에 섞여
+// 있어 테스트를 붙일 수 없었고, 그래서 분모 오프바이원·변형 배선 뒤바꿈·태그별 TP/FP/FN
+// 오류가 전부 조용히 통과했다(2026-07-26 뮤테이션 확인).
+//
+// 픽스처는 손으로 세어 답을 아는 3건이다. 사전은 4태그이고, 도메인 규칙에 기대지 않도록
+// 도메인 신호가 없는 URL을 쓴다.
+func TestMeasureSet(t *testing.T) {
+	dict := tagger.BuildDictionary([]tagger.TagEntry{
+		{ID: 1, Name: "kubernetes", Aliases: []string{"쿠버네티스"}},
+		{ID: 2, Name: "python", Aliases: []string{"파이썬"}},
+		{ID: 3, Name: "golang", Aliases: []string{"고랭"}},
+		{ID: 4, Name: "rust", Aliases: []string{"러스트"}},
+	})
+	id2name := map[int64]string{1: "kubernetes", 2: "python", 3: "golang", 4: "rust"}
+
+	long := strings.Repeat("가", 300) // 빈약 판정에 걸리지 않을 만큼 긴 본문
+
+	entries := []goldenEntry{
+		// 1) 제목이 정답을 말한다 → 모든 변형에서 hit. 본문·분류가 없어도 맞는다.
+		{
+			URL:          "https://example.com/a",
+			Snapshot:     goldenSnapshot{Title: "쿠버네티스 입문 " + long},
+			ExpectedTags: []string{"kubernetes"},
+		},
+		// 2) **본문에만** 정답이 있다 → full은 hit, no-body는 miss.
+		//    Δbody가 실제로 본문 기여를 재는지 여기서 갈린다.
+		{
+			URL:          "https://example.com/b",
+			Snapshot:     goldenSnapshot{Title: "제목에는 단서가 없다 " + long, BodyText: "파이썬 " + long},
+			ExpectedTags: []string{"python"},
+		},
+		// 3) 어디에도 정답 신호가 없다 → 전 변형 miss, 그리고 **정답 0점** 미스.
+		{
+			URL:          "https://example.com/c",
+			Snapshot:     goldenSnapshot{Title: "고랭 이야기 " + long},
+			ExpectedTags: []string{"rust"},
+		},
+	}
+
+	m := measureSet(entries, dict, id2name)
+
+	// Recall 분자 — 분모(len(entries))는 호출부가 쓰므로 여기서는 hit 수를 직접 고정한다.
+	if m.fullHit != 2 {
+		t.Errorf("full hit=2 여야 한다 (1·2번): %d", m.fullHit)
+	}
+	if m.noBodyHit != 1 {
+		t.Errorf("no-body hit=1 이어야 한다 (2번이 본문을 잃고 miss): %d", m.noBodyHit)
+	}
+	if m.baseHit != 0 {
+		t.Errorf("도메인만으로는 하나도 못 맞힌다: %d", m.baseHit)
+	}
+	// 분류(keywords)를 가진 항목이 없으므로 no-keywords는 full과, bare는 no-body와 같아야 한다.
+	if m.noKWHit != m.fullHit {
+		t.Errorf("분류가 없으면 no-keywords는 full과 같다: %d vs %d", m.noKWHit, m.fullHit)
+	}
+	if m.bareHit != m.noBodyHit {
+		t.Errorf("분류가 없으면 bare는 no-body와 같다: %d vs %d", m.bareHit, m.noBodyHit)
+	}
+	if m.withKW != 0 {
+		t.Errorf("분류를 가진 항목이 없다: %d", m.withKW)
+	}
+
+	// 미스 해부 — 3번은 정답 rust가 0점이므로 '순위 밀림'이 아니라 '정답 0점'이다.
+	if m.missZero != 1 || m.missRank != 0 {
+		t.Errorf("미스 해부: 정답 0점 1 · 순위 밀림 0 이어야 한다 (0점=%d 밀림=%d)", m.missZero, m.missRank)
+	}
+
+	// 태그별 집계 — golden 등장 수는 예측과 무관하게 라벨에서만 온다.
+	for tag, want := range map[string]int{"kubernetes": 1, "python": 1, "rust": 1} {
+		if m.goldN[tag] != want {
+			t.Errorf("goldN[%s]=%d, 기대 %d", tag, m.goldN[tag], want)
+		}
+	}
+	if m.tp["kubernetes"] != 1 {
+		t.Errorf("kubernetes는 1번에서 TP: %d", m.tp["kubernetes"])
+	}
+	if m.fn["rust"] != 1 {
+		t.Errorf("rust는 3번에서 FN(라벨엔 있는데 예측 안 됨): %d", m.fn["rust"])
+	}
+	// 3번에서 golang이 예측되지만 라벨은 rust다 → FP.
+	if m.fp["golang"] != 1 {
+		t.Errorf("golang은 3번에서 FP(예측됐지만 정답 아님): %d", m.fp["golang"])
+	}
+	if m.tp["golang"] != 0 {
+		t.Errorf("golang은 어디서도 TP가 아니다: %d", m.tp["golang"])
+	}
+
+	// 빈약 스냅샷 — 셋 다 본문이 길어 해당 없음.
+	if m.thin != 0 {
+		t.Errorf("빈약한 스냅샷이 없어야 한다: %d", m.thin)
+	}
+}
+
+// fill은 **비어 있는 필드만** 채운다. 이 한 줄이 golden-refill과 동결 test 사이에 서 있는
+// 전부다 — 덮어쓰기로 바뀌면 refill 한 번에 test.jsonl의 스냅샷이 통째로 새 캡처로 바뀌고,
+// 그 순간 이전 측정치와의 비교 가능성이 사라진다. 되돌릴 방법은 git뿐이다.
+func TestFillPreservesExisting(t *testing.T) {
+	existing := "원래 값"
+	fill(&existing, "새 값")
+	if existing != "원래 값" {
+		t.Errorf("비어 있지 않은 필드는 보존해야 한다: %q", existing)
+	}
+
+	empty := ""
+	fill(&empty, "새 값")
+	if empty != "새 값" {
+		t.Errorf("비어 있는 필드는 채워야 한다: %q", empty)
 	}
 }

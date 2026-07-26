@@ -198,41 +198,43 @@ func goldenCorpus(entries []goldenEntry, dict *tagger.Dictionary) tagger.CorpusS
 	return tagger.CorpusStats{Docs: int64(withTerms), DF: df}
 }
 
-// evalSet은 한 세트(dev/test/wild)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
+// setMetrics는 한 세트에서 나오는 **모든 수**다. 출력 형식은 들어 있지 않다.
 //
-// 변형은 **full에서 신호를 하나씩 뺀 것**이다 — 그래야 Δ가 그 신호만의 기여가 된다.
-// full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
-// baseline=도메인만(규칙 전체의 기여를 보는 기준선).
-func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {
-	fmt.Printf("\n=== %s (%d건) ===\n", name, len(entries))
-	if len(entries) == 0 {
-		fmt.Println("(빈 세트 — 건너뜀)")
-		return
-	}
-
-	var baseHit, noBodyHit, noKWHit, fullHit, bareHit int
+// 계산을 출력에서 떼어낸 이유는 하나다 — **잴 수 있게 하려고.** 예전에는 계산과 Printf가
+// 한 함수에 섞여 있어서 evalSet에 테스트를 붙일 수가 없었고, 그래서 리포트되는 모든 수
+// (Recall, Δ, 태그별 P/R)가 검증 없이 나갔다. 실제로 분모 오프바이원·변형 배선 뒤바꿈·
+// 태그별 TP/FP/FN 오류가 전부 테스트를 통과했다(2026-07-26 뮤테이션 확인).
+type setMetrics struct {
+	// 변형별 hit 수. 변형은 **full에서 신호를 하나씩 뺀 것**이라 Δ가 그 신호만의 기여가 된다.
+	// full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
+	// bare=본문도 분류도 없음 / base=도메인만.
+	fullHit, noBodyHit, noKWHit, bareHit, baseHit int
 	// tied: topK 경계에서 점수가 같아 **태그 이름 알파벳순으로** 갈린 링크 수.
 	// missZero/missRank: 미스를 둘로 가른다 — 정답 태그가 0점인가, 점수는 있는데 밀렸는가.
-	var tied, missZero, missRank int
+	tied, missZero, missRank int
 	// thin/thinHit: 스냅샷 자체가 빈약한 항목과, 그중 그래도 맞힌 항목.
-	// **Recall 하나로는 캡처 실패와 태거 실패가 구분되지 않는다.** 봇 차단 페이지를 잡아
-	// 왔으면 태거를 어떻게 고쳐도 그 항목은 영원히 miss인데, 수치는 태거 탓처럼 읽힌다.
-	var thin, thinHit int
-	// 태그별 집계 (full 기준): TP/FP/FN + golden 등장 수.
-	tp := map[string]int{}
-	fp := map[string]int{}
-	fn := map[string]int{}
-	goldN := map[string]int{}
-	// 발행자 분류를 가진 항목 수 — Δkeywords를 몇 건 위에서 잰 것인지 없으면 해석할 수 없다.
-	withKW := 0
+	thin, thinHit int
+	// withKW: 발행자 분류를 가진 항목 수 — Δkeywords를 몇 건 위에서 잰 것인지 없으면 해석 불가.
+	withKW int
+	// 태그별 집계 (full 기준).
+	tp, fp, fn, goldN map[string]int
+}
 
+// measureSet은 세트 하나를 돌며 setMetrics를 채운다. 출력하지 않는다.
+func measureSet(entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) setMetrics {
+	m := setMetrics{
+		tp:    map[string]int{},
+		fp:    map[string]int{},
+		fn:    map[string]int{},
+		goldN: map[string]int{},
+	}
 	for _, e := range entries {
 		exp := toSet(e.ExpectedTags)
 		for t := range exp {
-			goldN[t]++
+			m.goldN[t]++
 		}
 		if e.Snapshot.Keywords != "" {
-			withKW++
+			m.withKW++
 		}
 
 		base := classifyTop(tagger.Content{Domain: hostOf(e.URL)}, dict, id2name)
@@ -242,44 +244,61 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 		// bare = 본문도 분류도 없는 변형. 분류가 **본문의 대체재**인지 보려면 필요하다.
 		bare := classifyTop(evalContent(e, false, false), dict, id2name)
 
-		baseHit += hit(base, exp)
-		noBodyHit += hit(noBody, exp)
-		noKWHit += hit(noKW, exp)
-		fullHit += hit(full, exp)
-		bareHit += hit(bare, exp)
+		m.baseHit += hit(base, exp)
+		m.noBodyHit += hit(noBody, exp)
+		m.noKWHit += hit(noKW, exp)
+		m.fullHit += hit(full, exp)
+		m.bareHit += hit(bare, exp)
 
 		// 동점과 미스 해부는 full 기준으로 센다 — 실제로 출하되는 구성이다.
 		full3 := classifyRanked(evalContent(e, true, true), dict, id2name)
 		if tiedAtCut(full3) {
-			tied++
+			m.tied++
 		}
 		if hit(full, exp) == 0 {
 			if zeroScored(full3, exp) {
-				missZero++
+				m.missZero++
 			} else {
-				missRank++
+				m.missRank++
 			}
 		}
 		if isThinSnapshot(e.Snapshot.Title, e.Snapshot.Description, e.Snapshot.BodyText) {
-			thin++
-			thinHit += hit(full, exp)
+			m.thin++
+			m.thinHit += hit(full, exp)
 		}
 
 		// 태그별 P/R은 full 예측 기준.
 		predicted := toSet(full)
 		for t := range predicted {
 			if exp[t] {
-				tp[t]++
+				m.tp[t]++
 			} else {
-				fp[t]++
+				m.fp[t]++
 			}
 		}
 		for t := range exp {
 			if !predicted[t] {
-				fn[t]++
+				m.fn[t]++
 			}
 		}
 	}
+	return m
+}
+
+// evalSet은 한 세트(dev/test/wild)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
+// 계산은 measureSet이 하고, 여기는 형식만 맡는다.
+func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {
+	fmt.Printf("\n=== %s (%d건) ===\n", name, len(entries))
+	if len(entries) == 0 {
+		fmt.Println("(빈 세트 — 건너뜀)")
+		return
+	}
+
+	m := measureSet(entries, dict, id2name)
+	baseHit, noBodyHit, noKWHit, fullHit, bareHit := m.baseHit, m.noBodyHit, m.noKWHit, m.fullHit, m.bareHit
+	tied, missZero, missRank := m.tied, m.missZero, m.missRank
+	thin, thinHit, withKW := m.thin, m.thinHit, m.withKW
+	tp, fp, fn, goldN := m.tp, m.fp, m.fn, m.goldN
 
 	n := float64(len(entries))
 	fmt.Printf("Recall@%d:  full=%.3f   no-body=%.3f (Δbody %+.3f)   baseline(도메인만)=%.3f (Δrules %+.3f)\n",
