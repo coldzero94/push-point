@@ -76,7 +76,7 @@ CREATE TABLE links (
   body_text    TEXT NOT NULL DEFAULT '',        -- 0004에서 ALTER ADD COLUMN (그래서 맨 뒤).
                                                   -- 본문 추출(go-trafilatura). 태거·요약 입력 전용 — FTS·API 미노출
   summary      TEXT NOT NULL DEFAULT '',        -- 0005에서 ALTER ADD COLUMN. 추출식 요약(M5 Phase A)
-  body_source  TEXT NOT NULL DEFAULT '',         -- 0006. '' | 'server' | 'client'
+  body_source  TEXT NOT NULL DEFAULT ''          -- 0006. '' | 'server' | 'client'
     CHECK (body_source IN ('', 'server', 'client')),
   keywords     TEXT NOT NULL DEFAULT ''          -- 0008. 발행자 분류(meta keywords·article:section 등). 태거 입력 전용
 );

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -132,5 +133,36 @@ func TestCorpusDF_deleteWithdrawsContribution(t *testing.T) {
 	}
 	if _, ok := df["docker"]; ok {
 		t.Errorf("삭제된 링크의 표면이 남음: docker=%d", df["docker"])
+	}
+}
+
+// 삭제된 링크에는 태그·기여를 쓰지 않아야 한다.
+//
+// tagjob은 콘텐츠 조회와 분류를 마친 **뒤에** writer를 잡는다. 그 사이에 삭제가 커밋되면
+// (DeleteLink는 running 잡을 일부러 남긴다) 방금 회수한 기여가 곧바로 다시 쌓이고,
+// 두 번째 DeleteLink는 ErrNotFound로 빠져 자가 치유 경로가 없다. 지운 주제가 계속
+// "흔한 낱말"로 남아 앞으로의 태깅을 끌어내린다 — 회수하는 이유와 정확히 반대다.
+func TestApplyTags_refusesDeletedLink(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	ctx := context.Background()
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://c.example/race"})
+	if err := s.ApplyTags(ctx, id, nil, []string{"golang"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteLink(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+
+	// 진행 중이던 tagjob이 뒤늦게 커밋하려는 상황.
+	err := s.ApplyTags(ctx, id, nil, []string{"golang"})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("삭제된 링크에 태깅이 통과했다: %v", err)
+	}
+	docs, df, err := s.CorpusDF(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if docs != 0 || len(df) != 0 {
+		t.Errorf("삭제된 링크의 기여가 되살아났다: docs=%d df=%v", docs, df)
 	}
 }

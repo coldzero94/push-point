@@ -118,8 +118,13 @@ func evalContent(e goldenEntry, body, keywords bool) tagger.Content {
 // 여기서는 golden이 코퍼스다. 다른 코퍼스를 빌려 오면 실제로 켜질 통계와 다른 것을 재게 된다.
 func goldenCorpus(entries []goldenEntry, dict *tagger.Dictionary) tagger.CorpusStats {
 	df := map[string]int64{}
+	withTerms := 0
 	for _, e := range entries {
-		for s := range dict.MatchedSurfaces(evalContent(e, true, true)) {
+		surfaces := dict.MatchedSurfaces(evalContent(e, true, true))
+		if len(surfaces) > 0 {
+			withTerms++
+		}
+		for s := range surfaces {
 			df[s]++
 		}
 	}
@@ -143,7 +148,11 @@ func goldenCorpus(entries []goldenEntry, dict *tagger.Dictionary) tagger.CorpusS
 			fmt.Printf("    %-24s df=%3d  ratio=%.2f\n", r.t, r.n, float64(r.n)/float64(len(entries)))
 		}
 	}
-	return tagger.CorpusStats{Docs: int64(len(entries)), DF: df}
+	// 분모는 **표면을 하나라도 낸 문서 수**다. 런타임의 `CorpusDF`가 link_terms에 행을
+	// 남긴 링크만 세므로(표면 0인 링크는 원장에 아무것도 안 남긴다) 여기서도 같아야 한다.
+	// len(entries)로 세면 eval과 런타임이 다른 N을 쓰게 되고, IDF를 켤 때 판정 도구와
+	// 실제 동작이 어긋난다 — golden 123건 중 4건이 표면 0이라 3%쯤 벌어진다.
+	return tagger.CorpusStats{Docs: int64(withTerms), DF: df}
 }
 
 func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {

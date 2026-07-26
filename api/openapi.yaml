@@ -91,8 +91,8 @@ paths:
       description: >
         `INSERT INTO links` + `INSERT INTO jobs(kind='scrape')`를 한 트랜잭션으로 커밋하고
         즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다.
-        `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group
-        로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`).
+        `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트가 같은 요청을 재시도해도
+        중복 생성이 없다 (중복 시 200 `duplicate:true`).
         소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(pending 복귀, note 교체,
         scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
       requestBody:

@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/coby/push-point/backend/internal/store"
 )
 
 // 연결 정보는 토큰을 담으므로 **소유자만 읽을 수 있어야** 한다.
@@ -137,5 +139,27 @@ func TestConnected_matchesWhatOpenAccepts(t *testing.T) {
 				t.Errorf("Connected=%v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// 행 폭이 헤더와 같아야 한다.
+//
+// 어긋나면 웹훅은 9폭 범위에 8폭 행을 넣다 매 동기화 실패하고, 서비스 계정은 값이 한 칸씩
+// 밀려 상태가 "메모" 열 아래로 **조용히** 들어간다. 실측: `linkRow`에서 `l.Note`를 지우면
+// 17개 패키지 전부 통과했다 — `LastCol`↔`Header`만 묶여 있고 세 번째 당사자인 `linkRow`가
+// 빠져 있었다. 코드 주석이 열 추가를 예고하고 있어 실제로 벌어질 일이다.
+func TestLinkRow_matchesHeaderWidth(t *testing.T) {
+	if got, want := len(linkRow(store.Link{})), len(Header); got != want {
+		t.Errorf("행이 %d열인데 헤더는 %d열이다 — 열을 더했으면 Header·LastCol·linkRow 셋을 함께 옮겨야 한다",
+			got, want)
+	}
+}
+
+// 날짜는 시트가 날짜로 알아보는 문자열이어야 한다. epoch 정수를 넣으면 정렬은 되지만
+// 시트의 날짜 필터가 안 걸리고, 그게 내보내는 이유의 절반이다.
+func TestFormatTime_isADateString(t *testing.T) {
+	got := formatTime(1785000000)
+	if len(got) != len("2006-01-02 15:04:05") || got[4] != '-' || got[13] != ':' {
+		t.Errorf("날짜 형식이 아니다: %q", got)
 	}
 }
