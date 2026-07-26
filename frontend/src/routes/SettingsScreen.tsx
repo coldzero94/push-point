@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { SheetsSection } from './SheetsSection'
 import { Eye, EyeOff } from 'lucide-react'
 import { api, errorMessage } from '../lib/api/client'
 import { Button, Icon, Input, cn } from '../components/ui'
@@ -230,6 +231,13 @@ export function SettingsScreen() {
           </p>
         ) : null}
       </div>
+
+      <div className="border-t border-line-2" />
+
+      {/* ── 스프레드시트 ──────────────────────────────────────
+          연결은 터미널(just sheets-setup)이 맡는다 — 구글 승인을 브라우저에서 밟아야 해서
+          서버가 대신할 수 없다. 연결된 뒤로는 여기서 끝나야 한다. */}
+      <SheetsSection />
 
       <div className="border-t border-line-2" />
 

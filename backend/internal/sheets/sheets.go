@@ -274,9 +274,16 @@ func Cell(row []string, i int) string {
 // 갈라졌다는 사실이 어디에도 안 보인다.
 //
 // 그 대가로 **시트에 손으로 적은 것은 지워진다.** 이건 버그가 아니라 계약이다.
-func (c *Client) Replace(ctx context.Context, spreadsheetID, tab string, rows [][]any) error {
+func (c *Client) Replace(ctx context.Context, spreadsheetID, tab, lastCol string, rows [][]any) error {
+	// 탭이 없으면 만든다. **구글이 새 스프레드시트에 만들어 주는 탭 이름은 `Sheet1`이고
+	// 우리 기본 탭은 `links`다.** 이걸 빼먹으면 우리가 만든 시트에서 첫 동기화가 곧바로
+	// 400 "Unable to parse range"로 죽는다 — 실제로 그랬고, httptest 목이 응답을 흉내낼 뿐
+	// 구글의 의미론을 흉내내지 않아서 테스트가 통과하는 채로 남아 있었다.
+	if err := c.ensureTab(ctx, spreadsheetID, tab); err != nil {
+		return err
+	}
 	// 먼저 비운다. 이전 동기화가 더 많은 행을 썼다면 update만으로는 꼬리가 남는다.
-	if err := c.clear(ctx, spreadsheetID, tab); err != nil {
+	if err := c.clear(ctx, spreadsheetID, tab, lastCol); err != nil {
 		return err
 	}
 	if len(rows) == 0 {
@@ -290,10 +297,34 @@ func (c *Client) Replace(ctx context.Context, spreadsheetID, tab string, rows []
 	return c.do(ctx, http.MethodPut, target, payload)
 }
 
-func (c *Client) clear(ctx context.Context, spreadsheetID, tab string) error {
+// clear는 **우리 열만** 비운다. 탭 전체가 아니다.
+//
+// 이 한 줄이 계약을 바꾼다: "A~lastCol은 우리 것이고 매 동기화에 재생성된다.
+// 그다음 열부터는 당신 것이고 우리는 영원히 건드리지 않는다."
+//
+// 원래는 탭을 통째로 비웠다. 그러면 사용자가 J열에 무엇을 적든 다음 동기화가 말없이
+// 지운다 — 문서에 "계약"이라고 적어 뒀지만 그건 변명이지 해결이 아니었다. 손실을
+// 감지하려 애쓰는 대신 **손실이 일어날 수 없는 구조**로 바꾸는 편이 싸고 확실하다.
+// (감지는 애초에 불가능에 가깝다 — Sheets는 행·셀 수정 시각도 리비전 id도 주지 않는다.)
+func (c *Client) clear(ctx context.Context, spreadsheetID, tab, lastCol string) error {
 	target := fmt.Sprintf("%s/%s/values/%s:clear",
-		c.base, url.PathEscape(spreadsheetID), url.PathEscape(tab))
+		c.base, url.PathEscape(spreadsheetID), url.PathEscape(tab+"!A:"+lastCol))
 	return c.do(ctx, http.MethodPost, target, map[string]any{})
+}
+
+// ensureTab은 탭이 없으면 만든다. 이미 있으면 구글이 400을 주는데 그건 정상이다.
+func (c *Client) ensureTab(ctx context.Context, spreadsheetID, tab string) error {
+	target := fmt.Sprintf("%s/%s:batchUpdate", c.base, url.PathEscape(spreadsheetID))
+	payload := map[string]any{"requests": []any{
+		map[string]any{"addSheet": map[string]any{
+			"properties": map[string]any{"title": tab},
+		}},
+	}}
+	_, err := c.doJSON(ctx, http.MethodPost, target, payload)
+	if err != nil && strings.Contains(err.Error(), "already exists") {
+		return nil
+	}
+	return err
 }
 
 func (c *Client) do(ctx context.Context, method, target string, payload any) error {

@@ -446,6 +446,25 @@ FTS 모드의 커서는 bm25 rank 기반 keyset이므로, 페이지 사이에 �
 
 **상태 코드**: 200 — 404는 없다. 집계 전용 엔드포인트라 "없음" 상태가 존재하지 않고, 빈 DB에서도 `total_links: 0` + 빈 배열로 200을 낸다.
 
+## 7.1 스프레드시트 (Sheets)
+
+### GET /api/v1/sheets
+
+연결 여부와 마지막 동기화 결과(`connected`, `sheet_url`, `last_sync_at`, `last_rows`, `last_error`).
+
+### POST /api/v1/sheets/sync
+
+아카이브 전량을 시트에 다시 쓴다. 동기 호출이며 링크 수에 비례해 몇 초 걸릴 수 있다 —
+저장 API가 아니므로 p99 게이트 대상이 아니다.
+
+**연결은 이 API가 하지 않는다.** 구글 승인을 브라우저에서 밟는 단계가 있어 서버가 대신할 수
+없고, `pushpoint sheets-setup`이 그 안내를 맡는다. 연결돼 있지 않으면 409다.
+
+동기화가 실패해도 **200으로 상태를 돌려준다**(`last_error`에 사유). 500으로 던지고 사유를
+삼키면 화면이 무엇을 고쳐야 할지 보여줄 수 없다. 자세한 배경은 [07-DEPLOYMENT.md](07-DEPLOYMENT.md) §7.1.
+
+---
+
 ## 8. 썸네일 정적 서빙
 
 ### GET /thumbs/{dir}/{file}

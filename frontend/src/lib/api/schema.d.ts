@@ -170,6 +170,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sheets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 스프레드시트 연결 상태
+         * @description Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+         */
+        get: operations["getSheetsStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sheets/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 지금 동기화
+         * @description 아카이브 전량을 시트에 다시 쓴다(교체). 동기 호출이며 링크 수에 비례해 몇 초 걸릴 수 있다 — 저장 API가 아니므로 p99 게이트 대상이 아니다. 연결돼 있지 않으면 409.
+         */
+        post: operations["syncSheets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stats": {
         parameters: {
             query?: never;
@@ -304,6 +344,19 @@ export interface components {
             note?: string;
             /** @description 태그 이름 배열. 존재하지 않는 태그 이름이면 400 */
             tags?: string[];
+        };
+        /** @description 스프레드시트 연결 상태와 마지막 동기화 결과 */
+        SheetsStatus: {
+            /** @description 연결됐는지. false면 나머지 필드는 비어 있다 */
+            connected: boolean;
+            /** @description 시트 주소. 없으면 빈 문자열 */
+            sheet_url?: string;
+            /** @description 마지막 동기화 시각(unix epoch 초). 한 번도 안 했으면 null */
+            last_sync_at?: number | null;
+            /** @description 마지막에 쓴 링크 수 */
+            last_rows?: number;
+            /** @description 마지막 동기화가 실패했다면 그 이유. 성공했으면 빈 문자열 */
+            last_error?: string;
         };
         /** @description 커서 페이지네이션 응답 래퍼 */
         LinkPage: {
@@ -830,6 +883,59 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSheetsStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 연결 상태 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SheetsStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    syncSheets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 동기화 결과 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SheetsStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description 아직 연결되지 않음 (`pushpoint sheets-setup` 필요) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };

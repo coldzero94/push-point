@@ -132,17 +132,27 @@ func TestReplace_clearsBeforeWriting(t *testing.T) {
 	c.base = srv.URL
 
 	rows := [][]any{{"id", "url"}, {1, "https://a.example"}}
-	if err := c.Replace(context.Background(), "SHEET", "links", rows); err != nil {
+	if err := c.Replace(context.Background(), "SHEET", "links", "I", rows); err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 2 {
-		t.Fatalf("clear + update 두 번이어야 한다: %v", calls)
+	// 탭 보장 → 우리 열만 비우기 → 쓰기. 순서가 계약이다.
+	if len(calls) != 3 {
+		t.Fatalf("batchUpdate + clear + update 세 번이어야 한다: %v", calls)
 	}
-	if !strings.Contains(calls[0], "clear") {
-		t.Errorf("첫 호출이 clear가 아니다 — 지운 링크가 시트에 남는다: %v", calls)
+	if !strings.Contains(calls[0], "batchUpdate") {
+		t.Errorf("탭을 먼저 보장하지 않는다 — 구글이 만든 시트의 기본 탭은 Sheet1이라 "+
+			"links를 지우려다 400으로 죽는다: %v", calls)
 	}
-	if !strings.HasPrefix(calls[1], "PUT") {
-		t.Errorf("두 번째가 쓰기가 아니다: %v", calls)
+	if !strings.Contains(calls[1], "clear") {
+		t.Errorf("두 번째가 clear가 아니다 — 지운 링크가 시트에 남는다: %v", calls)
+	}
+	// **이 단언이 사용자 데이터를 지킨다.** 범위 없이 clear하면 탭 전체가 비워져
+	// J열에 손으로 적어 둔 것이 매 동기화마다 사라진다.
+	if !strings.Contains(calls[1], "A:I") {
+		t.Errorf("clear가 열 범위를 지정하지 않는다 — 사용자가 오른쪽에 적은 것을 지운다: %v", calls)
+	}
+	if !strings.HasPrefix(calls[2], "PUT") {
+		t.Errorf("세 번째가 쓰기가 아니다: %v", calls)
 	}
 	if got := wrote["values"]; got == nil {
 		t.Errorf("values를 보내지 않았다: %v", wrote)
@@ -171,11 +181,11 @@ func TestReplace_emptyStillClears(t *testing.T) {
 	c.acct.TokenURI = srv.URL + "/token"
 	c.base = srv.URL
 
-	if err := c.Replace(context.Background(), "SHEET", "links", nil); err != nil {
+	if err := c.Replace(context.Background(), "SHEET", "links", "I", nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(calls) != 1 || !strings.Contains(calls[0], "clear") {
-		t.Errorf("빈 입력에도 clear 한 번은 나가야 한다: %v", calls)
+	if len(calls) != 2 || !strings.Contains(calls[1], "clear") {
+		t.Errorf("빈 입력에도 탭 보장 + clear는 나가야 한다: %v", calls)
 	}
 }
 
@@ -470,5 +480,36 @@ func TestScope_isNarrow(t *testing.T) {
 	}
 	if strings.Contains(scope, "auth/drive ") || strings.HasSuffix(scope, "auth/drive") {
 		t.Error("전체 Drive 스코프를 요청하고 있다 — drive.file로 충분하다")
+	}
+}
+
+// 이미 있는 탭에 대한 addSheet는 400 "already exists"인데, 그건 정상 상태다.
+// 에러로 올리면 두 번째 동기화부터 전부 실패한다.
+func TestEnsureTab_existingIsNotAnError(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		if strings.Contains(r.URL.Path, "batchUpdate") {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":{"message":"A sheet with the name \"links\" already exists."}}`)
+			return
+		}
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	if err := c.Replace(context.Background(), "SHEET", "links", "I",
+		[][]any{{"id"}}); err != nil {
+		t.Fatalf("이미 있는 탭에서 실패했다 — 두 번째 동기화부터 전부 죽는다: %v", err)
 	}
 }

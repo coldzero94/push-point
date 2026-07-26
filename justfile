@@ -142,6 +142,13 @@ bench-http:
 test-crash:
     @if [ -f scripts/test_crash.sh ]; then scripts/test_crash.sh; else echo "scripts/test_crash.sh가 아직 없습니다. M2에서 활성화됩니다."; fi
 
+# Google 스프레드시트 연결 — 명령 한 번 + 붙여넣기 한 번으로 끝난다
+#
+# 클라우드 콘솔도, JSON 키도, API 켜기도 없다. 스크립트를 클립보드에 넣고 브라우저를
+# 열어 주므로, 사용자는 붙여넣고 배포한 뒤 URL만 되돌려 주면 된다.
+sheets-setup:
+    @cd backend && go run ./cmd/pushpoint sheets-setup
+
 # 아카이브를 Google 스프레드시트로 내보낸다 (단방향 — SQLite가 원본, 시트는 파생물)
 #
 # 저장 경로를 건드리지 않는다. 저장할 때마다 시트에 쓰면 외부 서비스가 저장 경로에
