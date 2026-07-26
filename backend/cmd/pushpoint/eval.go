@@ -2,7 +2,7 @@ package main
 
 // eval·golden-capture 서브커맨드 — M3 태깅 품질 측정 하네스.
 //
-//	pushpoint eval [golden-dir]        # dev.jsonl/test.jsonl로 Recall@3 + 태그별 P/R + 베이스라인 (네트워크 0)
+//	pushpoint eval [golden-dir]        # dev/test/wild.jsonl로 Recall@3 + 태그별 P/R + 베이스라인 (네트워크 0)
 //	pushpoint golden-capture urls.tsv  # url<TAB>tag,tag 목록을 프로덕션 스크랩 경로로 스냅샷 캡처 → JSONL
 //	pushpoint golden-refill in.jsonl   # 기존 golden의 **빈 필드만** 재fetch로 채움 → JSONL
 //
@@ -46,7 +46,7 @@ type goldenEntry struct {
 	ExpectedTags []string       `json:"expected_tags"`
 }
 
-// runEval은 golden 디렉터리(기본 nlu/golden/)의 dev/test를 평가해 리포트를 출력한다.
+// runEval은 golden 디렉터리(기본 nlu/golden/)의 dev/test/wild를 평가해 리포트를 출력한다.
 func runEval(args []string) error {
 	dir := "nlu/golden"
 	if len(args) > 0 {
@@ -59,14 +59,31 @@ func runEval(args []string) error {
 	fmt.Printf("사전 %d개 태그 로드 (fresh 마이그레이션 시드)\n", len(id2name))
 
 	ran := false
-	for _, name := range []string{"dev", "test"} {
+	// wild는 **dev/test와 합치지 않고 따로 낸다.** 합치면 하나의 평균 뒤로 숨는데,
+	// 이 세트의 존재 이유가 정확히 그 평균이 가리던 격차를 보이게 하는 것이다
+	// (2026-07-26 실측: dev 0.952 / test 0.885 vs wild 0.710).
+	for _, name := range []string{"dev", "test", "wild"} {
 		path := filepath.Join(dir, name+".jsonl")
 		entries, err := loadGolden(path)
 		if err != nil {
 			if os.IsNotExist(err) {
-				fmt.Printf("\n(%s 없음 — 건너뜀: %s)\n", name, path)
+				// stdout이 아니라 stderr로 낸다 — `just eval | grep Recall`처럼 거르면
+				// stdout에 섞인 안내는 사라지고 세트 하나가 빠진 채로 완전한 보고서처럼 보인다.
+				fmt.Fprintf(os.Stderr, "(%s 없음 — 건너뜀: %s)\n", name, path)
 				continue
 			}
+			return err
+		}
+		// **비어 있지만 존재하는 파일은 건너뛸 일이 아니라 결함이다.** 캡처가 실패했거나
+		// 파일이 잘렸다는 뜻인데, 예전에는 이것도 `ran = true`로 세어서 "세 세트를 다 쟀다"는
+		// 모양의 보고서가 exit 0으로 나왔다. 아무것도 안 재고도 성공하는 것이 가장 나쁘다.
+		if len(entries) == 0 {
+			return fmt.Errorf("eval: %s가 비어 있습니다 (%s) — 캡처 실패이거나 파일이 잘렸습니다", name, path)
+		}
+		// expected_tags가 사전에 없는 이름이면 **구조적으로 맞힐 수 없는 정답**이 된다.
+		// 그러면 태거 실패처럼 보이는 수치가 나오는데 원인은 오타다. README가 "사전에 존재하는
+		// name만"이라고 규정만 하고 강제하는 코드가 없었다.
+		if err := validateExpectedTags(name, entries, id2name); err != nil {
 			return err
 		}
 		ran = true
@@ -84,9 +101,40 @@ func runEval(args []string) error {
 		evalSet(strings.ToUpper(name), entries, d, id2name)
 	}
 	if !ran {
-		return fmt.Errorf("eval: golden 파일이 없습니다 (%s/{dev,test}.jsonl) — golden-capture로 만드세요", dir)
+		return fmt.Errorf("eval: golden 파일이 없습니다 (%s/{dev,test,wild}.jsonl) — golden-capture로 만드세요", dir)
 	}
 	fmt.Println("\n측정치는 기록용이다 (M3엔 게이트 없음 — 게이트는 M5 진입, 동결 test 기준).")
+	return nil
+}
+
+// validateExpectedTags는 라벨이 전부 사전에 있는 태그 이름인지 확인한다.
+//
+// 사전에 없는 이름(오타·별칭 오용·사전에서 삭제된 태그)은 예측될 수가 없으므로 **영구 miss**가
+// 된다. 그 결과는 Recall 하락으로 나타나고, 태그별 표에서는 P=0.00 R=0.00 행이 되어 "태거가
+// 못 맞히는 태그"와 눈으로 구분되지 않는다. 라벨은 사람이 손으로 쓰므로 오타가 실제로 난다.
+//
+// 빈 expected_tags도 같이 막는다 — hit 판정이 교집합이라 정답이 없으면 자동 miss이고,
+// 그 항목은 분모만 키운다.
+func validateExpectedTags(setName string, entries []goldenEntry, id2name map[int64]string) error {
+	known := make(map[string]bool, len(id2name))
+	for _, n := range id2name {
+		known[n] = true
+	}
+	var problems []string
+	for i, e := range entries {
+		if len(e.ExpectedTags) == 0 {
+			problems = append(problems, fmt.Sprintf("%d행 정답 태그 없음: %s", i+1, e.URL))
+			continue
+		}
+		for _, t := range e.ExpectedTags {
+			if !known[t] {
+				problems = append(problems, fmt.Sprintf("%d행 사전에 없는 태그 %q: %s", i+1, t, e.URL))
+			}
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("eval: %s 라벨 오류 %d건\n  %s", setName, len(problems), strings.Join(problems, "\n  "))
+	}
 	return nil
 }
 
@@ -150,37 +198,43 @@ func goldenCorpus(entries []goldenEntry, dict *tagger.Dictionary) tagger.CorpusS
 	return tagger.CorpusStats{Docs: int64(withTerms), DF: df}
 }
 
-// evalSet은 한 세트(dev/test)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
+// setMetrics는 한 세트에서 나오는 **모든 수**다. 출력 형식은 들어 있지 않다.
 //
-// 변형은 **full에서 신호를 하나씩 뺀 것**이다 — 그래야 Δ가 그 신호만의 기여가 된다.
-// full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
-// baseline=도메인만(규칙 전체의 기여를 보는 기준선).
-func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {
-	fmt.Printf("\n=== %s (%d건) ===\n", name, len(entries))
-	if len(entries) == 0 {
-		fmt.Println("(빈 세트 — 건너뜀)")
-		return
-	}
-
-	var baseHit, noBodyHit, noKWHit, fullHit, bareHit int
+// 계산을 출력에서 떼어낸 이유는 하나다 — **잴 수 있게 하려고.** 예전에는 계산과 Printf가
+// 한 함수에 섞여 있어서 evalSet에 테스트를 붙일 수가 없었고, 그래서 리포트되는 모든 수
+// (Recall, Δ, 태그별 P/R)가 검증 없이 나갔다. 실제로 분모 오프바이원·변형 배선 뒤바꿈·
+// 태그별 TP/FP/FN 오류가 전부 테스트를 통과했다(2026-07-26 뮤테이션 확인).
+type setMetrics struct {
+	// 변형별 hit 수. 변형은 **full에서 신호를 하나씩 뺀 것**이라 Δ가 그 신호만의 기여가 된다.
+	// full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
+	// bare=본문도 분류도 없음 / base=도메인만.
+	fullHit, noBodyHit, noKWHit, bareHit, baseHit int
 	// tied: topK 경계에서 점수가 같아 **태그 이름 알파벳순으로** 갈린 링크 수.
 	// missZero/missRank: 미스를 둘로 가른다 — 정답 태그가 0점인가, 점수는 있는데 밀렸는가.
-	var tied, missZero, missRank int
-	// 태그별 집계 (full 기준): TP/FP/FN + golden 등장 수.
-	tp := map[string]int{}
-	fp := map[string]int{}
-	fn := map[string]int{}
-	goldN := map[string]int{}
-	// 발행자 분류를 가진 항목 수 — Δkeywords를 몇 건 위에서 잰 것인지 없으면 해석할 수 없다.
-	withKW := 0
+	tied, missZero, missRank int
+	// thin/thinHit: 스냅샷 자체가 빈약한 항목과, 그중 그래도 맞힌 항목.
+	thin, thinHit int
+	// withKW: 발행자 분류를 가진 항목 수 — Δkeywords를 몇 건 위에서 잰 것인지 없으면 해석 불가.
+	withKW int
+	// 태그별 집계 (full 기준).
+	tp, fp, fn, goldN map[string]int
+}
 
+// measureSet은 세트 하나를 돌며 setMetrics를 채운다. 출력하지 않는다.
+func measureSet(entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) setMetrics {
+	m := setMetrics{
+		tp:    map[string]int{},
+		fp:    map[string]int{},
+		fn:    map[string]int{},
+		goldN: map[string]int{},
+	}
 	for _, e := range entries {
 		exp := toSet(e.ExpectedTags)
 		for t := range exp {
-			goldN[t]++
+			m.goldN[t]++
 		}
 		if e.Snapshot.Keywords != "" {
-			withKW++
+			m.withKW++
 		}
 
 		base := classifyTop(tagger.Content{Domain: hostOf(e.URL)}, dict, id2name)
@@ -190,40 +244,61 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 		// bare = 본문도 분류도 없는 변형. 분류가 **본문의 대체재**인지 보려면 필요하다.
 		bare := classifyTop(evalContent(e, false, false), dict, id2name)
 
-		baseHit += hit(base, exp)
-		noBodyHit += hit(noBody, exp)
-		noKWHit += hit(noKW, exp)
-		fullHit += hit(full, exp)
-		bareHit += hit(bare, exp)
+		m.baseHit += hit(base, exp)
+		m.noBodyHit += hit(noBody, exp)
+		m.noKWHit += hit(noKW, exp)
+		m.fullHit += hit(full, exp)
+		m.bareHit += hit(bare, exp)
 
 		// 동점과 미스 해부는 full 기준으로 센다 — 실제로 출하되는 구성이다.
 		full3 := classifyRanked(evalContent(e, true, true), dict, id2name)
 		if tiedAtCut(full3) {
-			tied++
+			m.tied++
 		}
 		if hit(full, exp) == 0 {
 			if zeroScored(full3, exp) {
-				missZero++
+				m.missZero++
 			} else {
-				missRank++
+				m.missRank++
 			}
+		}
+		if isThinSnapshot(e.Snapshot.Title, e.Snapshot.Description, e.Snapshot.BodyText) {
+			m.thin++
+			m.thinHit += hit(full, exp)
 		}
 
 		// 태그별 P/R은 full 예측 기준.
 		predicted := toSet(full)
 		for t := range predicted {
 			if exp[t] {
-				tp[t]++
+				m.tp[t]++
 			} else {
-				fp[t]++
+				m.fp[t]++
 			}
 		}
 		for t := range exp {
 			if !predicted[t] {
-				fn[t]++
+				m.fn[t]++
 			}
 		}
 	}
+	return m
+}
+
+// evalSet은 한 세트(dev/test/wild)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
+// 계산은 measureSet이 하고, 여기는 형식만 맡는다.
+func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {
+	fmt.Printf("\n=== %s (%d건) ===\n", name, len(entries))
+	if len(entries) == 0 {
+		fmt.Println("(빈 세트 — 건너뜀)")
+		return
+	}
+
+	m := measureSet(entries, dict, id2name)
+	baseHit, noBodyHit, noKWHit, fullHit, bareHit := m.baseHit, m.noBodyHit, m.noKWHit, m.fullHit, m.bareHit
+	tied, missZero, missRank := m.tied, m.missZero, m.missRank
+	thin, thinHit, withKW := m.thin, m.thinHit, m.withKW
+	tp, fp, fn, goldN := m.tp, m.fp, m.fn, m.goldN
 
 	n := float64(len(entries))
 	fmt.Printf("Recall@%d:  full=%.3f   no-body=%.3f (Δbody %+.3f)   baseline(도메인만)=%.3f (Δrules %+.3f)\n",
@@ -248,6 +323,17 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 		fmt.Printf("           미스 %d건: 정답 0점 %d · 순위 밀림 %d → 재랭킹 상한 %.3f (+%.3f)\n",
 			miss, missZero, missRank,
 			float64(fullHit+missRank)/n, float64(missRank)/n)
+	}
+	// 빈약한 스냅샷 — **태거를 고쳐서 얻을 수 있는 몫의 상한**을 가른다.
+	// 여기 걸린 항목은 봇 차단 페이지·로그인 벽·요청조차 안 한 어댑터의 결과물이라,
+	// 태거를 아무리 고쳐도 신호가 없다. 해법은 태거가 아니라 클라이언트 캡처다.
+	// 두 수를 같이 내지 않으면 캡처 결함이 태거 품질로 잘못 귀속된다.
+	if thin > 0 && thin < len(entries) {
+		usable := len(entries) - thin
+		fmt.Printf("           신호 %d자 미만 %d건(맞힌 것 %d) — 캡처가 벽·빈 응답을 물어온 몫이라 태거로 못 고친다.\n",
+			thinSignalRunes, thin, thinHit)
+		fmt.Printf("             나머지 %d건 기준 Recall@%d=%.3f — **태거를 고쳐서 올릴 수 있는 상한**이다.\n",
+			usable, evalTopK, float64(fullHit-thinHit)/float64(usable))
 	}
 
 	// 언어별 — 이 앱은 한국어와 영어를 대등하게 지원해야 하므로 한쪽만 잘 되는 회귀를 드러낸다.
@@ -369,7 +455,7 @@ func runGoldenCapture(args []string) error {
 
 	sccan := bufio.NewScanner(f)
 	sccan.Buffer(make([]byte, 0, 1<<20), 1<<20)
-	var ok, fail int
+	var ok, fail, skipped, thin int
 	for sccan.Scan() {
 		line := strings.TrimSpace(sccan.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -385,6 +471,7 @@ func runGoldenCapture(args []string) error {
 		}
 		if len(tags) == 0 { // 태그 없는 줄(탭 누락 등)은 golden에 넣지 않는다 — 항상 miss가 되어 지표를 왜곡.
 			fmt.Fprintf(os.Stderr, "  건너뜀(태그 없음): %s\n", rawURL)
+			skipped++
 			continue
 		}
 		m, err := sc.Fetch(ctx, rawURL)
@@ -402,13 +489,50 @@ func runGoldenCapture(args []string) error {
 			return fmt.Errorf("golden-capture: JSONL 쓰기 실패: %w", err)
 		}
 		ok++
+		// **에러 없이 성공한 빈 캡처가 가장 위험하다.** 봇 차단 페이지·로그인 벽·요청조차
+		// 하지 않는 어댑터(instagram)가 전부 err=nil로 돌아오고, 스냅샷만 보면 진짜 페이지와
+		// 구분되지 않는다. 실제로 wild 초안에서 존재하지 않는 URL과 차단된 URL을 구분하지
+		// 못한 원인이 이것이었다. 지우지는 않는다 — 사용자가 그 링크를 저장하면 실제로 그
+		// 벽을 맞으므로 그것도 측정 대상이다. 대신 **세어서 눈에 띄게 한다.**
+		if isThinSnapshot(m.Title, m.Description, m.BodyText) {
+			thin++
+			fmt.Fprintf(os.Stderr, "  ⚠ 빈약한 스냅샷(차단·로그인 벽 의심): %s (title=%dB desc=%dB body=%dB)\n",
+				rawURL, len(m.Title), len(m.Description), len(m.BodyText))
+			continue
+		}
 		fmt.Fprintf(os.Stderr, "  캡처: %s (title=%.30q body=%dB)\n", rawURL, m.Title, len(m.BodyText))
 	}
 	if err := sccan.Err(); err != nil {
 		return fmt.Errorf("golden-capture: 입력 읽기 실패: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "완료: %d 캡처, %d 실패\n", ok, fail)
+	fmt.Fprintf(os.Stderr, "완료: %d 캡처(빈약 %d), %d 실패, %d 건너뜀\n", ok, thin, fail, skipped)
+	// **실패가 있으면 0으로 끝내지 않는다.** 예전에는 몇 건이 실패하든 nil을 돌려줘서
+	// `golden-capture urls.tsv > wild.jsonl && git add wild.jsonl`이 잘린 세트에 대해
+	// 성공했다. 사람이 stderr를 읽고 있을 때만 드러나는 실패는 스크립트에서는 없는 것과 같다.
+	if fail > 0 || skipped > 0 {
+		return fmt.Errorf("golden-capture: %d 실패 · %d 건너뜀 (성공 %d) — golden이 불완전합니다", fail, skipped, ok)
+	}
 	return nil
+}
+
+// thinSignalRunes는 "이 스냅샷으로 태깅할 만한 것이 있는가"를 가르는 글자 수다.
+const thinSignalRunes = 200
+
+// isThinSnapshot은 태거에게 줄 신호가 사실상 없는 스냅샷을 가려낸다.
+//
+// **벽인지 아닌지를 내용으로 판정하려 들지 않는다.** 봇 차단 페이지에도 제목이 있고
+// ("Reddit - Please wait for verification", "Threads • 로그인"), 그럴듯한 제목을 근거로
+// 벽을 알아내려는 규칙은 그 자체가 틀릴 수 있는 추론이다. 세는 것은 글자 수 하나다.
+//
+// 세 필드를 **합쳐서** 본다. 어느 한 필드가 비었다는 사실은 아무것도 뜻하지 않는다 —
+// x.com 어댑터는 본문을 0자로 주면서 트윗 전문을 description에 담고(oembed), 그건 정상
+// 캡처다. 도메인은 항상 있으므로 신호에 세지 않는다(그것만으로 맞히는 것이 baseline이다).
+//
+// 이건 **근사치이고 그렇게만 쓴다.** 200자가 넘는 벽도 있고 200자 미만의 진짜 짧은 글도 있다.
+// 이 수로 판정하는 것은 "태거를 고쳐서 얻을 수 있는 몫의 상한"뿐이다.
+func isThinSnapshot(title, description, bodyText string) bool {
+	n := len([]rune(title)) + len([]rune(description)) + len([]rune(bodyText))
+	return n < thinSignalRunes
 }
 
 // loadEvalDict는 fresh 마이그레이션 임시 DB에서 사전을 읽어(런타임과 동일 경로) 컴파일된

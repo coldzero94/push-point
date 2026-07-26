@@ -69,13 +69,16 @@ func runSummaryEval(args []string) error {
 
 	var gateErr error
 	devMeasured := false
-	for _, name := range []string{"dev", "test"} {
+	// wild도 잰다 — 요약 품질이야말로 개발 블로그와 실제 웹에서 갈릴 것이 뻔한 지표다.
+	// 여기를 dev/test로 두면 `just eval`은 세 세트를, `just eval-summary`는 두 세트를 재게
+	// 되고, 그 비대칭은 아무도 의도하지 않았는데 조용히 생긴다.
+	for _, name := range []string{"dev", "test", "wild"} {
 		entries, err := loadGolden(filepath.Join(dir, name+".jsonl"))
 		if err != nil {
 			// dev가 없으면 게이트를 잴 수 없다 — 조용한 통과는 게이트가 아니다.
-			// (test는 동결 세트라 출력 전용이므로 부재를 허용한다.)
-			if os.IsNotExist(err) && name == "test" {
-				fmt.Printf("\n(test 없음 — 건너뜀)\n")
+			// (test·wild는 출력 전용이므로 부재를 허용한다.)
+			if os.IsNotExist(err) && name != "dev" {
+				fmt.Printf("\n(%s 없음 — 건너뜀)\n", name)
 				continue
 			}
 			return fmt.Errorf("dev golden을 읽지 못해 게이트를 판정할 수 없다 (%s): %w",

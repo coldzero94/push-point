@@ -78,11 +78,49 @@ for host, tag_list in domains.items():
     if unknown:
         errs.append(f"domains.json '{host}': 사전에 없는 태그 {unknown}")
 
+# 4) golden의 expected_tags도 사전 태그만 참조 — domains.json과 같은 종류의 불변식인데
+#    golden만 검사 밖에 있었다. 라벨 오타는 **구조적으로 맞힐 수 없는 정답**이 되어
+#    Recall을 떨어뜨리고, 태그별 표에서 P=0.00 R=0.00 행으로 나타나 "태거가 못 맞히는 태그"와
+#    구분되지 않는다. 실측: wild 한 항목의 `video`를 `vidoe`로 바꾸면 0.733이 조용히 내려간다.
+#
+#    eval에도 같은 검사가 있지만(validateExpectedTags) `just eval`은 CI에서 돌지 않는다.
+#    커밋을 막는 것은 여기다.
+golden_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), "golden")
+seen_urls = {}
+for path in sorted(glob.glob(os.path.join(golden_dir, "*.jsonl"))):
+    setname = os.path.splitext(os.path.basename(path))[0]
+    if os.path.getsize(path) == 0:
+        errs.append(f"golden/{setname}.jsonl이 비어 있습니다 — 캡처 실패이거나 파일이 잘렸습니다")
+        continue
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    for lineno, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            errs.append(f"golden/{setname}.jsonl:{lineno} JSON 파싱 실패: {exc}")
+            continue
+        tags = row.get("expected_tags") or []
+        if not tags:
+            errs.append(f"golden/{setname}.jsonl:{lineno} expected_tags가 비었습니다 — 자동 miss가 되어 분모만 키웁니다")
+        unknown = [t for t in tags if t not in dict_tags]
+        if unknown:
+            errs.append(f"golden/{setname}.jsonl:{lineno} 사전에 없는 태그 {unknown}: {row.get('url','')}")
+        if len(tags) != len(set(tags)):
+            errs.append(f"golden/{setname}.jsonl:{lineno} expected_tags에 중복이 있습니다: {tags}")
+        # 세트 간 URL 중복 = 데이터 누수. dev로 튜닝한 항목이 동결 test에 있으면 게이트가 무의미해진다.
+        url = row.get("url", "")
+        if url in seen_urls and seen_urls[url] != setname:
+            errs.append(f"golden URL이 {seen_urls[url]}와 {setname}에 모두 있습니다(누수): {url}")
+        seen_urls[url] = setname
+
 if errs:
     print("dict-lint 실패:")
     for e in errs:
         print(f"  - {e}")
     sys.exit(1)
 
-print(f"dict-lint OK — 태그 {len(dict_tags)}개, 도메인 {sum(1 for h in domains if not h.startswith('_'))}개, 시드와 일치")
+print(f"dict-lint OK — 태그 {len(dict_tags)}개, 도메인 {sum(1 for h in domains if not h.startswith('_'))}개, golden {len(seen_urls)}건, 시드와 일치")
 PY
