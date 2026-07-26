@@ -16,8 +16,11 @@ struct ContentView: View {
     @EnvironmentObject private var backend: Backend
     @State private var links: [Components.Schemas.Link] = []
     @State private var loadError: String?
-    /// 삭제 확인을 기다리는 링크. 삭제는 되돌릴 수 없는 동작이라 한 번 묻는다.
-    @State private var pendingDelete: Components.Schemas.Link?
+    /// 방금 지운 링크. 되돌릴 수 있는 동안만 들고 있는다.
+    @State private var justDeleted: Components.Schemas.Link?
+    @State private var undoTask: Task<Void, Never>?
+    /// 열어 볼 링크. NavigationLink 대신 이 값으로 이동한다 — 아래 row 주석 참조.
+    @State private var opening: OpeningLink?
 
     var body: some View {
         NavigationStack {
@@ -25,22 +28,20 @@ struct ContentView: View {
                 .background(PP.Palette.canvas)
             .navigationTitle("Push-Point")
             .refreshable { await load() }
+            .navigationDestination(item: $opening) { target in
+                LinkDetailView(linkID: target.id, facetOf: { facets[$0] ?? .neutral })
+            }
         }
         .task(id: backend.state) { await load() }
         .task(id: filter) { await load() }
-        // 삭제는 소프트 삭제지만 화면에서는 사라지므로, 실수로 지운 것을 되돌릴
-        // 방법이 UI에 없다. 그래서 지우기 전에 무엇을 지우는지 이름을 보여주고 묻는다.
-        .confirmationDialog(
-            pendingDelete.map { "'\($0.title.isEmpty ? $0.domain : $0.title)'을 삭제할까요?" } ?? "",
-            isPresented: .init(get: { pendingDelete != nil },
-                               set: { if !$0 { pendingDelete = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("삭제", role: .destructive) {
-                if let link = pendingDelete { Task { await delete(link) } }
+        // 확인창 대신 되돌리기. 확인창은 **모든** 삭제를 느리게 만들어 흔한 경우에
+        // 세금을 매기고, 서버가 소프트 삭제라 되살릴 수단이 실제로 있다.
+        .overlay(alignment: .bottom) {
+            if let link = justDeleted {
+                UndoToast(message: "삭제했습니다") { Task { await undo(link) } }
             }
-            Button("취소", role: .cancel) { pendingDelete = nil }
         }
+        .animation(.smooth(duration: 0.25), value: justDeleted?.id)
     }
 
     @ViewBuilder
@@ -90,9 +91,20 @@ struct ContentView: View {
         .environment(\.defaultMinListHeaderHeight, 0)
     }
 
+    /// `NavigationLink` 대신 버튼 + `navigationDestination`을 쓴다.
+    ///
+    /// List 안의 NavigationLink는 오른쪽에 화살표(disclosure indicator)를 붙이는데,
+    /// 그건 **행의 어휘이지 카드의 어휘가 아니다** — §4.4의 카드 명세에 화살표는 없고,
+    /// 카드는 그 자체가 탭 대상이라 "여기를 눌러라" 표시가 따로 필요 없다. 게다가
+    /// 화살표는 카드 바깥에 떠서 카드와 분리돼 보인다.
+    ///
+    /// 스와이프가 있다는 힌트를 대신 넣지는 않았다. 목록을 옆으로 미는 것은 iOS에서
+    /// 이미 배워진 동작이고, 발견되지 않는 경우를 위해 길게 누르기(컨텍스트 메뉴)를
+    /// 함께 뒀다. 힌트 UI를 더하면 그건 화면에 상시로 남는 비용인데, 한 번 배우면
+    /// 다시 필요 없는 정보에 그 자리를 내줄 이유가 없다(§1.3이 온보딩 투어를 금지하는 것과 같은 판단).
     private func row(_ link: Components.Schemas.Link) -> some View {
-        NavigationLink {
-            LinkDetailView(linkID: link.id, facetOf: { facets[$0] ?? .neutral })
+        Button {
+            opening = OpeningLink(id: link.id)
         } label: {
             LinkCard(link: link,
                      facetOf: { facets[$0] ?? .neutral },
@@ -102,8 +114,10 @@ struct ContentView: View {
         .buttonStyle(.plain)
         // 스와이프와 길게 누르기 둘 다 둔다(§8.4). 스와이프는 빠르지만 발견되지 않고,
         // 컨텍스트 메뉴는 느리지만 항상 찾을 수 있다.
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) { pendingDelete = link } label: {
+        // 끝까지 밀면 버튼을 거치지 않고 바로 지운다 — 메시지 앱과 같은 동작이고,
+        // 손이 이미 그렇게 배워 있다. 안전망은 아래 되돌리기 토스트다.
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) { Task { await delete(link) } } label: {
                 Label("삭제", systemImage: "trash")
             }
         }
@@ -126,7 +140,7 @@ struct ContentView: View {
             if let url = URL(string: link.url) {
                 Link(destination: url) { Label("원문 열기", systemImage: "safari") }
             }
-            Button(role: .destructive) { pendingDelete = link } label: {
+            Button(role: .destructive) { Task { await delete(link) } } label: {
                 Label("삭제", systemImage: "trash")
             }
         }
@@ -180,6 +194,11 @@ struct ContentView: View {
         return nil
     }
 
+    /// navigationDestination(item:)이 Identifiable을 요구해서 id만 감싼다.
+    private struct OpeningLink: Identifiable, Hashable {
+        let id: Int
+    }
+
     // MARK: - 구간
 
     private struct DaySection {
@@ -229,12 +248,36 @@ struct ContentView: View {
     /// 방금 지운 카드가 잠깐 남아 있고, 그 사이 다시 누르면 404가 난다.
     private func delete(_ link: Components.Schemas.Link) async {
         guard let client = backend.client else { return }
-        pendingDelete = nil
         do {
             _ = try await client.deleteLink(.init(path: .init(id: link.id))).noContent
             withAnimation(.smooth(duration: 0.25)) {
                 links.removeAll { $0.id == link.id }
             }
+            justDeleted = link
+            // 되돌리기 창을 닫는 타이머. 새로 지우면 앞의 타이머는 취소된다 —
+            // 그러지 않으면 먼저 걸린 타이머가 나중 토스트를 지운다.
+            undoTask?.cancel()
+            undoTask = Task {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                if justDeleted?.id == link.id { justDeleted = nil }
+            }
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    /// 되돌리기는 같은 URL을 다시 저장하는 것이다 — store가 소프트 삭제된 행을 만나면
+    /// undelete한다(별도 복구 엔드포인트가 없다). 단, 그 경로는 링크를 pending으로
+    /// 되돌리고 다시 스크랩하므로 **태그·요약은 새로 만들어진다**. 링크가 돌아오는 것이
+    /// 요점이고 그 값들은 어차피 파생물이라 받아들일 만하다.
+    private func undo(_ link: Components.Schemas.Link) async {
+        guard let client = backend.client else { return }
+        justDeleted = nil
+        undoTask?.cancel()
+        do {
+            _ = try await client.createLink(.init(body: .json(.init(url: link.url))))
+            await load()
         } catch {
             loadError = error.localizedDescription
         }
