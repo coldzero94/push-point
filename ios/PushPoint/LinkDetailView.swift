@@ -19,6 +19,8 @@ struct LinkDetailView: View {
     @EnvironmentObject private var backend: Backend
     @State private var detail: Components.Schemas.LinkDetail?
     @State private var loadError: String?
+    @State private var confirmingDelete = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScrollView {
@@ -33,6 +35,21 @@ struct LinkDetailView: View {
         }
         .background(PP.Palette.canvas)
         .navigationBarTitleDisplayMode(.inline)
+        // 내용을 보고 "이건 아니네" 하는 자리가 여기라, 목록으로 돌아가지 않고
+        // 그 자리에서 지울 수 있어야 한다.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .destructive) { confirmingDelete = true } label: {
+                    Image(systemName: "trash")
+                }
+                .tint(PP.Palette.danger)
+            }
+        }
+        .confirmationDialog("이 링크를 삭제할까요?", isPresented: $confirmingDelete,
+                            titleVisibility: .visible) {
+            Button("삭제", role: .destructive) { Task { await delete() } }
+            Button("취소", role: .cancel) {}
+        }
         .task { await load() }
     }
 
@@ -162,6 +179,18 @@ struct LinkDetailView: View {
         f.locale = Locale(identifier: "ko_KR")
         f.dateFormat = "yyyy.MM.dd HH:mm"
         return f.string(from: Date(timeIntervalSince1970: TimeInterval(epoch)))
+    }
+
+    /// 삭제 후에는 상세에 머물 이유가 없다 — 목록으로 돌아간다. 목록은 다시 나타날 때
+    /// 스스로 갱신하므로(task(id:)) 여기서 목록을 건드리지 않는다.
+    private func delete() async {
+        guard let client = backend.client else { return }
+        do {
+            _ = try await client.deleteLink(.init(path: .init(id: linkID))).noContent
+            dismiss()
+        } catch {
+            loadError = error.localizedDescription
+        }
     }
 
     private func load() async {

@@ -16,22 +16,31 @@ struct ContentView: View {
     @EnvironmentObject private var backend: Backend
     @State private var links: [Components.Schemas.Link] = []
     @State private var loadError: String?
+    /// 삭제 확인을 기다리는 링크. 삭제는 되돌릴 수 없는 동작이라 한 번 묻는다.
+    @State private var pendingDelete: Components.Schemas.Link?
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let filter { filterBar(filter) }
-                    content
-                }
-                .padding(.horizontal, 16).padding(.bottom, 24)
-            }
-            .background(PP.Palette.canvas)
+            content
+                .background(PP.Palette.canvas)
             .navigationTitle("Push-Point")
             .refreshable { await load() }
         }
         .task(id: backend.state) { await load() }
         .task(id: filter) { await load() }
+        // 삭제는 소프트 삭제지만 화면에서는 사라지므로, 실수로 지운 것을 되돌릴
+        // 방법이 UI에 없다. 그래서 지우기 전에 무엇을 지우는지 이름을 보여주고 묻는다.
+        .confirmationDialog(
+            pendingDelete.map { "'\($0.title.isEmpty ? $0.domain : $0.title)'을 삭제할까요?" } ?? "",
+            isPresented: .init(get: { pendingDelete != nil },
+                               set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("삭제", role: .destructive) {
+                if let link = pendingDelete { Task { await delete(link) } }
+            }
+            Button("취소", role: .cancel) { pendingDelete = nil }
+        }
     }
 
     @ViewBuilder
@@ -57,26 +66,70 @@ struct ContentView: View {
         }
     }
 
+    /// 보드를 `List`로 만든다. 카드 모양은 그대로지만 스와이프 액션과 셀 재활용이
+    /// 딸려 온다 — §8.4가 행 액션으로 `.swipeActions`를 지정하고 있고, 링크 10만 건이
+    /// 목표라 재활용도 공짜로 얻을 이유가 없다. List가 기본으로 얹는 구분선·배경·여백은
+    /// 전부 걷어내야 보드처럼 보인다.
     private var board: some View {
-        LazyVStack(alignment: .leading, spacing: 20) {
+        List {
+            if let filter {
+                filterBar(filter).plainRow(top: 8, bottom: 0)
+            }
             ForEach(sections, id: \.title) { section in
-                VStack(alignment: .leading, spacing: 10) {
-                    spine(section)
+                Section {
                     ForEach(section.links, id: \.id) { link in
-                        NavigationLink {
-                            LinkDetailView(linkID: link.id, facetOf: { facets[$0] ?? .neutral })
-                        } label: {
-                            LinkCard(link: link,
-                                     facetOf: { facets[$0] ?? .neutral },
-                                     activeTag: activeTagName,
-                                     resolveThumb: backend.absoluteURL)
-                        }
-                        .buttonStyle(.plain)
+                        row(link).plainRow(top: 5, bottom: 5)
                     }
+                } header: {
+                    spine(section).plainRow(top: 14, bottom: 6)
                 }
             }
         }
-        .padding(.top, 8)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListHeaderHeight, 0)
+    }
+
+    private func row(_ link: Components.Schemas.Link) -> some View {
+        NavigationLink {
+            LinkDetailView(linkID: link.id, facetOf: { facets[$0] ?? .neutral })
+        } label: {
+            LinkCard(link: link,
+                     facetOf: { facets[$0] ?? .neutral },
+                     activeTag: activeTagName,
+                     resolveThumb: backend.absoluteURL)
+        }
+        .buttonStyle(.plain)
+        // 스와이프와 길게 누르기 둘 다 둔다(§8.4). 스와이프는 빠르지만 발견되지 않고,
+        // 컨텍스트 메뉴는 느리지만 항상 찾을 수 있다.
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) { pendingDelete = link } label: {
+                Label("삭제", systemImage: "trash")
+            }
+        }
+        // 방향으로 성격을 나눈다. **오른쪽 끝은 파괴적인 것만** — iOS 전반의 관용이고,
+        // 그래야 손이 기억한 방향이 다른 화면에서 배신하지 않는다. 왼쪽 끝은 되돌릴 수
+        // 있는 것: 실패한 링크는 재시도가 가장 필요한 동작이므로 그 자리를 내주고,
+        // 정상 링크는 원문 열기를 둔다.
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if link.status == .failed {
+                Button { Task { await retry(link) } } label: {
+                    Label("재시도", systemImage: "arrow.clockwise")
+                }
+                .tint(PP.Palette.warn)
+            } else if let url = URL(string: link.url) {
+                Link(destination: url) { Label("원문", systemImage: "safari") }
+                    .tint(PP.Palette.accent)
+            }
+        }
+        .contextMenu {
+            if let url = URL(string: link.url) {
+                Link(destination: url) { Label("원문 열기", systemImage: "safari") }
+            }
+            Button(role: .destructive) { pendingDelete = link } label: {
+                Label("삭제", systemImage: "trash")
+            }
+        }
     }
 
     /// 켜진 필터를 화면에 남긴다. 통계에서 넘어왔는데 목록이 조용히 좁아져 있으면
@@ -109,7 +162,7 @@ struct ContentView: View {
     }
 
     /// 시간 척추 — serif 머리글 + 건수 + 하한선. serif가 쓰이는 유일한 자리다(§2.2.5).
-    private func spine(_ section: Section) -> some View {
+    private func spine(_ section: DaySection) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 9) {
             Text(section.title)
                 .font(PP.Typo.spine)
@@ -129,14 +182,14 @@ struct ContentView: View {
 
     // MARK: - 구간
 
-    private struct Section {
+    private struct DaySection {
         let title: String
         let links: [Components.Schemas.Link]
     }
 
     /// 오늘 · 어제 · 이번 주 · 이전. 절대 날짜가 아니라 상대 구간인 이유는, 찾을 때
     /// 떠오르는 것이 "며칠 전"이지 "7월 12일"이 아니기 때문이다.
-    private var sections: [Section] {
+    private var sections: [DaySection] {
         let cal = Calendar.current
         let now = Date()
         var buckets: [(String, [Components.Schemas.Link])] = [
@@ -156,7 +209,35 @@ struct ContentView: View {
             }
             buckets[index].1.append(link)
         }
-        return buckets.filter { !$0.1.isEmpty }.map { Section(title: $0.0, links: $0.1) }
+        return buckets.filter { !$0.1.isEmpty }.map { DaySection(title: $0.0, links: $0.1) }
+    }
+
+    /// 수집에 실패한 링크를 다시 큐에 넣는다. 실패는 통계가 아니라 할 일이라(통계 탭의
+    /// "손이 필요한 것"과 같은 판단), 목록에서 바로 손댈 수 있어야 한다.
+    private func retry(_ link: Components.Schemas.Link) async {
+        guard let client = backend.client else { return }
+        do {
+            _ = try await client.retryLink(.init(path: .init(id: link.id)))
+            // 상태가 pending으로 돌아가면 레일이 다시 켜지므로 목록을 새로 받는다.
+            await load()
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    /// 삭제 후 목록을 다시 받지 않고 **그 자리에서 빼는** 이유: 재조회는 왕복이 있어
+    /// 방금 지운 카드가 잠깐 남아 있고, 그 사이 다시 누르면 404가 난다.
+    private func delete(_ link: Components.Schemas.Link) async {
+        guard let client = backend.client else { return }
+        pendingDelete = nil
+        do {
+            _ = try await client.deleteLink(.init(path: .init(id: link.id))).noContent
+            withAnimation(.smooth(duration: 0.25)) {
+                links.removeAll { $0.id == link.id }
+            }
+        } catch {
+            loadError = error.localizedDescription
+        }
     }
 
     // MARK: - 로드
