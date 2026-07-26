@@ -97,7 +97,10 @@ func (s *sqliteStore) ApplyTags(ctx context.Context, linkID int64, scored []Scor
 
 // SetSummary는 추출식 요약을 기록한다. 빈 문자열도 정상 값이라 그대로 저장한다 —
 // 가드에 걸려 요약이 없다는 사실 자체가 상태이고, UI는 그때 섹션을 그리지 않는다.
-// links_fts는 건드리지 않는다(요약은 색인 대상이 아니다 — 05 §2 참고).
+//
+// **같은 트랜잭션에서 FTS를 재색인한다.** 요약이 색인 대상이 된 뒤로(reindexFTS 주석 참고)
+// 이걸 빼먹으면 요약이 붙어도 검색에는 영원히 안 잡힌다 — tag 잡이 ApplyTags로 재색인한
+// **뒤에** SetSummary가 오기 때문이다. 링크/태그 쓰기와 같은 트랜잭션 규약이기도 하다.
 func (s *sqliteStore) SetSummary(ctx context.Context, linkID int64, summary string) error {
 	return s.withWriteTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
@@ -113,7 +116,7 @@ func (s *sqliteStore) SetSummary(ctx context.Context, linkID int64, summary stri
 		if n == 0 {
 			return ErrNotFound
 		}
-		return nil
+		return reindexFTS(ctx, tx, linkID)
 	})
 }
 

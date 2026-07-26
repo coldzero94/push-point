@@ -79,6 +79,27 @@ export interface paths {
         patch: operations["updateLink"];
         trace?: never;
     };
+    "/api/v1/links/{id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 열람 기록
+         * @description 이 링크를 열었다는 사실만 기록한다(`opened_at`). 클라이언트는 fire-and-forget으로 부르고 실패해도 재시도하지 않는다 — 저장 경로 밖이라 p99 게이트와 무관하고, 한 번 놓친 열람 기록이 아카이브를 손상시키지 않는다.
+         *     **횟수는 세지 않는다.** 이 신호는 푸시포인트를 통과한 열람만 잡으므로(브라우저 히스토리·원본 앱 직접 열기는 잡히지 않는다) 구조적으로 과소집계이고, 비율이나 지표로 쓰면 틀린 결론을 만든다. 링크별 사실로만 쓴다.
+         */
+        post: operations["markOpened"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/links/{id}/retry": {
         parameters: {
             query?: never;
@@ -316,6 +337,8 @@ export interface components {
             duration_sec: number | null;
             word_count: number | null;
             lang: string;
+            /** @description 마지막으로 이 링크를 연 시각. 한 번도 안 열었으면 null. **목록 항목(`Link`)에는 넣지 않는다** — 카드에 표시할 자리가 없으므로(상태는 2px 레일뿐) 목록 페이로드를 키울 이유가 없다. */
+            opened_at: components["schemas"]["EpochSeconds"] | null;
             /** @description 최종 실패 사유. 실패 없으면 빈 문자열 */
             error: string;
             /** @description 이 링크에 연결된 잡 상태 요약. 해당 kind의 잡이 아직 없으면 필드 생략 (scrape 잡은 저장 트랜잭션에서 항상 생성되므로 필수). thumb은 best-effort — failed여도 링크 status에 영향 없음 */
@@ -548,6 +571,8 @@ export interface operations {
                 tag?: components["parameters"]["TagFilter"];
                 /** @description 링크 상태 필터 */
                 status?: components["schemas"]["LinkStatus"];
+                /** @description `true`면 아직 열지 않은 링크만. 양방향 불리언이 아니다 — "다시 읽은 것" 필터는 쓰이지 않는다. 부분 인덱스가 있어 keyset 커서가 그대로 탄다. */
+                unopened?: boolean;
             };
             header?: never;
             path?: never;
@@ -702,6 +727,31 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LinkDetail"];
                 };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    markOpened: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 링크 id */
+                id: components["parameters"]["LinkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 기록 완료 (본문 없음) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];

@@ -124,7 +124,7 @@ func (f *fakeStore) GetLink(ctx context.Context, id int64) (*store.LinkDetail, e
 	return &cp, nil
 }
 
-func (f *fakeStore) ListLinks(ctx context.Context, cursor string, limit int, tag, status string) ([]store.Link, string, error) {
+func (f *fakeStore) ListLinks(ctx context.Context, cursor string, limit int, tag, status string, unopened bool) ([]store.Link, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var all []store.Link
@@ -1130,3 +1130,5 @@ func TestCreateLinkCleansCaptureFields(t *testing.T) {
 func (f *fakeStore) CorpusDF(ctx context.Context) (int64, map[string]int64, error) {
 	return 0, nil, nil
 }
+
+func (f *fakeStore) MarkOpened(ctx context.Context, linkID int64) error { return nil }

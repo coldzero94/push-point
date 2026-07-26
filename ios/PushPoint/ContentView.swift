@@ -271,6 +271,7 @@ struct ContentView: View {
         .contextMenu {
             if let url = URL(string: link.url) {
                 Link(destination: url) { Label("원문 열기", systemImage: "safari") }
+                    .simultaneousGesture(TapGesture().onEnded { recordOpen(link) })
                 ShareLink(item: url) { Label("공유", systemImage: "square.and.arrow.up") }
             }
             Button(role: .destructive) { Task { await delete(link) } } label: {
@@ -418,6 +419,12 @@ struct ContentView: View {
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    /// 열람 기록 — fire-and-forget. 실패는 무시한다(계측이 흐름을 막으면 안 된다).
+    private func recordOpen(_ link: Components.Schemas.Link) {
+        guard let client = backend.client else { return }
+        Task { _ = try? await client.markOpened(.init(path: .init(id: link.id))) }
     }
 
     // MARK: - 검색

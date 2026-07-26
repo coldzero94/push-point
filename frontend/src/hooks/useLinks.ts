@@ -7,6 +7,9 @@ import type { LinkPage, LinkStatus } from '../lib/api/types'
 export interface LinksFilter {
   tag?: string
   status?: LinkStatus
+  /** Only links never opened through push-point. One-way — a "already read"
+   *  filter has no use, so this is a flag rather than a tri-state. */
+  unopened?: boolean
 }
 
 // Infinite list of links (GET /api/v1/links). Keyset cursor pagination: the next
@@ -27,6 +30,7 @@ export function useLinks(filter: LinksFilter = {}) {
             cursor: pageParam,
             tag: filter.tag,
             status: filter.status,
+            unopened: filter.unopened || undefined,
           },
         },
         signal,

@@ -78,8 +78,11 @@ CREATE TABLE links (
   summary      TEXT NOT NULL DEFAULT '',        -- 0005에서 ALTER ADD COLUMN. 추출식 요약(M5 Phase A)
   body_source  TEXT NOT NULL DEFAULT ''          -- 0006. '' | 'server' | 'client'
     CHECK (body_source IN ('', 'server', 'client')),
-  keywords     TEXT NOT NULL DEFAULT ''          -- 0008. 발행자 분류(meta keywords·article:section 등). 태거 입력 전용
+  keywords     TEXT NOT NULL DEFAULT '',         -- 0008. 발행자 분류(meta keywords·article:section 등). 태거 입력 전용
+  opened_at    INTEGER                            -- 0010. 마지막 열람 시각. 한 번도 안 열었으면 NULL
 );
+CREATE INDEX idx_links_unopened ON links(created_at DESC, id DESC)
+  WHERE deleted_at IS NULL AND opened_at IS NULL;
 CREATE INDEX idx_links_list   ON links(created_at DESC, id DESC) WHERE deleted_at IS NULL;
 CREATE INDEX idx_links_status ON links(status) WHERE deleted_at IS NULL;
 
@@ -169,6 +172,7 @@ CREATE VIRTUAL TABLE links_fts USING fts5(
 | `summary` | body_text에서 고른 핵심 문장 2~3개를 개행으로 이은 **추출식 요약**(M5 Phase A — LLM 없이 원문 문장 선택이라 환각 0). tag 잡이 태깅과 같은 본문 처리에서 함께 쓴다. **`LinkDetail`에만 노출**하고 목록(`Link`)·검색(`SearchResult`)에는 싣지 않는다 — 요약은 원문 대체재가 아니라 "열까 말까"의 판단 보조다. `links_fts`에도 넣지 않는다(가상 테이블 재생성 위험 — 재검토는 stage 2). 본문이 얇거나(200룬 미만) 산문이 3문장 미만이거나 description과 사실상 같으면(겹침 0.8 이상) 빈 문자열이고, 그때 UI는 아무것도 그리지 않는다 |
 | `body_source` | 본문 출처. `''`(아직 없음) / `server`(스크래퍼가 추출) / `client`(브라우저 확장·Share Extension이 **렌더된 페이지에서 캡처해 저장 요청에 실어 보냄**). `client`면 이후 스크랩이 `title`·`description`·`body_text`를 덮어쓰지 않는다 — 서버가 못 가져오는 페이지(SPA·봇 차단·로그인 벽)라서 클라이언트가 준 것이므로 서버 재시도 결과가 항상 더 나쁘다. 같은 이유로 scrape 잡이 확정 실패해도 이 링크의 `status`는 `failed`가 아니라 `done`이다(`error`는 그대로 기록) |
 | `keywords` | **발행자가 스스로 붙인 분류.** `meta[name=keywords]`·`news_keywords`·`article:section`·`article:tag`·JSON-LD `articleSection`을 모아 콤마로 이은 값(512바이트 상한). 우리가 본문에서 추론한 값이 아니라 사이트가 선언한 값이라 태거에서 제목과 같은 가중치를 받는다. **도메인 맵과 같은 급의 신호이면서 사이트별 등록이 필요 없다** — 등록되지 않은 사이트에서도 동작한다. `body_text`와 같은 규칙으로 다룬다: 스크랩이 채우되 클라이언트 캡처 값은 덮지 않고, 빈 값이 기존 값을 지우지 않는다. **태거 입력 전용** — `links_fts`·API 응답 어디에도 노출하지 않는다 |
+| `opened_at` | **마지막으로 이 링크를 연 시각.** 한 번도 안 열었으면 NULL. 코어 루프 5단계 중 저장·스크레이프·태깅은 계측되는데 마지막 단계인 재열람만 0이었다. **횟수(`open_count`)는 두지 않는다** — 이건 지표가 아니라 링크별 사실이다. 이 신호는 푸시포인트를 통과한 열람만 잡으므로(브라우저 히스토리·원본 앱 직접 열기는 잡히지 않는다) 구조적으로 과소집계이고, 비율로 쓰면 "난 안 읽는다"는 틀린 결론을 만든다. **`updated_at`도 건드리지 않는다** — 열람이 그걸 올리면 목록 정렬과 "수정됨"의 의미가 함께 흔들린다. `POST /api/v1/links/{id}/open`이 기록하고 `LinkDetail`에만 노출한다(목록 항목에는 없다 — 카드에 표시할 자리가 없다) |
 | `status` / `error` | 처리 파이프라인 상태와 최종 실패 사유 (§4 참고) |
 | `created_at` / `updated_at` / `deleted_at` | epoch 초. 삭제는 소프트 삭제 |
 
@@ -211,7 +215,7 @@ v1의 `category`/`icon`/`usage_count` 컬럼은 폐기. 사용 수는 집계 컬
 
 **tag_embeddings** — M5에서 태그 사전 임베딩을 미리 계산해 캐시. `model` 컬럼으로 모델 교체 시 무효화 판별.
 
-**links_fts** — `title`, `description`, `note`, `tags`(태그 이름을 공백 연결한 텍스트) 4개 컬럼을 색인. 외래키 제약이 없는 가상 테이블이므로 `rowid = links.id` 규약과 store 계층의 트랜잭션 동기화(§5)로 정합성을 보장한다.
+**links_fts** — `title`, `description`, `note`, `tags`(태그 이름을 공백 연결한 텍스트) 4개 컬럼을 색인. **`description` 칸에는 `links.description`과 `links.summary`를 이어 붙여 넣는다**(2026-07-26) — 가상 테이블 컬럼이 links 컬럼과 일치할 의무가 없고, 검색은 MATCH·bm25에만 쓰며 표시값은 전부 links에서 가져오기 때문이다. 전용 컬럼을 새로 만들지 않는 이유는 가상 테이블 재생성 위험과, 정당화할 측정 세트가 없는 bm25 가중치 노브를 사지 않기 위해서다. 근거는 실측: golden 123건 중 **107건(87%)** 이 요약에만 있는 3-gram을 얻는다(`nlu/golden/README.md`). `summary`가 바뀌면 같은 트랜잭션에서 재색인한다(`SetSummary`). 외래키 제약이 없는 가상 테이블이므로 `rowid = links.id` 규약과 store 계층의 트랜잭션 동기화(§5)로 정합성을 보장한다.
 
 ---
 

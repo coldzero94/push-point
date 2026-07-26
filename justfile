@@ -346,6 +346,13 @@ ios-api-gen:
     @shasum -a 256 api/openapi.yaml | awk '{print $1}' > ios/PushPoint/Generated/.openapi.sha256
     @echo "ios-api-gen: ios/PushPoint/Generated/{Types,Client}.swift 갱신"
 
+# M6 완료 기준 판정 — 최근 28일 연속 저장 (미달 시 exit 1)
+#
+# 연속의 정의는 iOS StatsView와 **같아야 한다** — 갈라지면 화면과 스크립트가 다른 숫자를
+# 말하고 어느 쪽을 믿을지 정할 근거가 없다.
+streak:
+    @scripts/streak.sh
+
 # M4 DoD 판정 — 공유 저장이 2초를 지켰는지 (확장이 남긴 계측 기록을 읽는다)
 save-timing udid="":
     @scripts/save_timing.sh {{udid}}

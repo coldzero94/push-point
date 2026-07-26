@@ -56,6 +56,15 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `DELETE /api/v1/links/{id}`.
     /// - Remark: Generated from `#/paths//api/v1/links/{id}/delete(deleteLink)`.
     func deleteLink(_ input: Operations.deleteLink.Input) async throws -> Operations.deleteLink.Output
+    /// 열람 기록
+    ///
+    /// 이 링크를 열었다는 사실만 기록한다(`opened_at`). 클라이언트는 fire-and-forget으로 부르고 실패해도 재시도하지 않는다 — 저장 경로 밖이라 p99 게이트와 무관하고, 한 번 놓친 열람 기록이 아카이브를 손상시키지 않는다.
+    /// **횟수는 세지 않는다.** 이 신호는 푸시포인트를 통과한 열람만 잡으므로(브라우저 히스토리·원본 앱 직접 열기는 잡히지 않는다) 구조적으로 과소집계이고, 비율이나 지표로 쓰면 틀린 결론을 만든다. 링크별 사실로만 쓴다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/links/{id}/open`.
+    /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)`.
+    func markOpened(_ input: Operations.markOpened.Input) async throws -> Operations.markOpened.Output
     /// 실패 링크 재시도
     ///
     /// `status='failed'`인 링크의 잡을 다시 enqueue한다. 링크는 `pending`으로 되돌아가고 워커가 처음부터 다시 처리한다. `failed` 상태가 아닌 링크는 400.
@@ -221,6 +230,23 @@ extension APIProtocol {
         headers: Operations.deleteLink.Input.Headers = .init()
     ) async throws -> Operations.deleteLink.Output {
         try await deleteLink(Operations.deleteLink.Input(
+            path: path,
+            headers: headers
+        ))
+    }
+    /// 열람 기록
+    ///
+    /// 이 링크를 열었다는 사실만 기록한다(`opened_at`). 클라이언트는 fire-and-forget으로 부르고 실패해도 재시도하지 않는다 — 저장 경로 밖이라 p99 게이트와 무관하고, 한 번 놓친 열람 기록이 아카이브를 손상시키지 않는다.
+    /// **횟수는 세지 않는다.** 이 신호는 푸시포인트를 통과한 열람만 잡으므로(브라우저 히스토리·원본 앱 직접 열기는 잡히지 않는다) 구조적으로 과소집계이고, 비율이나 지표로 쓰면 틀린 결론을 만든다. 링크별 사실로만 쓴다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/links/{id}/open`.
+    /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)`.
+    internal func markOpened(
+        path: Operations.markOpened.Input.Path,
+        headers: Operations.markOpened.Input.Headers = .init()
+    ) async throws -> Operations.markOpened.Output {
+        try await markOpened(Operations.markOpened.Input(
             path: path,
             headers: headers
         ))
@@ -1468,6 +1494,10 @@ internal enum Operations {
                 ///
                 /// - Remark: Generated from `#/paths/api/v1/links/GET/query/status`.
                 internal var status: Components.Schemas.LinkStatus?
+                /// `true`면 아직 열지 않은 링크만. 양방향 불리언이 아니다 — "다시 읽은 것" 필터는 쓰이지 않는다. 부분 인덱스가 있어 keyset 커서가 그대로 탄다.
+                ///
+                /// - Remark: Generated from `#/paths/api/v1/links/GET/query/unopened`.
+                internal var unopened: Swift.Bool?
                 /// Creates a new `Query`.
                 ///
                 /// - Parameters:
@@ -1475,16 +1505,19 @@ internal enum Operations {
                 ///   - limit: 페이지 크기
                 ///   - tag: 태그 이름 필터
                 ///   - status: 링크 상태 필터
+                ///   - unopened: `true`면 아직 열지 않은 링크만. 양방향 불리언이 아니다 — "다시 읽은 것" 필터는 쓰이지 않는다. 부분 인덱스가 있어 keyset 커서가 그대로 탄다.
                 internal init(
                     cursor: Components.Parameters.Cursor? = nil,
                     limit: Components.Parameters.Limit? = nil,
                     tag: Components.Parameters.TagFilter? = nil,
-                    status: Components.Schemas.LinkStatus? = nil
+                    status: Components.Schemas.LinkStatus? = nil,
+                    unopened: Swift.Bool? = nil
                 ) {
                     self.cursor = cursor
                     self.limit = limit
                     self.tag = tag
                     self.status = status
+                    self.unopened = unopened
                 }
             }
             internal var query: Operations.listLinks.Input.Query
@@ -2576,6 +2609,216 @@ internal enum Operations {
             /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
             ///
             /// - Remark: Generated from `#/paths//api/v1/links/{id}/delete(deleteLink)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 열람 기록
+    ///
+    /// 이 링크를 열었다는 사실만 기록한다(`opened_at`). 클라이언트는 fire-and-forget으로 부르고 실패해도 재시도하지 않는다 — 저장 경로 밖이라 p99 게이트와 무관하고, 한 번 놓친 열람 기록이 아카이브를 손상시키지 않는다.
+    /// **횟수는 세지 않는다.** 이 신호는 푸시포인트를 통과한 열람만 잡으므로(브라우저 히스토리·원본 앱 직접 열기는 잡히지 않는다) 구조적으로 과소집계이고, 비율이나 지표로 쓰면 틀린 결론을 만든다. 링크별 사실로만 쓴다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/links/{id}/open`.
+    /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)`.
+    internal enum markOpened {
+        internal static let id: Swift.String = "markOpened"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/links/{id}/open/POST/path`.
+            internal struct Path: Sendable, Hashable {
+                /// 링크 id
+                ///
+                /// - Remark: Generated from `#/paths/api/v1/links/{id}/open/POST/path/id`.
+                internal var id: Components.Parameters.LinkId
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - id: 링크 id
+                internal init(id: Components.Parameters.LinkId) {
+                    self.id = id
+                }
+            }
+            internal var path: Operations.markOpened.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/links/{id}/open/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.markOpened.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.markOpened.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.markOpened.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            internal init(
+                path: Operations.markOpened.Input.Path,
+                headers: Operations.markOpened.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct NoContent: Sendable, Hashable {
+                /// Creates a new `NoContent`.
+                internal init() {}
+            }
+            /// 기록 완료 (본문 없음)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            case noContent(Operations.markOpened.Output.NoContent)
+            /// 기록 완료 (본문 없음)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            internal static var noContent: Self {
+                .noContent(.init())
+            }
+            /// The associated value of the enum case if `self` is `.noContent`.
+            ///
+            /// - Throws: An error if `self` is not `.noContent`.
+            /// - SeeAlso: `.noContent`.
+            internal var noContent: Operations.markOpened.Output.NoContent {
+                get throws {
+                    switch self {
+                    case let .noContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "noContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 잘못된 요청 (`invalid_input`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Components.Responses.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            internal var badRequest: Components.Responses.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 리소스 없음 — 소프트 삭제된 링크 포함 (`not_found`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Components.Responses.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Components.Responses.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/open/post(markOpened)/responses/500`.
             ///
             /// HTTP response code: `500 internalServerError`.
             case internalServerError(Components.Responses.InternalError)

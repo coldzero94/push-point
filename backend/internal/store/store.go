@@ -80,6 +80,8 @@ type LinkDetail struct {
 	// Summary는 추출식 요약(M5). 목록(Link)이 아니라 **상세에만** 있다 — 목록·검색 경로가
 	// summary를 모르게 두는 것이 linkCols·scanLink·sqlite_search.go 무변경의 근거다.
 	Summary string
+	// OpenedAt은 마지막 열람 시각. 한 번도 안 열었으면 nil.
+	OpenedAt *int64
 }
 
 // facet 값 — tags.facet CHECK 제약(migrations/0003_tag_facet.up.sql)과
@@ -274,6 +276,12 @@ type Store interface {
 	// 통계와 태그가 어긋난다.
 	ApplyTags(ctx context.Context, linkID int64, scored []ScoredTag, terms []string) error
 
+	// MarkOpened는 이 링크를 열었다는 사실만 기록한다.
+	//
+	// 횟수를 세지 않고 updated_at도 건드리지 않는다 — 열람이 updated_at을 올리면
+	// 목록 정렬과 "수정됨"의 의미가 함께 흔들린다.
+	MarkOpened(ctx context.Context, linkID int64) error
+
 	// CorpusDF는 자체 코퍼스의 문서 빈도 스냅샷을 돌려준다 (표면 → df, 그리고 문서 수).
 	// 태거 IDF의 입력이다.
 	CorpusDF(ctx context.Context) (docs int64, df map[string]int64, err error)
@@ -281,7 +289,7 @@ type Store interface {
 	// ListLinks는 keyset 커서 목록. tag는 태그 이름 필터, status는 links.status 필터
 	// (각각 빈 문자열이면 미적용). cursor는 이전 응답의 nextCursor (첫 페이지는 "").
 	// limit는 호출 전에 보정된 값(1~100)을 전달한다. 다음 페이지가 없으면 nextCursor="".
-	ListLinks(ctx context.Context, cursor string, limit int, tag, status string) (items []Link, nextCursor string, err error)
+	ListLinks(ctx context.Context, cursor string, limit int, tag, status string, unopened bool) (items []Link, nextCursor string, err error)
 
 	// UpdateLink는 메모/태그를 수정하고 수정된 상세를 반환한다.
 	//   - note: nil이면 유지, 아니면 교체.

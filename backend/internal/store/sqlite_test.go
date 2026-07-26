@@ -139,7 +139,7 @@ func TestListLinks_CursorBoundary(t *testing.T) {
 	wantPages := [][]int64{{ids[4], ids[3]}, {ids[2], ids[1]}, {ids[0]}}
 	cursor := ""
 	for pi, want := range wantPages {
-		items, next, err := s.ListLinks(ctx, cursor, 2, "", "")
+		items, next, err := s.ListLinks(ctx, cursor, 2, "", "", false)
 		if err != nil {
 			t.Fatalf("페이지 %d 조회 실패: %v", pi, err)
 		}
@@ -162,7 +162,7 @@ func TestListLinks_CursorBoundary(t *testing.T) {
 	}
 
 	// 잘못된 커서 → ErrInvalidCursor
-	if _, _, err := s.ListLinks(ctx, "!!!invalid!!!", 2, "", ""); !errors.Is(err, ErrInvalidCursor) {
+	if _, _, err := s.ListLinks(ctx, "!!!invalid!!!", 2, "", "", false); !errors.Is(err, ErrInvalidCursor) {
 		t.Fatalf("잘못된 커서 에러 = %v, want ErrInvalidCursor", err)
 	}
 }
@@ -181,7 +181,7 @@ func TestListLinks_Filters(t *testing.T) {
 	}
 
 	// tag 필터 — 부착 태그도 함께 조회 (N+1 없이 IN 쿼리)
-	items, _, err := s.ListLinks(ctx, "", 20, "golang", "")
+	items, _, err := s.ListLinks(ctx, "", 20, "golang", "", false)
 	if err != nil {
 		t.Fatalf("tag 필터 조회 실패: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestListLinks_Filters(t *testing.T) {
 	}
 
 	// status 필터
-	items, _, err = s.ListLinks(ctx, "", 20, "", "done")
+	items, _, err = s.ListLinks(ctx, "", 20, "", "done", false)
 	if err != nil {
 		t.Fatalf("status 필터 조회 실패: %v", err)
 	}
@@ -446,7 +446,7 @@ func TestDeleteLink_Soft(t *testing.T) {
 	if _, err := s.GetLink(ctx, id); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("삭제 후 GetLink = %v, want ErrNotFound", err)
 	}
-	items, _, err := s.ListLinks(ctx, "", 20, "", "")
+	items, _, err := s.ListLinks(ctx, "", 20, "", "", false)
 	if err != nil || len(items) != 0 {
 		t.Fatalf("삭제 후 목록 = %v (%v), want 빈 목록", items, err)
 	}
@@ -936,13 +936,13 @@ func TestCursor_ModeMismatch(t *testing.T) {
 		t.Fatalf("FTS 1페이지 = (cursor=%q, mode=%q, %v)", ftsCursor, mode, err)
 	}
 	// 목록 커서 획득
-	_, listCursor, err := s.ListLinks(ctx, "", 1, "", "")
+	_, listCursor, err := s.ListLinks(ctx, "", 1, "", "", false)
 	if err != nil || listCursor == "" {
 		t.Fatalf("목록 1페이지 = (cursor=%q, %v)", listCursor, err)
 	}
 
 	// FTS 커서를 목록에 → 400
-	if _, _, err := s.ListLinks(ctx, ftsCursor, 1, "", ""); !errors.Is(err, ErrInvalidCursor) {
+	if _, _, err := s.ListLinks(ctx, ftsCursor, 1, "", "", false); !errors.Is(err, ErrInvalidCursor) {
 		t.Fatalf("목록에 FTS 커서 = %v, want ErrInvalidCursor", err)
 	}
 	// 목록 커서를 FTS 검색에 → 400
@@ -954,7 +954,7 @@ func TestCursor_ModeMismatch(t *testing.T) {
 		t.Fatalf("LIKE에 FTS 커서 = %v, want ErrInvalidCursor", err)
 	}
 	// 정상 모드 조합은 계속 동작
-	if _, _, err := s.ListLinks(ctx, listCursor, 1, "", ""); err != nil {
+	if _, _, err := s.ListLinks(ctx, listCursor, 1, "", "", false); err != nil {
 		t.Fatalf("목록 커서 재사용 실패: %v", err)
 	}
 	if _, _, _, err := s.Search(ctx, "쿠버네티스", "", nil, nil, ftsCursor, 1); err != nil {

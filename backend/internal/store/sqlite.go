@@ -209,10 +209,21 @@ func reindexFTS(ctx context.Context, tx *sql.Tx, linkID int64) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM links_fts WHERE rowid = ?`, linkID); err != nil {
 		return fmt.Errorf("store: links_fts DELETE 실패: %w", err)
 	}
-	var title, desc, note string
+	// summary를 description 칸에 함께 넣는다.
+	//
+	// **links_fts의 컬럼이 links의 컬럼과 일치할 의무는 없다** — 검색은 MATCH와 bm25에만
+	// 쓰고 표시값은 전부 links에서 가져오며, 스니펫을 만들지 않기로 한 결정 덕에 색인
+	// 원문이 화면에 뜰 일도 없다. 그래서 전용 컬럼을 새로 만들지 않는다(가상 테이블
+	// 재생성 위험 · 정당화할 측정 세트가 없는 bm25 가중치 노브를 사지 않는다).
+	//
+	// 근거는 실측이다: golden 123건 중 **107건(87%)** 이 요약에만 있는 3-gram을 하나 이상
+	// 얻는다(nlu/golden/README.md). 즉 제목·설명이 담지 못한 어휘를 대부분의 링크에서
+	// 실제로 들여온다. 0005가 유예하며 건 재검토 트리거(요약 커버리지 85% 초과)도
+	// 실측 0.855/0.885로 이미 발동했다.
+	var title, desc, note, summary string
 	err := tx.QueryRowContext(ctx,
-		`SELECT title, description, note FROM links WHERE id = ? AND deleted_at IS NULL`, linkID,
-	).Scan(&title, &desc, &note)
+		`SELECT title, description, note, summary FROM links WHERE id = ? AND deleted_at IS NULL`, linkID,
+	).Scan(&title, &desc, &note, &summary)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // 삭제된 링크 — 색인에서 빠진 상태 유지
 	}
@@ -238,7 +249,7 @@ func reindexFTS(ctx context.Context, tx *sql.Tx, linkID int64) error {
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO links_fts (rowid, title, description, note, tags) VALUES (?, ?, ?, ?, ?)`,
-		linkID, title, desc, note, strings.Join(names, " ")); err != nil {
+		linkID, title, strings.TrimSpace(desc+" "+summary), note, strings.Join(names, " ")); err != nil {
 		return fmt.Errorf("store: links_fts INSERT 실패: %w", err)
 	}
 	return nil
@@ -252,15 +263,16 @@ func (s *sqliteStore) GetLink(ctx context.Context, id int64) (*LinkDetail, error
 		publishedAt sql.NullInt64
 		durationSec sql.NullInt64
 		wordCount   sql.NullInt64
+		openedAt    sql.NullInt64
 	)
 	err := s.db.Reader.QueryRowContext(ctx, `
 		SELECT id, url, domain, title, description, author, content_type, lang,
 		       published_at, duration_sec, word_count, thumb_path, note, status, error,
-		       created_at, updated_at, summary
+		       created_at, updated_at, summary, opened_at
 		FROM links WHERE id = ? AND deleted_at IS NULL`, id,
 	).Scan(&d.ID, &d.URL, &d.Domain, &d.Title, &d.Description, &d.Author, &d.ContentType, &d.Lang,
 		&publishedAt, &durationSec, &wordCount, &thumb, &d.Note, &d.Status, &d.Error,
-		&d.CreatedAt, &d.UpdatedAt, &d.Summary)
+		&d.CreatedAt, &d.UpdatedAt, &d.Summary, &openedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -278,6 +290,9 @@ func (s *sqliteStore) GetLink(ctx context.Context, id int64) (*LinkDetail, error
 	}
 	if wordCount.Valid {
 		d.WordCount = &wordCount.Int64
+	}
+	if openedAt.Valid {
+		d.OpenedAt = &openedAt.Int64
 	}
 
 	// 부착 태그
@@ -334,7 +349,7 @@ func (s *sqliteStore) GetLink(ctx context.Context, id int64) (*LinkDetail, error
 }
 
 // ListLinks는 keyset 커서 목록 — (created_at, id) < (?, ?), OFFSET 금지.
-func (s *sqliteStore) ListLinks(ctx context.Context, cursor string, limit int, tag, status string) ([]Link, string, error) {
+func (s *sqliteStore) ListLinks(ctx context.Context, cursor string, limit int, tag, status string, unopened bool) ([]Link, string, error) {
 	var (
 		sb   strings.Builder
 		args []any
@@ -352,6 +367,10 @@ func (s *sqliteStore) ListLinks(ctx context.Context, cursor string, limit int, t
 	if status != "" {
 		sb.WriteString(` AND l.status = ?`)
 		args = append(args, status)
+	}
+	if unopened {
+		// 부분 인덱스 idx_links_unopened가 이 조건과 정렬을 함께 탄다.
+		sb.WriteString(` AND l.opened_at IS NULL`)
 	}
 	if cursor != "" {
 		ca, cid, err := DecodeCursor(cursor)

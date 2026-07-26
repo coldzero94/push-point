@@ -17,6 +17,9 @@ const rootRoute = createRootRoute({ component: RootLayout })
 const listSearchSchema = z.object({
   tag: z.string().optional(),
   status: z.enum(['pending', 'scraping', 'tagging', 'done', 'failed']).optional(),
+  // One-way flag, not a tri-state: a "already read" filter has no use. Absent
+  // means everything, so the URL stays clean in the common case.
+  unopened: z.coerce.boolean().optional(),
   link: z.coerce.number().int().positive().optional(),
 })
 

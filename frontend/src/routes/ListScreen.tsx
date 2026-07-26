@@ -63,10 +63,10 @@ function groupByTime(links: readonly LinkItem[]): TimeGroupedLinks[] {
 }
 
 export function ListScreen() {
-  const { tag, status, link } = route.useSearch()
+  const { tag, status, unopened, link } = route.useSearch()
   const navigate = useNavigate()
 
-  const query = useLinks({ tag, status })
+  const query = useLinks({ tag, status, unopened })
   const { data, isPending, isError, error, hasNextPage, isFetchingNextPage, fetchNextPage } = query
   const tagsQuery = useTags()
   const retry = useRetryLink()
@@ -176,6 +176,21 @@ export function ListScreen() {
             </kbd>
           </Link>
           <StatusFilter value={status} onChange={setStatus} />
+          {/* 안 연 것 — 컬럼 하나가 만드는 유일한 화면 변화다. 배지도 딤도 없다:
+              이건 지표가 아니라 링크별 사실이고, 카드에 표시하면 "안 읽었다"는
+              판정처럼 읽힌다(그 신호는 푸시포인트를 통과한 열람만 잡으므로
+              구조적으로 과소집계다). */}
+          <Button
+            variant={unopened ? 'primary' : 'secondary'}
+            onClick={() =>
+              void navigate({
+                to: '/',
+                search: (prev) => ({ ...prev, unopened: unopened ? undefined : true, link: undefined }),
+              })
+            }
+          >
+            안 연 것
+          </Button>
         </div>
 
         {/* Tag filter chip bar (control chips; §11 3(4)). Horizontal scroll
