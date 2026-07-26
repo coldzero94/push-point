@@ -148,14 +148,49 @@ M3 단위 테스트 예:
 
 ### Phase B — 임베딩 분류 (ONNX, M5)
 
-1. **모델 베이크오프 (M5 Week 1)** — 후보 3종을 golden set으로 실측 비교해 선정한다:
-   - (a) multilingual-e5-small-ko 계열 — ONNX 기제공, 384-dim, **1순위 검토**. `query:` / `passage:` 프리픽스 규약을 지켜야 품질이 나온다
-   - (b) jhgan/ko-sroberta-multitask int8 (110M)
-   - (c) BM-K/KoSimCSE int8 (110M, ONNX 직접 변환 필요)
-   "소형"·"경량" 같은 수식어는 베이크오프의 실측 수치(모델 크기·추론 시간·Recall)로 대체한다.
-2. **토크나이저**: [yalue/onnxruntime_go](https://github.com/yalue/onnxruntime_go)는 텐서 입출력만 제공하므로 토크나이저는 Go 구현(sugarme/tokenizer 또는 knights-analytics/hugot)을 별도 선정한다. **Python HF 토크나이저와 토큰 ID 시퀀스 100% 일치 골든 테스트**(한글 NFC 정규화 포함) 통과가 M5 Week 2 진입 게이트다.
-3. 문서 임베딩(title+description) vs 태그 사전 임베딩(`tag_embeddings` 캐시) 코사인 유사도 → 상위 k, threshold 컷
-4. Phase A와 점수 앙상블. `tag_feedback` 데이터(사용자의 태그 추가/제거 이력)로 재랭킹 가중치 보정
+> **2026-07-26 정정.** 아래 1~4는 원안이고, 실측 조사에서 여러 전제가 깨졌다. 각 항목에
+> 정정을 붙인다. M5 자체의 재범위는 [08-DEVELOPMENT-PLAN.md](08-DEVELOPMENT-PLAN.md) §M5.
+
+1. **모델 베이크오프** — 후보 3종을 golden set으로 실측 비교해 선정한다:
+   - ~~(a) multilingual-e5-small-ko 계열 — ONNX 기제공, 384-dim, **1순위 검토**~~
+     → **ONNX 기제공이 아니다.** `dragonkue/multilingual-e5-small-ko`에 `.onnx`가 **0개**다
+     (safetensors뿐, HF API 확인). ONNX를 제공하는 건 한국어 튜닝이 아닌 base
+     `intfloat/multilingual-e5-small`이다. **1순위 근거가 사라졌다.**
+   - (b) jhgan/ko-sroberta-multitask — **기제공 int8을 가진 유일한 후보다**
+     (`onnx/model_qint8_avx512_vnni.onnx`). 원안이 (a)에 붙인 라벨이 실제로는 여기 있다.
+   - (c) BM-K/KoSimCSE — ONNX 직접 변환 필요(`.onnx` 0개, 확인).
+   - ~~(b)(c)만 "110M"~~ → **e5-small이 117.65M으로 셋 중 가장 크다**(나머지 110.62M).
+     int8 파일도 112.9 vs 106.2 MiB로 **크기 축이 세 후보를 못 가른다.**
+   - 대신 갈라야 할 축: e5-small은 파라미터의 81.6%가 25만 어휘 룩업 테이블이고 본체는
+     21.3M뿐인 반면 ko-sroberta는 76.9%가 본체(85.1M)라 **토큰당 연산이 약 4배**다.
+     선정 기준을 "int8 파일 크기"가 아니라 **본체(지연) / 어휘 테이블(메모리)** 두 축으로 쓴다.
+   - 프리픽스 규약도 정정: 원안은 "query:/passage: 비대칭"이라 적었으나, 모델 저자 README는
+     분류·클러스터링 용도에는 **양쪽 다 `query: `** 를 쓰라고 지시한다.
+   - `nlu/models/`는 `.gitkeep`뿐이다 — 어느 경로를 골라도 변환·양자화 스크립트를 만들어야
+     한다. "(c)만 변환 필요"는 성립하지 않는다.
+2. **토크나이저**: `onnxruntime_go`는 텐서 입출력만 제공하므로 Go 토크나이저를 별도 선정한다.
+   ~~**Python HF와 토큰 ID 100% 일치**가 M5 Week 2 진입 게이트~~
+   → **어느 후보로도 도달 불가다.** 실측(golden 123건): sugarme/tokenizer × e5 = 110/123,
+   공백 정규화를 더해 120/123(잔여 3건은 라이브러리 내부 Unigram Viterbi 결함이라 호출측에서
+   못 고친다). hugot 순수 Go × e5 = **0/123**.
+   그리고 **"(한글 NFC 정규화 포함)"은 방향이 뒤집혀 있었다** — XLM-R의 charsmap에 한글 합성이
+   없어서 NFD 입력에서 Go와 Python은 *똑같이 망가진 채* 100% 일치한다. **게이트는 초록이고
+   시스템은 깨진다.** 진짜 요구사항은 입력 경로의 NFC 강제였고, 그건 Phase B와 무관한
+   Phase A 결함이라 2026-07-26에 따로 고쳤다(`tagger.Normalize`).
+   → 게이트를 "문서 단위 exact match"에서 **"토크나이즈 전 공백 정규화 규약 고정 + 토큰 단위
+   일치율"**로 바꾸지 않으면 M5는 Week 2에서 멈춘다.
+   → hugot을 고르면 **토크나이저 선택권이 사라진다**(주입 훅이 없어 hftokenizer에 락인).
+3. ~~문서 임베딩(title+description)~~ → **입력 정의가 낡았다.** `body_text`(0004)와
+   `keywords`(0008)가 현재 최대 기여 신호다(Δbody +0.066~0.081). Phase B가 무엇을 인코딩하는지
+   다시 정의해야 한다. 그리고 **태그 쪽에 임베딩할 문장이 없다** — `tags.json` 항목은
+   `{name, facet, aliases}`뿐이고 name 42개는 전부 `dev`·`ai` 같은 한 단어다. 프로토타입 문장
+   필드 또는 별칭 센트로이드 설계가 선행 조건인데 원안에 없었다.
+4. **Phase A와 점수 앙상블** — 결합 규칙이 원안 어디에도 없었다. 현재 score map은 **정수
+   격자**(가중치 1/2/3 × 정수 매칭 수)에 threshold 1.0인데, 거기에 [-1,1] 코사인을 더할
+   배율·정규화·threshold 조정이 정의돼 있지 않다. 그 배율은 코사인 분포에서 나오므로
+   **Week 3 항목이 아니라 오프라인 스파이크의 산출물**이다.
+   ~~`tag_feedback`으로 재랭킹 가중치 보정~~ → `tag_feedback`에 `removed`가 **0건**이다.
+   학습할 데이터가 없다.
 
 **배포 형태 (3택, M5에서 결정)** — M1~M4는 CGO-free 단일 정적 바이너리이고, M5에서 ONNX 채택 시 다음 중 하나로 간다.
 
@@ -166,18 +201,30 @@ M3 단위 테스트 예:
 패키지에 두고 `internal/app`만 import하면 `tagjob`을 고치지 않고도 확장이 깨끗하다).
 `ppshare_test.go`의 모듈 허용 목록이 그 경계를 지킨다.
 
-1. `libonnxruntime.dylib`을 바이너리에 embed하고 시작 시 `data/`로 추출 (cgo 빌드 감수)
-2. hugot 순수 Go 백엔드 — 추론이 약 8배 느리지만 태깅은 비동기 3s 예산 내라 허용 가능
+1. `libonnxruntime`을 embed 후 시작 시 추출 (cgo 감수) — **정정: 리스크는 iOS가 아니라
+   서버다.** iOS는 원래 cgo 링킹을 요구해 `GOOS=ios GOARCH=arm64`가 그냥 된다. 실제로 깨지는
+   것은 **`GOOS=linux` 크로스컴파일**이고, 그때 이 문서 §2의 "GOOS/GOARCH만으로 크로스컴파일"이
+   무너져 타깃별 C 툴체인이 필요해진다. 그리고 확장에는 허용 목록 트립와이어가 있지만
+   **서버의 CGO-free 성질에는 대응물이 없다** — 조용히 바뀐다.
+2. ~~hugot 순수 Go 백엔드 — 약 8배 느리지만 3s 예산 내~~ → **후보가 아니다.** 실측: 토큰
+   일치 0/123(위 2번), 지연은 상수가 아니라 길이 함수(15토큰 24.5배 … 481토큰 43.6배 =
+   **1.348초**), 512토큰 초과는 실패, int8을 Go 힙에 float32로 펴서 양자화 이득을 버린다.
 3. Phase A 유지 (게이트 미달 시)
+
+**그리고 이건 3택이 아니라 2차원이다** — 서버 축 × 확장 축. **확장 축의 선택지는 하나뿐이다:
+확장은 Phase A 유지.** int8 가중치만 106~113MiB인데 확장 여유가 ~106MB이고, 실측 로드 후
+최대 RSS가 367MB(ONNX Runtime) / 603MB(순수 Go)로 예산의 3~5배다. **오버헤드 0을 가정해도
+안 들어간다.** 따라서 M5가 팔 수 있는 것은 "iOS 자립 모드도 Phase A+B"가 아니라
+**"같은 링크가 저장 경로에 따라 다른 태그를 받는다"**이고, 그걸 검증하는 테스트는 현재 0개다.
 
 ### 품질 게이트
 
 측정 없는 "잘 되는 것 같다"는 금지. 평가 프로토콜은 다음과 같다:
 
-- **golden set**: 실제 저장 링크(M2 임포트 + 실사용 축적분에서 층화 샘플링) 100개로 구축한 `nlu/golden/` JSONL. 레코드 스키마:
+- **golden set**: 실제 저장 링크(M2 임포트 + 실사용 축적분에서 층화 샘플링) 123개로 구축한 `nlu/golden/` JSONL. 레코드 스키마:
 
   ```json
-  {"url": "...", "snapshot": {"title": "...", "description": "...", "meta_keywords": "...", "body_text": "..."}, "expected_tags": ["..."]}
+  {"url": "...", "snapshot": {"title": "...", "description": "...", "body_text": "...", "keywords": "..."}, "expected_tags": ["..."]}
   ```
 
   eval은 **네트워크 접근 0** — snapshot만 입력으로 쓴다. 원본 페이지가 바뀌거나 사라져도 평가가 재현된다.
