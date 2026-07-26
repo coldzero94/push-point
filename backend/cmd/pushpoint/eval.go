@@ -163,6 +163,9 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 	}
 
 	var baseHit, noBodyHit, noKWHit, fullHit, bareHit int
+	// tied: topK 경계에서 점수가 같아 **태그 이름 알파벳순으로** 갈린 링크 수.
+	// missZero/missRank: 미스를 둘로 가른다 — 정답 태그가 0점인가, 점수는 있는데 밀렸는가.
+	var tied, missZero, missRank int
 	// 태그별 집계 (full 기준): TP/FP/FN + golden 등장 수.
 	tp := map[string]int{}
 	fp := map[string]int{}
@@ -193,6 +196,19 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 		fullHit += hit(full, exp)
 		bareHit += hit(bare, exp)
 
+		// 동점과 미스 해부는 full 기준으로 센다 — 실제로 출하되는 구성이다.
+		full3 := classifyRanked(evalContent(e, true, true), dict, id2name)
+		if tiedAtCut(full3) {
+			tied++
+		}
+		if hit(full, exp) == 0 {
+			if zeroScored(full3, exp) {
+				missZero++
+			} else {
+				missRank++
+			}
+		}
+
 		// 태그별 P/R은 full 예측 기준.
 		predicted := toSet(full)
 		for t := range predicted {
@@ -220,6 +236,20 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 	fmt.Printf("           분류 기여: 본문 있을 때 %+.3f (no-keywords=%.3f) · 본문 없을 때 %+.3f (bare=%.3f) · 분류 있는 항목 %d/%d\n",
 		float64(fullHit-noKWHit)/n, float64(noKWHit)/n,
 		float64(noBodyHit-bareHit)/n, float64(bareHit)/n, withKW, len(entries))
+	// 동점 — 지표가 못 보는 자리다. hit@3는 3위 안에 정답이 있으면 통과이므로,
+	// 3위와 4위가 동점이라 알파벳순으로 갈린 경우를 구분하지 않는다. 가중치를 건드리면
+	// 이 덩어리가 통째로 재배열되는데 Recall@3는 거의 움직이지 않는다.
+	fmt.Printf("           경계 동점: %d/%d (%.0f%%) — 3위와 4위 점수가 같아 태그 이름 알파벳순으로 갈렸다\n",
+		tied, len(entries), 100*float64(tied)/n)
+
+	// 미스 해부 — 어떤 개선이 유효한지가 여기서 갈린다.
+	// 0점 미스는 순위를 아무리 바꿔도 못 고친다(승격이 필요하고, 그건 오탐 위험이 다르다).
+	if miss := len(entries) - fullHit; miss > 0 {
+		fmt.Printf("           미스 %d건: 정답 0점 %d · 순위 밀림 %d → 재랭킹 상한 %.3f (+%.3f)\n",
+			miss, missZero, missRank,
+			float64(fullHit+missRank)/n, float64(missRank)/n)
+	}
+
 	// 언어별 — 이 앱은 한국어와 영어를 대등하게 지원해야 하므로 한쪽만 잘 되는 회귀를 드러낸다.
 	reportTagRecallByLang(entries, dict, id2name)
 
@@ -281,13 +311,32 @@ func reportTagRecallByLang(entries []goldenEntry, dict *tagger.Dictionary, id2na
 
 // classifyTop은 Content를 분류해 상위 evalTopK 태그 이름을 돌려준다.
 func classifyTop(c tagger.Content, dict *tagger.Dictionary, id2name map[int64]string) []string {
-	scored := tagger.Classify(c, dict)
-	if len(scored) > evalTopK {
-		scored = scored[:evalTopK]
+	out := make([]string, 0, evalTopK)
+	for _, r := range classifyRanked(c, dict, id2name) {
+		if len(out) == evalTopK {
+			break
+		}
+		out = append(out, r.name)
 	}
-	out := make([]string, 0, len(scored))
+	return out
+}
+
+// ranked는 이름과 confidence를 함께 들고 다닌다.
+//
+// `classifyTop`이 이름만 돌려주면서 점수가 버려지고 있었다. 그 결과 진단 두 가지가
+// 구조적으로 불가능했다: **3위와 4위가 동점인지**(그러면 순위가 태그 이름 알파벳순으로
+// 갈린다), 그리고 **미스가 0점인지 밀림인지**. 둘 다 아래에서 필요하다.
+type ranked struct {
+	name string
+	conf float64
+}
+
+// classifyRanked는 컷 없이 전부 돌려준다 — topK 경계 **바깥**을 봐야 동점을 알 수 있다.
+func classifyRanked(c tagger.Content, dict *tagger.Dictionary, id2name map[int64]string) []ranked {
+	scored := tagger.Classify(c, dict)
+	out := make([]ranked, 0, len(scored))
 	for _, s := range scored {
-		out = append(out, id2name[s.TagID])
+		out = append(out, ranked{name: id2name[s.TagID], conf: s.Confidence})
 	}
 	return out
 }
@@ -503,4 +552,30 @@ func fill(dst *string, v string) {
 	if *dst == "" {
 		*dst = v
 	}
+}
+
+// tiedAtCut은 topK 경계에서 점수가 같은지 본다.
+//
+// 같으면 순위가 **태그 이름 알파벳순**으로 갈린다(Classify의 동점 정렬 규약). 그건 품질이
+// 아니라 우연이고, hit@3는 그 우연을 못 본다 — 3위 안에만 있으면 통과이기 때문이다.
+// 가중치를 건드리면 이 덩어리가 재배열되면서 Recall@3는 거의 안 움직인다.
+func tiedAtCut(rs []ranked) bool {
+	if len(rs) <= evalTopK {
+		return false // 경계 밖에 후보가 없으면 갈릴 것도 없다
+	}
+	return rs[evalTopK-1].conf == rs[evalTopK].conf
+}
+
+// zeroScored는 정답 태그가 **하나도 점수를 못 받았는지** 본다.
+//
+// 이 구분이 개선의 종류를 정한다. 0점이면 순위를 아무리 바꿔도 못 고치고 — 태그를
+// threshold 위로 **승격**시켜야 하는데 그건 오탐 대량 유입이라는 다른 위험이다.
+// 점수가 있는데 밀린 것만 재랭킹으로 되찾을 수 있다.
+func zeroScored(rs []ranked, expected map[string]bool) bool {
+	for _, r := range rs {
+		if expected[r.name] {
+			return false // 점수는 받았다 — 밀린 것이다
+		}
+	}
+	return true
 }
