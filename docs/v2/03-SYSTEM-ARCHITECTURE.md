@@ -103,7 +103,7 @@ URL fetch + goquery 파싱. `<title>`, og:title/description/image/site_name, met
 
 ### backend/internal/tagger
 
-**Tagger 인터페이스는 없다** — 앙상블 지점이 `classify.go`의 `score map[int64]float64`이기 때문이다. 도메인·제목·분류·설명·메모·본문 여섯 신호가 지금도 거기서 가법 합성되고 있고, Phase B(ONNX)는 **일곱 번째 신호**로 같은 맵에 들어간다. 인터페이스로 갈라 구현체를 교체하면 두 신호 중 하나만 고를 수 있게 되는데, 앙상블은 정의상 둘을 함께 쓰는 것이라 그 모양이 오히려 방해가 된다. 자유 태그 생성이 아니라 통제된 태그 사전(30~50개)에 대한 분류로 문제를 좁혀 LLM 없이 품질을 확보한다. Phase A는 도메인 휴리스틱 + 조사 접미 정규화 기반 후보구 추출·TF-IDF 스코어링 + 사전 매칭, Phase B는 ONNX 임베딩 코사인 유사도와의 앙상블이다. 품질은 `nlu/golden/` golden set의 `just eval`로 측정하며, 게이트는 상대 조건이다 — M5 진입: Phase A가 "도메인 휴리스틱만" 베이스라인 대비 +15pp, M5 종료: 앙상블이 Phase A 대비 +10pp (절대 60%/80%는 참고치). 상세는 [02-TECH-SPEC.md](02-TECH-SPEC.md) 참고.
+**Tagger 인터페이스는 없다** — 앙상블 지점이 `classify.go`의 `score map[int64]float64`이기 때문이다. 도메인·제목·분류·설명·메모·본문 여섯 신호가 지금도 거기서 가법 합성되고 있고, Phase B(ONNX)는 **일곱 번째 신호**로 같은 맵에 들어간다. 인터페이스로 갈라 구현체를 교체하면 두 신호 중 하나만 고를 수 있게 되는데, 앙상블은 정의상 둘을 함께 쓰는 것이라 그 모양이 오히려 방해가 된다. 자유 태그 생성이 아니라 통제된 태그 사전(30~50개)에 대한 분류로 문제를 좁혀 LLM 없이 품질을 확보한다. Phase A는 도메인 휴리스틱 + 조사 접미 정규화 기반 후보구 추출·TF-IDF 스코어링 + 사전 매칭, Phase B는 ONNX 임베딩 코사인 유사도와의 앙상블이다. 품질은 `nlu/golden/` golden set의 `just eval`로 측정하며, 게이트는 상대 조건이다 — M5 진입: Phase A가 상수 예측기(내용 미참조, test 0.721) 대비 대응표본 유의 — 충족, M5 종료: 앙상블이 Phase A 대비 회귀 0 + 개선 5건 이상(2026-07-26 재정의 — golden 123건이 분해할 수 있는 최소 단위). 상세는 [02-TECH-SPEC.md](02-TECH-SPEC.md) 참고.
 
 ### backend/internal/thumbs
 
