@@ -194,6 +194,71 @@ func (c *Client) signedJWT() (string, error) {
 	return signing + "." + base64.RawURLEncoding.EncodeToString(sig), nil
 }
 
+// Read는 탭 하나의 값을 읽는다. 없는 탭이면 빈 결과다(에러가 아니다 — 첫 동기화 전에는
+// 탭이 비어 있는 것이 정상이다).
+//
+// 반환 행은 **뒤쪽 빈 셀이 잘려 온다.** Sheets가 그렇게 준다 — 마지막 열이 비어 있으면
+// 그 행의 길이가 짧아진다. 호출자가 열 인덱스로 접근하면 범위를 벗어나므로 cell()을 쓴다.
+func (c *Client) Read(ctx context.Context, spreadsheetID, tab string) ([][]string, error) {
+	token, err := c.accessToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	target := fmt.Sprintf("%s/%s/values/%s",
+		c.base, url.PathEscape(spreadsheetID), url.PathEscape(tab))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, fmt.Errorf("sheets: 읽기 요청 생성 실패: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sheets: 읽기 실패: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	if resp.StatusCode == http.StatusBadRequest {
+		// 탭이 없을 때 Sheets는 400에 "Unable to parse range"를 준다.
+		// 첫 동기화 전에는 정상 상태이므로 에러로 올리지 않는다.
+		if strings.Contains(string(body), "Unable to parse range") {
+			return nil, nil
+		}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		hint := ""
+		if resp.StatusCode == http.StatusForbidden {
+			hint = fmt.Sprintf(" — 시트를 %s 에 공유했는지 확인하세요", c.acct.ClientEmail)
+		}
+		return nil, fmt.Errorf("sheets: 읽기 거부 (%d)%s: %s",
+			resp.StatusCode, hint, strings.TrimSpace(string(body)))
+	}
+	var out struct {
+		Values [][]any `json:"values"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("sheets: 읽기 응답 파싱 실패: %w", err)
+	}
+	rows := make([][]string, 0, len(out.Values))
+	for _, r := range out.Values {
+		row := make([]string, 0, len(r))
+		for _, v := range r {
+			row = append(row, fmt.Sprint(v))
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+// Cell은 행에서 i번째 열을 꺼낸다. 없으면 빈 문자열이다 — Sheets가 뒤쪽 빈 셀을
+// 잘라 보내므로 인덱스 접근을 그대로 하면 패닉이 난다.
+func Cell(row []string, i int) string {
+	if i < 0 || i >= len(row) {
+		return ""
+	}
+	return row[i]
+}
+
 // Replace는 탭 하나의 내용을 rows로 통째로 바꾼다.
 //
 // **덧붙이기가 아니라 교체다.** 시트는 파생물이고 SQLite가 원본이라, 태그를 고치거나

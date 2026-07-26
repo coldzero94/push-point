@@ -235,3 +235,98 @@ func TestAccessToken_isCached(t *testing.T) {
 		t.Errorf("토큰을 %d번 받았다 — 캐시가 안 된다", tokenCalls)
 	}
 }
+
+// Sheets는 **행 뒤쪽의 빈 셀을 잘라서 보낸다.** 마지막 열(메모·상태)이 비면 그 행만
+// 짧아지는데, 열 인덱스로 그냥 접근하면 거기서 패닉이 난다 — 그리고 그 행은 "메모가
+// 비어 있는 링크"라는 가장 흔한 경우다.
+func TestRead_handlesRaggedRows(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		fmt.Fprint(w, `{"values":[["id","url","note"],["1","https://a.example","메모"],["2","https://b.example"]]}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	rows, err := c.Read(context.Background(), "SHEET", "links")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("행 수: %d", len(rows))
+	}
+	if got := Cell(rows[2], 2); got != "" {
+		t.Errorf("잘린 셀은 빈 문자열이어야 한다: %q", got)
+	}
+	if got := Cell(rows[1], 2); got != "메모" {
+		t.Errorf("있는 셀은 그대로여야 한다: %q", got)
+	}
+	if got := Cell(rows[1], 99); got != "" {
+		t.Errorf("범위 밖도 빈 문자열이어야 한다: %q", got)
+	}
+}
+
+// 첫 동기화 전에는 탭이 없다. Sheets는 그때 400 "Unable to parse range"를 주는데,
+// 그걸 에러로 올리면 "아직 안 만들었다"가 "고장났다"로 보고된다.
+func TestRead_missingTabIsNotAnError(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"error":{"message":"Unable to parse range: nope"}}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	rows, err := c.Read(context.Background(), "SHEET", "nope")
+	if err != nil {
+		t.Fatalf("없는 탭은 에러가 아니어야 한다: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("없는 탭은 빈 결과여야 한다: %v", rows)
+	}
+}
+
+// 진짜 400(범위 파싱 문제가 아닌 것)은 삼키면 안 된다 — 삼키면 "시트가 비었다"로
+// 보이고, 그 상태로 Replace를 돌리면 멀쩡한 시트를 지운다.
+func TestRead_otherBadRequestStillErrors(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"error":{"message":"Invalid spreadsheet id"}}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	if _, err := c.Read(context.Background(), "SHEET", "links"); err == nil {
+		t.Fatal("다른 400을 삼켰다 — 빈 시트로 오인하면 Replace가 멀쩡한 시트를 지운다")
+	}
+}
