@@ -2,6 +2,7 @@ package tagger
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -142,5 +143,44 @@ func TestClassify_keywordsWeighsLikeTitle(t *testing.T) {
 	}
 	if byKeywords[0].Confidence <= byDesc[0].Confidence {
 		t.Errorf("keywords가 description보다 약하다: %v vs %v", byKeywords[0].Confidence, byDesc[0].Confidence)
+	}
+}
+
+// capN은 한 필드에서 한 태그의 기여를 matchCap으로 자른다 — **키워드 스터핑 방지**의 실체다.
+// 이걸 없애도 지금까지 아무 테스트가 실패하지 않았다(2026-07-27 실측). 상한이 없으면 본문에
+// 같은 낱말을 스무 번 박은 페이지가 내용이 실한 페이지를 점수로 이긴다.
+func TestCapNLimitsKeywordStuffing(t *testing.T) {
+	if capN(1) != 1 {
+		t.Errorf("상한 아래는 그대로: capN(1)=%d", capN(1))
+	}
+	if capN(matchCap) != matchCap {
+		t.Errorf("상한과 같으면 그대로: capN(%d)=%d", matchCap, capN(matchCap))
+	}
+	if got := capN(matchCap + 50); got != matchCap {
+		t.Errorf("상한을 넘으면 잘라야 한다: capN(%d)=%d, want %d", matchCap+50, got, matchCap)
+	}
+}
+
+// 위 단위 규칙이 실제 점수까지 이어지는지 — 스터핑한 문서가 정직한 문서를 못 이겨야 한다.
+func TestStuffingDoesNotOutscore(t *testing.T) {
+	dict := BuildDictionary([]TagEntry{
+		{ID: 1, Name: "python", Aliases: []string{"파이썬"}},
+	})
+	body := func(n int) string {
+		out := ""
+		for range n {
+			out += "파이썬 "
+		}
+		return out + strings.Repeat("가 ", 200) // 길이 요구치를 넘기기 위한 채움
+	}
+	honest := Classify(Content{Body: body(matchCap)}, dict)
+	stuffed := Classify(Content{Body: body(matchCap * 20)}, dict)
+
+	if len(honest) == 0 || len(stuffed) == 0 {
+		t.Fatalf("둘 다 태그가 나와야 비교가 된다: honest=%v stuffed=%v", honest, stuffed)
+	}
+	if stuffed[0].Confidence > honest[0].Confidence {
+		t.Errorf("스무 배로 반복한 문서가 더 높은 점수를 받았다 — 상한이 안 걸린다: %v vs %v",
+			stuffed[0].Confidence, honest[0].Confidence)
 	}
 }
