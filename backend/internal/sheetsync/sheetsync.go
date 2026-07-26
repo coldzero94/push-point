@@ -68,7 +68,13 @@ func Open(dataDir string) (Transport, State, error) {
 	st := Load(dataDir)
 	if st.Mode == "webhook" && st.DeployURL != "" {
 		wh, err := sheets.NewWebhook(st.DeployURL, st.Token)
-		return wh, st, err
+		if err != nil {
+			// nil인 *Webhook을 그대로 돌려주면 인터페이스는 non-nil인데 안이 nil인
+			// 상태가 된다. 지금 호출자는 err를 먼저 보므로 무해하지만, 언젠가
+			// `if tr != nil`로 판단하는 코드가 생기면 첫 호출에서 패닉이다.
+			return nil, st, err
+		}
+		return wh, st, nil
 	}
 	// 서비스 계정 경로 — 환경변수가 있을 때만.
 	keyPath := os.Getenv("PUSHPOINT_SHEETS_KEY")
