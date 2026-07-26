@@ -38,7 +38,13 @@ const (
 	tokenURL = "https://oauth2.googleapis.com/token"
 	apiBase  = "https://sheets.googleapis.com/v4/spreadsheets"
 	// scope는 쓰기까지 필요하다. 읽기 전용 스코프로는 values.update가 403이다.
-	scope = "https://www.googleapis.com/auth/spreadsheets"
+	//
+	// drive.file을 함께 요청하는 이유는 **우리가 시트를 만들어 사용자에게 공유**하기
+	// 위해서다(사용자가 시트를 만들고 ID를 복사해 오는 단계를 없앤다). drive.file은
+	// 전체 Drive가 아니라 **이 앱이 만든 파일에만** 권한을 준다 — 사용자의 나머지
+	// 드라이브는 이 키로 건드릴 수 없다. 넓은 `auth/drive`를 쓰지 않는 이유가 그것이다.
+	scope     = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file"
+	driveBase = "https://www.googleapis.com/drive/v3/files"
 	// tokenTTL은 JWT의 유효 기간. 구글이 1시간을 상한으로 둔다.
 	tokenTTL = time.Hour
 	// requestTimeout은 요청당 상한. 동기화는 사람이 기다리는 명령이라 짧게 잡는다.
@@ -60,7 +66,9 @@ type Client struct {
 	key  *rsa.PrivateKey
 	// base는 Sheets API 루트. 테스트가 갈아 끼울 수 있게 필드로 둔다 — 상수로 두면
 	// "비우고 쓴다"는 순서를 실제 호출로 확인할 방법이 없어 그 테스트가 가짜가 된다.
-	base  string
+	base string
+	// drive는 Drive API 루트. 시트를 만든 뒤 사용자에게 공유할 때만 쓴다.
+	drive string
 	token string
 	// exp는 캐시된 토큰의 만료 시각. 한 번의 동기화에서 여러 요청을 보내므로
 	// 매번 토큰을 새로 받지 않는다.
@@ -89,7 +97,7 @@ func New(keyJSON []byte) (*Client, error) {
 	if acct.TokenURI == "" {
 		acct.TokenURI = tokenURL
 	}
-	return &Client{http: &http.Client{Timeout: requestTimeout}, acct: acct, key: key, base: apiBase}, nil
+	return &Client{http: &http.Client{Timeout: requestTimeout}, acct: acct, key: key, base: apiBase, drive: driveBase}, nil
 }
 
 // Email은 서비스 계정 주소. 시트를 이 주소에 공유해야 쓰기가 되므로,
@@ -321,4 +329,85 @@ func (c *Client) do(ctx context.Context, method, target string, payload any) err
 			method, resp.StatusCode, hint, strings.TrimSpace(string(respBody)))
 	}
 	return nil
+}
+
+// Create는 새 스프레드시트를 만들고 ID를 돌려준다.
+//
+// **왜 우리가 만드는가.** 사용자에게 "시트를 만들고 URL에서 ID를 잘라 오세요"를 시키면
+// 준비 단계가 하나 더 늘고, 그 단계가 틀리기도 쉽다(ID와 URL 전체를 헷갈리는 것이 흔하다).
+// 만드는 쪽은 API 한 번이라 우리가 하는 편이 싸다.
+//
+// 만들어진 파일의 **소유자는 서비스 계정**이다. 그래서 Share를 반드시 이어서 불러야
+// 사용자 눈에 보인다 — 안 그러면 시트는 존재하는데 아무도 열 수 없다.
+func (c *Client) Create(ctx context.Context, title string) (string, error) {
+	body, err := c.doJSON(ctx, http.MethodPost, c.base,
+		map[string]any{"properties": map[string]any{"title": title}})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		SpreadsheetID string `json:"spreadsheetId"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", fmt.Errorf("sheets: 생성 응답 파싱 실패: %w", err)
+	}
+	if out.SpreadsheetID == "" {
+		return "", fmt.Errorf("sheets: 생성 응답에 spreadsheetId가 없습니다")
+	}
+	return out.SpreadsheetID, nil
+}
+
+// Share는 파일을 email에게 편집자로 공유한다.
+//
+// `sendNotificationEmail=false`인 이유: 자기 도구가 자기에게 보내는 알림 메일은 소음이고,
+// 어차피 아래에서 URL을 출력한다. 다만 **개인 Gmail 계정에 공유할 때 구글이 알림 없는
+// 공유를 거부하는 경우가 있어**, 실패하면 알림을 켜서 한 번 더 시도한다.
+func (c *Client) Share(ctx context.Context, fileID, email string) error {
+	target := fmt.Sprintf("%s/%s/permissions?sendNotificationEmail=false",
+		c.drive, url.PathEscape(fileID))
+	perm := map[string]any{"type": "user", "role": "writer", "emailAddress": email}
+	if _, err := c.doJSON(ctx, http.MethodPost, target, perm); err == nil {
+		return nil
+	}
+	retry := fmt.Sprintf("%s/%s/permissions?sendNotificationEmail=true",
+		c.drive, url.PathEscape(fileID))
+	if _, err := c.doJSON(ctx, http.MethodPost, retry, perm); err != nil {
+		return fmt.Errorf("sheets: %s 에게 공유 실패: %w", email, err)
+	}
+	return nil
+}
+
+// URL은 사람이 열 수 있는 주소.
+func URL(spreadsheetID string) string {
+	return "https://docs.google.com/spreadsheets/d/" + spreadsheetID + "/edit"
+}
+
+// doJSON은 do와 같지만 응답 본문을 돌려준다.
+func (c *Client) doJSON(ctx context.Context, method, target string, payload any) ([]byte, error) {
+	token, err := c.accessToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("sheets: 요청 본문 인코딩 실패: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("sheets: 요청 생성 실패: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sheets: 요청 실패: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("sheets: %s 거부 (%d): %s",
+			method, resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return respBody, nil
 }

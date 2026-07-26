@@ -337,24 +337,35 @@ launchctl load ~/Library/LaunchAgents/ai.pushpoint.server.plist
 시트가 값을 하는 자리는 **SQLite가 못 하는 일** — 시트에서 필터·피벗으로 훑고, 남에게
 보여주고, 다른 도구에 붙이는 것이다.
 
-### 준비
+### 준비 — 실질적으로 한 단계다
 
-1. Google Cloud 콘솔에서 **서비스 계정**을 만들고 JSON 키를 내려받는다
-2. 같은 프로젝트에서 **Google Sheets API**를 켠다
-3. 시트를 서비스 계정 이메일에 **편집자로 공유**한다 — 빠뜨리면 403이고, 그때 오류 메시지가
-   어느 주소에 공유해야 하는지 알려준다
+**시트는 우리가 만들어 공유해 준다.** 사용자가 시트를 만들고 URL에서 ID를 잘라 오는 단계는
+틀리기 쉽고(ID와 URL 전체를 헷갈리는 것이 흔하다) 없앨 수 있는 단계라 없앴다.
 
-사용자 OAuth가 아니라 서비스 계정인 이유는 리다이렉트·토큰 갱신·동의 화면이 단일 사용자
-셀프호스트에 과하기 때문이다. **키는 기기 밖으로 나가지 않는다.**
+1. Google Cloud 콘솔에서 **서비스 계정**을 만들고 JSON 키를 내려받는다.
+   같은 프로젝트에서 **Sheets API와 Drive API**를 켠다.
+2. 끝.
 
 ```bash
-export PUSHPOINT_SHEETS_KEY=data/sheets-key.json   # 서비스 계정 JSON
-export PUSHPOINT_SHEETS_ID=1AbC...                 # 시트 URL의 /d/ 와 /edit 사이
-export PUSHPOINT_SHEETS_TAB=links                  # 선택 (기본 links)
-just sheets-sync
+export PUSHPOINT_SHEETS_KEY=data/sheets-key.json
+PUSHPOINT_SHEETS_SHARE=you@example.com just sheets-sync   # 첫 실행에만
+just sheets-sync                                          # 그다음부터는 이것만
 ```
 
-주기 실행은 launchd/cron에 위 명령을 걸면 된다.
+첫 실행이 시트를 만들어 `PUSHPOINT_SHEETS_SHARE` 계정에 편집자로 공유하고, 만든 ID를
+`data/sheets.json`에 기억한다. 두 번째부터는 환경변수 하나면 된다. 이미 있는 시트를 쓰려면
+`PUSHPOINT_SHEETS_ID`를 주면 그쪽이 우선한다.
+
+**1번은 없앨 수 없다** — 구글이 자격증명 없이는 아무것도 내주지 않는다. 사용자 OAuth로
+바꿔도 클라이언트 ID를 만드는 같은 콘솔 작업이 남고, 거기에 리다이렉트·토큰 갱신·동의
+화면이 더해진다. 단일 사용자 셀프호스트에는 서비스 계정이 더 싸다. **키는 기기 밖으로
+나가지 않는다.**
+
+요청하는 스코프는 `spreadsheets` + **`drive.file`**이다. `drive.file`은 전체 드라이브가
+아니라 **이 도구가 만든 파일에만** 권한을 준다 — 시트를 만들고 공유하는 데 그것으로
+충분하고, 넓은 `auth/drive`는 사용자의 나머지 드라이브까지 이 키의 사정권에 넣는다.
+
+주기 실행은 launchd/cron에 `just sheets-sync`를 걸면 된다.
 
 ### 알아 둘 것
 

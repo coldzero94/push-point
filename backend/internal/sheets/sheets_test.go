@@ -330,3 +330,145 @@ func TestRead_otherBadRequestStillErrors(t *testing.T) {
 		t.Fatal("다른 400을 삼켰다 — 빈 시트로 오인하면 Replace가 멀쩡한 시트를 지운다")
 	}
 }
+
+// 시트 생성 — 응답에서 ID를 꺼내야 한다. 못 꺼내면 빈 ID로 이후 요청이 전부
+// 이상한 URL로 나가는데, 그 증상은 "404"라서 원인이 안 보인다.
+func TestCreate_returnsID(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	var gotTitle string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if props, ok := body["properties"].(map[string]any); ok {
+			gotTitle, _ = props["title"].(string)
+		}
+		fmt.Fprint(w, `{"spreadsheetId":"NEW123"}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	id, err := c.Create(context.Background(), "제목")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "NEW123" {
+		t.Errorf("ID: %q", id)
+	}
+	if gotTitle != "제목" {
+		t.Errorf("제목이 전달되지 않았다: %q", gotTitle)
+	}
+}
+
+// ID 없는 응답을 성공으로 읽으면 빈 ID가 흘러 다닌다. 그 상태로 상태 파일에 저장되면
+// 다음 실행도 빈 ID를 재사용해 영원히 고장난다.
+func TestCreate_emptyIDIsAnError(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	if _, err := c.Create(context.Background(), "x"); err == nil {
+		t.Fatal("ID 없는 응답을 성공으로 읽었다")
+	}
+}
+
+// 공유는 알림 없이 먼저 시도하고, 거부되면 알림을 켜서 재시도한다.
+// 개인 Gmail에 알림 없는 공유를 구글이 거부하는 경우가 있어서다 — 재시도가 없으면
+// 시트는 만들어졌는데 사용자가 볼 수 없는 상태로 끝난다.
+func TestShare_retriesWithNotification(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	var attempts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		notify := r.URL.Query().Get("sendNotificationEmail")
+		attempts = append(attempts, notify)
+		if notify == "false" {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":{"message":"Bad Request"}}`)
+			return
+		}
+		fmt.Fprint(w, `{"id":"perm1"}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.drive = srv.URL
+
+	if err := c.Share(context.Background(), "SHEET", "me@example.com"); err != nil {
+		t.Fatalf("재시도로 성공해야 한다: %v", err)
+	}
+	if len(attempts) != 2 || attempts[0] != "false" || attempts[1] != "true" {
+		t.Errorf("알림 없이 먼저, 그다음 알림 켜고여야 한다: %v", attempts)
+	}
+}
+
+// 둘 다 실패하면 어느 계정에 공유하려 했는지가 오류에 있어야 한다 —
+// 없으면 사용자가 콘솔에서 무엇을 고쳐야 할지 모른다.
+func TestShare_bothFailuresAreReported(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"error":{"message":"Drive API has not been used"}}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.drive = srv.URL
+
+	err = c.Share(context.Background(), "SHEET", "me@example.com")
+	if err == nil {
+		t.Fatal("둘 다 실패했는데 성공으로 보고했다")
+	}
+	if !strings.Contains(err.Error(), "me@example.com") {
+		t.Errorf("어느 계정인지 없다: %v", err)
+	}
+}
+
+// drive.file 스코프를 요청해야 시트를 만들고 공유할 수 있다. 넓은 auth/drive를
+// 요청하면 사용자의 드라이브 전체가 이 키의 사정권에 들어온다 — 그건 이 도구가
+// 필요로 하는 권한이 아니다.
+func TestScope_isNarrow(t *testing.T) {
+	if !strings.Contains(scope, "drive.file") {
+		t.Error("drive.file 스코프가 없으면 시트 생성·공유가 403이다")
+	}
+	if strings.Contains(scope, "auth/drive ") || strings.HasSuffix(scope, "auth/drive") {
+		t.Error("전체 Drive 스코프를 요청하고 있다 — drive.file로 충분하다")
+	}
+}

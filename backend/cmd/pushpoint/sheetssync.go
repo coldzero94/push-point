@@ -16,8 +16,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -36,24 +38,56 @@ var sheetHeader = []any{
 	"id", "저장일", "URL", "도메인", "제목", "설명", "태그", "메모", "상태",
 }
 
+// syncState는 우리가 만든 시트를 기억한다. 없으면 매번 새 시트를 만들게 되고,
+// 그러면 사용자의 드라이브에 빈 시트가 쌓인다.
+type syncState struct {
+	SpreadsheetID string `json:"spreadsheet_id"`
+	CreatedAt     int64  `json:"created_at"`
+}
+
+func statePath(dataDir string) string { return filepath.Join(dataDir, "sheets.json") }
+
+func loadState(dataDir string) syncState {
+	var st syncState
+	b, err := os.ReadFile(statePath(dataDir))
+	if err != nil {
+		return st
+	}
+	_ = json.Unmarshal(b, &st) // 깨졌으면 없는 것으로 본다 — 새로 만들면 복구된다
+	return st
+}
+
+func saveState(dataDir string, st syncState) error {
+	b, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(statePath(dataDir), b, 0o600)
+}
+
 func runSheetsSync(_ []string) error {
 	keyPath := os.Getenv("PUSHPOINT_SHEETS_KEY")
-	sheetID := os.Getenv("PUSHPOINT_SHEETS_ID")
 	tab := os.Getenv("PUSHPOINT_SHEETS_TAB")
 	if tab == "" {
 		tab = "links"
 	}
-	if keyPath == "" || sheetID == "" {
-		return fmt.Errorf(`sheets-sync: 설정이 필요합니다.
+	if keyPath == "" {
+		return fmt.Errorf(`sheets-sync: 서비스 계정 키가 필요합니다.
 
-  PUSHPOINT_SHEETS_KEY   서비스 계정 JSON 키 파일 경로
-  PUSHPOINT_SHEETS_ID    스프레드시트 ID (URL의 /d/ 와 /edit 사이)
-  PUSHPOINT_SHEETS_TAB   탭 이름 (선택, 기본 "links")
+  PUSHPOINT_SHEETS_KEY     서비스 계정 JSON 키 파일 경로 (필수)
+  PUSHPOINT_SHEETS_SHARE   시트를 공유받을 내 구글 계정 (첫 실행에만 필요)
+  PUSHPOINT_SHEETS_ID      기존 시트를 쓸 때만 (없으면 우리가 만든다)
+  PUSHPOINT_SHEETS_TAB     탭 이름 (선택, 기본 "links")
 
-준비 절차:
+준비 절차 — 한 번만 하면 된다:
   1. Google Cloud 콘솔에서 서비스 계정을 만들고 JSON 키를 내려받는다
-  2. 그 프로젝트에서 Google Sheets API를 켠다
-  3. 시트를 서비스 계정 이메일에 **편집자**로 공유한다 (이걸 빼먹으면 403)`)
+  2. 그 프로젝트에서 Google Sheets API와 Google Drive API를 켠다
+  3. PUSHPOINT_SHEETS_SHARE 에 본인 구글 계정을 넣고 실행한다
+
+시트는 **우리가 만들어 공유해 준다** — 만들고 ID를 복사해 올 필요가 없다.
+만든 시트 ID는 data/sheets.json 에 기억하므로 다음부터는 그대로 쓴다.
+
+구글이 자격증명 없이는 아무것도 내주지 않으므로 1번은 없앨 수 없다.`)
 	}
 
 	keyJSON, err := os.ReadFile(keyPath)
@@ -69,6 +103,12 @@ func runSheetsSync(_ []string) error {
 	if err != nil {
 		return err
 	}
+
+	ctxSetup := context.Background()
+	sheetID, err := resolveSheet(ctxSetup, client, cfg.DataDir, tab)
+	if err != nil {
+		return err
+	}
 	db, err := store.Open(cfg.DataDir)
 	if err != nil {
 		return fmt.Errorf("sheets-sync: DB 열기 실패: %w", err)
@@ -76,7 +116,7 @@ func runSheetsSync(_ []string) error {
 	defer db.Close()
 	st := store.New(db, queue.NewSQLite(db.Writer))
 
-	ctx := context.Background()
+	ctx := ctxSetup
 	rows := [][]any{sheetHeader}
 	cursor := ""
 	for {
@@ -97,9 +137,50 @@ func runSheetsSync(_ []string) error {
 	if err := client.Replace(ctx, sheetID, tab, rows); err != nil {
 		return err
 	}
-	fmt.Printf("sheets-sync: %d건을 %q 탭에 썼습니다 (서비스 계정 %s)\n",
-		len(rows)-1, tab, client.Email())
+	fmt.Printf("sheets-sync: %d건을 %q 탭에 썼습니다\n  %s\n",
+		len(rows)-1, tab, sheets.URL(sheetID))
 	return nil
+}
+
+// resolveSheet는 쓸 시트를 정한다: 환경변수 > 기억해 둔 것 > 새로 만들기.
+//
+// 새로 만드는 경로가 이 함수의 요점이다. 사용자가 시트를 만들고 URL에서 ID를 잘라 오는
+// 단계는 틀리기 쉽고(ID와 URL 전체를 헷갈린다) 없앨 수 있는 단계다.
+func resolveSheet(ctx context.Context, client *sheets.Client, dataDir, tab string) (string, error) {
+	if id := os.Getenv("PUSHPOINT_SHEETS_ID"); id != "" {
+		return id, nil
+	}
+	if st := loadState(dataDir); st.SpreadsheetID != "" {
+		return st.SpreadsheetID, nil
+	}
+
+	share := os.Getenv("PUSHPOINT_SHEETS_SHARE")
+	if share == "" {
+		return "", fmt.Errorf(`sheets-sync: 첫 실행에는 PUSHPOINT_SHEETS_SHARE 가 필요합니다.
+
+시트를 새로 만들어 드리는데, 만든 파일의 소유자는 서비스 계정이라 그대로 두면
+**사용자 눈에 보이지 않습니다.** 공유받을 구글 계정을 알려주세요:
+
+  PUSHPOINT_SHEETS_SHARE=you@example.com just sheets-sync`)
+	}
+
+	title := fmt.Sprintf("Push-Point 아카이브 (%s)", time.Now().Format("2006-01-02"))
+	id, err := client.Create(ctx, title)
+	if err != nil {
+		return "", err
+	}
+	// 공유가 실패해도 ID는 먼저 저장한다 — 안 하면 다음 실행이 시트를 또 만들어
+	// 드라이브에 고아 시트가 쌓인다. 공유는 사람이 콘솔에서 고칠 수 있지만
+	// 쌓인 고아 시트는 아무도 안 치운다.
+	if err := saveState(dataDir, syncState{SpreadsheetID: id, CreatedAt: time.Now().Unix()}); err != nil {
+		fmt.Fprintf(os.Stderr, "경고: 시트 ID 기록 실패 — 다음 실행이 새 시트를 만들 수 있습니다: %v\n", err)
+	}
+	if err := client.Share(ctx, id, share); err != nil {
+		return "", fmt.Errorf("%w\n\n시트는 만들어졌습니다(%s). 서비스 계정 %s 이 Drive API 권한을 갖는지 확인하세요",
+			err, sheets.URL(id), client.Email())
+	}
+	fmt.Printf("시트를 만들어 %s 에 공유했습니다:\n  %s\n", share, sheets.URL(id))
+	return id, nil
 }
 
 // linkRow는 링크 하나를 시트 한 행으로 만든다.
