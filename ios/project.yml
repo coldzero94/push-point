@@ -31,6 +31,23 @@ settings:
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: NO
 
+# 스킴을 명시하는 이유: XcodeGen이 자동 생성한 스킴은 앱에 의존하는 타깃만 테스트
+# 액션에 담는데, PushPointTests는 앱과 링크되지 않는 순수 단위 테스트라 빠졌다.
+# 그래서 `CoverPatternTests`가 리포에 있으면서 **한 번도 실행되지 않았다** — 웹과
+# iOS의 커버 해시가 갈라져도 양쪽 다 정상으로 보이므로 눈으로는 절대 안 잡히는데,
+# 그걸 잡으라고 만든 테스트가 잠들어 있었다.
+schemes:
+  PushPoint:
+    build:
+      targets:
+        PushPoint: all
+    test:
+      targets:
+        - PushPointTests
+        - PushPointUITests
+    run:
+      config: Debug
+
 targets:
   # 웹과 값이 갈라지면 안 되는 것들(생성 커버 해시)을 고정하는 자리.
   # 화면 코드가 아니라 규칙을 테스트한다.

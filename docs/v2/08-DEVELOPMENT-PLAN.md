@@ -165,14 +165,15 @@ SQLite `cache_size(-64000)`은 예약이 아니라 상한이라, DB가 커져도
 **Week 1**
 - Apple Developer Program 가입 ($99/년 — 무료 프로비저닝은 7일 만료라 매일 사용과 양립 불가)
 - ATS 결정: 서버 주소는 IP 형식(`http://100.x.y.z:8420`)만 사용 (IP는 ATS 면제). MagicDNS 이름을 쓰려면 `tailscale cert` HTTPS 필수
-- `ios/` 워크스페이스에 Xcode 프로젝트 세팅, SwiftUI 앱 골격, API 클라이언트, API 키 Keychain 저장 (앱 그룹 공유)
+- `ios/` 워크스페이스에 Xcode 프로젝트 세팅, SwiftUI 앱 골격, API 클라이언트. **API 키 Keychain 저장은 하지 않았다** — 자립 모드는 실행마다 난수 키라 보관 대상이 없다(:154). Keychain은 홈서버 모드가 생길 때 필요해진다
 - API 클라이언트는 swift-openapi-generator로 `api/openapi.yaml`에서 생성 — API 타입 수작성 금지. SPM 플러그인 대신 CLI 실행 + 생성물 커밋(클린 빌드 페널티 회피). Swift allOf 생성물(value1/value2) 실측 후 스펙 allOf 해체 여부 결정
 
 **Week 2**
 - Share Extension 최소 구현: 공유 시트에서 한 탭 저장
 - **공유 출처별 입력 처리**([04-DATA-FLOW.md](04-DATA-FLOW.md) §7.3.1): Safari 공유는
   `NSExtensionJavaScriptPreprocessingFile`에 `extension/src/extract.js`를 지정해 본문까지 받고,
-  네이티브 앱 공유는 `NSItemProvider`의 `public.url`·`public.plain-text`·`public.image`를 전부
+  네이티브 앱 공유는 `NSItemProvider`의 `public.url`·`public.plain-text`를 전부(`public.image`는
+  매핑하지 않는다 — 계약(`LinkInput`)에 이미지를 받을 자리가 없고 저장 단위가 URL이다)
   확인해 계약 필드에 채운다. 어느 쪽이든 App Group 큐에 **저장 계약 JSON 그대로** 적재한다.
 - 로그인 벽 사이트(인스타그램 등)를 네이티브 공유로 받을 때의 처리는 앱 내 `WKWebView` 세션
   재사용으로 풀 수 있는지 실기기에서 판정한다(§7.3.1 규칙 3). 서버는 자격증명을 갖지 않는다.
@@ -217,7 +218,9 @@ Week 1~3의 저장 경로가 시뮬레이터에서 실제로 돌아간 뒤, 목�
   `total_links`·`links_this_week`·`by_tag`·`by_day`(30일)를 준다 — 서버 작업 없이
   화면만 만들면 된다. 일별 막대(Swift Charts), 상위 태그, 헤드라인 수치.
 
-화면이 셋이 되므로 `NavigationStack` 하나에서 **TabView(목록·검색·통계)** 로 바꾼다.
+화면이 늘어나므로 `NavigationStack` 하나에서 **TabView(목록·통계)** 로 바꾼다. 검색은 탭이
+아니라 목록 안의 `.searchable`이다 — 찾는 대상이 그 목록이라 탭을 나누면 "필터 걸린 목록"과
+"검색 결과"라는 거의 같은 두 화면이 생긴다.
 
 여기서 `allOf` 판정이 실제 문제가 된다. 상세 화면은 `LinkDetail`을 쓰는데
 swift-openapi-generator가 이를 `value1`/`value2`로 감싸 `detail.value1.title` /

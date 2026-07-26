@@ -184,8 +184,8 @@ M3 단위 테스트 예:
 
 - **전제**: Apple Developer Program($99/년) — 무료 계정은 프로비저닝 7일 만료라 매일 쓰는 앱과 양립 불가.
 - **SwiftUI.** React Native는 v2에서 제외 — 저장 경로의 핵심인 Share Extension을 네이티브 수준 품질로 만드는 것이 우선이다.
-- **Share Extension 캡처 정책**: App Group 로컬 큐에 **우선 기록** → `timeoutInterval` 2~3s로 `POST /api/v1/links` → 성공 시 큐에서 제거, 실패/타임아웃 시 큐에 남긴 채 시트를 닫는다. 큐 드레인은 본앱 실행 시 + BGTaskScheduler가 담당한다. "요청 발사 후 즉시 닫기"는 금지 — extension 프로세스 종료로 in-flight 요청이 유실된다. `POST /api/v1/links`는 url_hash 멱등(중복 시 200 duplicate:true)이므로 재시도해도 중복 생성이 없다.
-- **API 키 보관**: Keychain에 앱 그룹 공유로 저장 — 앱과 Share Extension이 같은 키를 읽는다.
+- **Share Extension 캡처 정책**: 확장이 `mobile/ppshare`로 App Group의 공유 SQLite에 **직접 쓰고**, 같은 프로세스에서 태그·요약까지 끝낸다. 네트워크가 관여하지 않으므로 in-flight 유실 구간 자체가 없다 — 원안이던 로컬 큐 + POST + 드레인은 대상이 사라져 구현하지 않았다([04-DATA-FLOW.md](04-DATA-FLOW.md) §7.2가 되돌릴 원안으로 보존, §7.4가 현재 구현). `POST /api/v1/links`의 url_hash 멱등성은 그대로 유효하다(웹·단축어 경로).
+- **API 키 보관**: 자립 모드에서는 **보관하지 않는다** — 앱이 실행마다 난수 키를 만들어 인프로세스 서버에 넘긴다(iOS 루프백은 앱 샌드박스를 넘어 공유되므로 고정 키를 코드에 박으면 방어가 사라진다). 확장은 서버를 거치지 않고 SQLite에 직접 쓰므로 키가 필요 없다. Keychain(앱 그룹 공유)은 **홈서버 모드가 구현될 때** 그 서버의 키를 두는 자리다.
 - 앱 화면: 목록(커서 페이지네이션 무한 스크롤), 태그 필터, 검색, 상세(태그 수정 = PATCH). API는 [06-API-SPECIFICATION.md](06-API-SPECIFICATION.md) 참고.
 
 ## 9. 개발 도구

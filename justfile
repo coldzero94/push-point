@@ -338,6 +338,26 @@ flow file="maestro/smoke.yaml":
     @command -v maestro >/dev/null 2>&1 || { echo "maestro 미설치 — brew install mobile-dev-inc/tap/maestro"; exit 1; }
     maestro test {{file}}
 
+# 단위 테스트 (PushPointTests) — 규칙을 고정하는 자리. 화면은 ios-uitest가 본다.
+#
+# 이게 없어서 `CoverPatternTests`가 **한 번도 돌지 않았다** — ios-uitest가
+# `-only-testing:PushPointUITests`로 잘라내기 때문이다. 그 테스트는 웹과 iOS의 커버 해시가
+# 갈라지는 것을 잡으려고 기준값을 박아 둔 것인데, 갈라져도 양쪽 다 정상 동작하는 것처럼
+# 보이므로 안 돌면 존재하지 않는 것과 같다.
+ios-test device="iPhone 17": ios-gen
+    cd ios && xcodebuild test -project PushPoint.xcodeproj -scheme PushPoint \
+        -destination 'platform=iOS Simulator,name={{device}}' \
+        -only-testing:PushPointTests \
+        -derivedDataPath .build CODE_SIGN_IDENTITY="-" | \
+        grep -E "Test Case|error:|\*\* TEST" || true
+
+# iOS 생성물 드리프트 검사 — Go(gen-check)·웹(web-gen-check)과 같은 자리
+#
+# 계약의 세 소비자 중 iOS만 검사가 없었다. 생성 레시피(ios-api-gen)는 있는데 드리프트를
+# 잡는 쪽이 없으면, 스펙을 고치고 iOS만 재생성을 잊어도 아무것도 실패하지 않는다.
+ios-api-gen-check:
+    @just ios-api-gen >/dev/null && git diff --exit-code ios/PushPoint/Generated
+
 # 화면을 실제로 조작하는 UI 테스트 (XCUITest, 시뮬레이터)
 #
 # 앱을 `-uitest`로 띄운다 — 임시 디렉터리 + 자체 픽스처라 시뮬레이터에 무엇이 들어

@@ -28,6 +28,9 @@ Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker
 - `just ios-api-gen` — api/openapi.yaml → ios/PushPoint/Generated/ (swift-openapi-generator CLI, generated output committed — the contract's third consumer)
 - `just flow [file]` — Maestro flow against the booted simulator's real data (default `maestro/smoke.yaml`)
 - `just ios-uitest` — XCUITest on the simulator with its own seeded fixtures
+- `just ios-test` — iOS unit tests (`PushPointTests` — the cover-hash goldens shared with web)
+- `just ios-api-gen-check` — iOS generated-output drift (the contract's third consumer)
+- `just save-timing` — M4 DoD verdict: was the share save under 2s (exits 1 if not)
 - For the remaining recipes (build/gen-check/web-gen-check/test-crash/seed/lint/fmt), run `just` to list them
 
 ## Core rules
@@ -37,7 +40,7 @@ Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker
 - The task runner is just (adopted after the 2026-07-20 evaluation — re-evaluation triggers: starting frontend work, a collaborator joining). The API contract stack is hand-written OpenAPI 3.1 + oapi-codegen pinned to v2.8.0 + swift-openapi-generator (settled in the 2026-07-20 review; background in docs/v2/09-PLAN-REVIEW.md and .claude/rules/api.md).
 - Design sources of truth: schema = `docs/v2/05-DATA-SCHEMA.md`, API = `api/openapi.yaml` (`docs/v2/06-API-SPECIFICATION.md` is commentary), plan = `docs/v2/08-DEVELOPMENT-PLAN.md`. To change a design, edit the source first and let the rest follow (for the API, regenerate with `just gen`).
 - No unmeasured "seems to work" — back performance and quality claims with numbers from `just bench-http` (p99 gate), `just bench`, or `just eval`.
-- **Definition of done**: declare implementation work complete only after `just fmt`, `just lint`, `just test`, and `just gen-check` all pass (plus `just web-gen-check` and `just web-build` for frontend changes), and present the commands you ran and their output as evidence (no success claims without output).
+- **Definition of done**: declare implementation work complete only after `just fmt`, `just lint`, `just test`, and `just gen-check` all pass (plus `just web-gen-check` and `just web-build` for frontend changes; `just ios-api-gen-check`, `just ios-test`, and `just ios-uitest` for iOS or contract changes), and present the commands you ran and their output as evidence (no success claims without output).
 - **UI changes need a screen, not a build.** A successful build is not evidence that a screen is right — every UI failure this project shipped compiled cleanly. Look at the screen (`maestro hierarchy`, `just flow`) or lock it down (`just ios-uitest`) before calling UI work done. Details in `.claude/rules/ui-verification.md`.
 - **Sweep rule**: for edits spanning many files, do not assign targets from memory — first build the target list with `grep -l`/glob, save it to a file, and work it off as a checklist. When done, re-run the same search and confirm zero remaining.
 - Mention the v1 stack (PostgreSQL/Redis/MinIO/OpenAI/k8s/Gin/Ent) only in "v1 vs v2" context. It must not appear in descriptions of the current architecture.

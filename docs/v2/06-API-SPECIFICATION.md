@@ -24,7 +24,7 @@ Authorization: Bearer {PUSHPOINT_API_KEY}
 curl -H "Authorization: Bearer dev-key" http://localhost:8420/api/v1/links
 ```
 
-`just dev`로 띄운 서버는 키가 `dev-key`로 설정된다. iOS 앱/Share Extension은 이 키를 Keychain(앱 그룹 공유)에 보관한다.
+`just dev`로 띄운 서버는 키가 `dev-key`로 설정된다. iOS 자립 모드는 앱이 실행마다 난수 키를 만들어 자기 인프로세스 서버에 넘기므로 보관 대상이 없고, 홈서버 모드의 키는 Keychain(앱 그룹 공유)에 둔다.
 
 ### 에러 형식
 
@@ -116,7 +116,7 @@ POST /api/v1/links
 }
 ```
 
-이 API는 `url_hash` 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group 로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다(중복 시 200 `duplicate:true`). 오프라인 큐에 남은 요청을 안심하고 다시 보낼 수 있는 근거다. 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(`pending` 복귀, `note` 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
+이 API는 `url_hash` 기반으로 멱등하다 — 클라이언트가 같은 요청을 재시도해도 중복 생성이 없다(중복 시 200 `duplicate:true`). 오프라인 큐에 남은 요청을 안심하고 다시 보낼 수 있는 근거다. 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(`pending` 복귀, `note` 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
 
 **클라이언트 캡처 필드 (optional)** — 서버가 fetch할 수 없는 페이지(SPA·봇 차단·로그인 벽)에서, 이미 그 페이지를 렌더한 클라이언트(브라우저 확장·iOS Share Extension)가 콘텐츠를 함께 보낸다.
 

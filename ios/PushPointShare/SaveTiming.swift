@@ -1,4 +1,5 @@
 import Foundation
+import os
 import OSLog
 
 /// 저장 계측 — M4 DoD("공유 탭 → 응답 2초 미만")를 **주장이 아니라 수치로** 만든다.
@@ -31,14 +32,31 @@ enum SaveTiming {
     static func end(_ start: Date, outcome: String, tags: Int = 0) {
         let ms = Date().timeIntervalSince(start) * 1000
         let over = ms > budget * 1000
-        log.info("저장 \(outcome) \(ms, format: .fixed(precision: 1))ms over=\(over)")
+        let memMB = availableMemoryMB()
+        log.info("저장 \(outcome) \(ms, format: .fixed(precision: 1))ms over=\(over) mem=\(memMB)MB")
         append([
             "at": ISO8601DateFormatter().string(from: start),
             "ms": (ms * 10).rounded() / 10,
             "outcome": outcome,
             "tags": tags,
             "over": over,
+            "mem_avail_mb": memMB,
         ])
+    }
+
+    /// 저장이 끝난 시점의 **남은** 확장 메모리(MB).
+    ///
+    /// 계획(08 M4 Week 2)이 확장 메모리를 실기기에서 재확인하라고 요구한다. 선행 검증
+    /// 수치(13.4MB 등)는 macOS arm64에서 잰 것이라 iOS 확장의 실제 예산과 같다는 보장이
+    /// 없고, 확장은 예산을 넘기면 경고 없이 죽는다 — 사용자에게는 "가끔 저장이 안 된다"로
+    /// 보인다. 여기서 재는 이유는 **저장 직후가 최대 사용 시점**이기 때문이다(태그·요약까지
+    /// 끝난 뒤다).
+    ///
+    /// `os_proc_available_memory()`는 확장에서만 의미가 있고 **시뮬레이터에서는 0을 준다.**
+    /// 그 0을 숨기지 않는다 — 0이 찍혀 있다는 사실 자체가 "이 값은 아직 실기기에서 재지
+    /// 않았다"는 표식이고, 실기기에서 처음 돌리는 날 숫자가 나타나는 것으로 판정이 끝난다.
+    private static func availableMemoryMB() -> Int {
+        Int(os_proc_available_memory() / (1024 * 1024))
     }
 
     /// App Group의 `data/save-timing.jsonl`에 한 줄 덧붙인다.
