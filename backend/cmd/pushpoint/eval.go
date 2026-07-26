@@ -61,7 +61,8 @@ func runEval(args []string) error {
 	ran := false
 	// wild는 **dev/test와 합치지 않고 따로 낸다.** 합치면 하나의 평균 뒤로 숨는데,
 	// 이 세트의 존재 이유가 정확히 그 평균이 가리던 격차를 보이게 하는 것이다
-	// (2026-07-26 실측: dev 0.952 / test 0.885 vs wild 0.710).
+	// 수치는 여기 적지 않는다 — 결함을 고칠 때마다 움직이는데 주석은 실패하는 테스트가
+	// 없어 조용히 낡는다(이 줄의 이전 판이 실제로 그랬다). 최신 값은 `just eval`이 낸다.
 	for _, name := range []string{"dev", "test", "wild"} {
 		path := filepath.Join(dir, name+".jsonl")
 		entries, err := loadGolden(path)

@@ -81,7 +81,7 @@ for host, tag_list in domains.items():
 # 4) golden의 expected_tags도 사전 태그만 참조 — domains.json과 같은 종류의 불변식인데
 #    golden만 검사 밖에 있었다. 라벨 오타는 **구조적으로 맞힐 수 없는 정답**이 되어
 #    Recall을 떨어뜨리고, 태그별 표에서 P=0.00 R=0.00 행으로 나타나 "태거가 못 맞히는 태그"와
-#    구분되지 않는다. 실측: wild 한 항목의 `video`를 `vidoe`로 바꾸면 0.733이 조용히 내려간다.
+#    구분되지 않는다. 실측: wild 한 항목의 `video`를 `vidoe`로 바꾸면 Recall이 조용히 내려간다.
 #
 #    eval에도 같은 검사가 있지만(validateExpectedTags) `just eval`은 CI에서 돌지 않는다.
 #    커밋을 막는 것은 여기다.
