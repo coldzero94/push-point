@@ -18,8 +18,32 @@ set -euo pipefail
 BUNDLE_ID="com.pushpoint.app"
 BUDGET_MS=2000
 
+# 실기기가 연결돼 있으면 그쪽을 먼저 본다 — 확장 메모리는 실기기에서만 값이 나오고,
+# 폰을 꽂아 둔 채 시뮬레이터 기록을 읽어 "미측정"을 보는 것이 가장 헷갈린다.
+#
+# **이 경로는 실기기에서 검증되지 않았다**(2026-07-26 기준 기기 없음). 실패하면 아래
+# 안내를 내고 시뮬레이터 경로로 넘어간다 — 조용히 빈손으로 끝나지 않게.
+file=""
+dev_udid=$(xcrun devicectl list devices 2>/dev/null | awk '/connected/ {print $(NF-1); exit}' || true)
+if [ -n "$dev_udid" ] && [ -z "${1:-}" ]; then
+  tmp=$(mktemp -d)
+  if xcrun devicectl device copy from --device "$dev_udid" \
+      --domain-type appGroupDataContainer \
+      --domain-identifier group.com.pushpoint.shared \
+      --source data/save-timing.jsonl --destination "$tmp/save-timing.jsonl" >/dev/null 2>&1; then
+    echo "실기기($dev_udid)에서 계측 기록을 가져왔습니다."
+    file="$tmp/save-timing.jsonl"
+  else
+    echo "실기기가 연결돼 있지만 계측 기록을 가져오지 못했습니다 — 시뮬레이터 기록을 봅니다."
+    echo "  · 아직 폰에서 공유 시트로 저장한 적이 없거나,"
+    echo "  · App Group이 무료 프로비저닝에서 거부됐을 수 있습니다"
+    echo "    (그 경우 확장이 자기 컨테이너에 남기므로 Xcode → Devices에서 앱 컨테이너를 내려받으세요)."
+    echo
+  fi
+fi
+
 udid="${1:-}"
-if [ -z "$udid" ]; then
+if [ -z "$file" ] && [ -z "$udid" ]; then
   udid=$(xcrun simctl list devices booted -j | python3 -c '
 import json,sys
 d = json.load(sys.stdin)["devices"]
@@ -32,13 +56,15 @@ if [ -z "$udid" ]; then
 fi
 
 # App Group 컨테이너 경로는 실행마다 UUID가 달라 하드코딩할 수 없다.
-group_line=$(xcrun simctl get_app_container "$udid" "$BUNDLE_ID" groups 2>/dev/null | head -1 || true)
-if [ -z "$group_line" ]; then
-  echo "App Group 컨테이너를 찾지 못했습니다 — 앱이 설치돼 있나요? (just ios-run)"
-  exit 1
+if [ -z "$file" ]; then
+  group_line=$(xcrun simctl get_app_container "$udid" "$BUNDLE_ID" groups 2>/dev/null | head -1 || true)
+  if [ -z "$group_line" ]; then
+    echo "App Group 컨테이너를 찾지 못했습니다 — 앱이 설치돼 있나요? (just ios-run)"
+    exit 1
+  fi
+  container=$(printf '%s' "$group_line" | awk -F'\t' '{print $NF}')
+  file="$container/data/save-timing.jsonl"
 fi
-container=$(printf '%s' "$group_line" | awk -F'\t' '{print $NF}')
-file="$container/data/save-timing.jsonl"
 
 # App Group이 안 열리면(무료 Personal Team에서 entitlement가 거부될 수 있다) 확장은 자기
 # 컨테이너에 남긴다. 저장이 못 되는 기기에서도 메모리·시간 수치는 건지자는 설계라
@@ -53,7 +79,7 @@ fi
 
 if [ ! -f "$file" ]; then
   echo "계측 기록이 없습니다."
-  echo "  App Group:  $container/data/save-timing.jsonl"
+  echo "  App Group:  ${container:-(실기기)}/data/save-timing.jsonl"
   echo "공유 시트로 한 번 이상 저장한 뒤 다시 실행하세요 (기록은 확장이 남깁니다)."
   exit 1
 fi

@@ -389,10 +389,35 @@ ios-device team="": ios-gen
     fi
     export PUSHPOINT_TEAM_ID="$team"
     cd ios && xcodegen generate >/dev/null
+    # 연결된 기기를 먼저 찾는다 — 없으면 빌드만 하고 안내한다.
+    udid=$(xcrun devicectl list devices 2>/dev/null | awk '/connected/ {print $(NF-1); exit}' || true)
+    if [ -n "$udid" ]; then
+      dest="-destination id=$udid"
+    else
+      dest="-destination generic/platform=iOS"
+    fi
+    set +e
     xcodebuild -project PushPoint.xcodeproj -scheme PushPoint \
-        -destination 'generic/platform=iOS' -derivedDataPath .build \
-        DEVELOPMENT_TEAM="$team" -allowProvisioningUpdates | \
-        grep -E "error:|warning: .*[Pp]rovisioning|\*\* BUILD" || true
+        $dest -derivedDataPath .build \
+        DEVELOPMENT_TEAM="$team" -allowProvisioningUpdates 2>&1 | \
+        { grep -E "error:|warning: .*[Pp]rovisioning|\*\* BUILD" || true; }
+    rc=${PIPESTATUS[0]}
+    set -e
+    [ "$rc" -eq 0 ] || { echo "빌드 실패 — 위 오류 참조. App Group 관련이면 무료 팀에서 거부된 것일 수 있습니다."; exit "$rc"; }
+    if [ -z "$udid" ]; then
+      echo
+      echo "기기가 연결돼 있지 않아 빌드만 했습니다. USB로 연결하고 \"이 컴퓨터를 신뢰\"를 승인한 뒤 다시 실행하세요."
+      exit 0
+    fi
+    app=.build/Build/Products/Debug-iphoneos/PushPoint.app
+    xcrun devicectl device install app --device "$udid" "$app"
+    echo
+    echo "설치 완료. 이제 폰에서:"
+    echo "  1. 설정 → 일반 → VPN 및 기기 관리 에서 개발자 앱을 신뢰"
+    echo "  2. 사파리에서 아무 페이지나 공유 시트 → Push-Point"
+    echo "  3. 다시 여기서:  just save-timing"
+    echo
+    echo "무료 프로비저닝은 7일 만료입니다 — M4 DoD(연속 7일)는 오늘부터 세면 재설치 없이 들어갑니다."
 
 # 이 머신에서 쓸 수 있는 서명 팀 목록 (무료 Personal Team 포함)
 ios-teams:
