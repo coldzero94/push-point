@@ -1,0 +1,237 @@
+package sheets
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"crypto"
+)
+
+// testKey는 서비스 계정 JSON 한 벌을 만든다. 실제 구글 키와 **같은 모양**(PKCS#8 PEM)이라
+// 파싱 경로가 진짜와 같다 — 테스트용으로 모양을 단순화하면 정작 실키에서 깨진다.
+func testKey(t *testing.T) ([]byte, *rsa.PrivateKey) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	acct := map[string]string{
+		"type":         "service_account",
+		"client_email": "pushpoint@example.iam.gserviceaccount.com",
+		"private_key":  string(pemBytes),
+	}
+	b, err := json.Marshal(acct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b, key
+}
+
+// JWT가 실제로 검증 가능한 서명을 갖는지. 이게 이 패키지에서 유일하게 조용히 틀릴 수 있는
+// 부분이다 — 서명이 틀려도 코드는 돌고, 구글이 400을 줄 뿐이라 원인이 안 보인다.
+func TestSignedJWT_verifies(t *testing.T) {
+	keyJSON, key := testKey(t)
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := c.signedJWT()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		t.Fatalf("JWT는 세 조각이어야 한다: %d", len(parts))
+	}
+	sum := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
+	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		t.Fatalf("서명이 base64url이 아니다: %v", err)
+	}
+	if err := rsa.VerifyPKCS1v15(&key.PublicKey, crypto.SHA256, sum[:], sig); err != nil {
+		t.Fatalf("서명 검증 실패 — 구글이 400으로 거부할 값이다: %v", err)
+	}
+
+	// 클레임이 구글 요구사항을 만족하는지. aud/scope가 틀리면 토큰은 나오는데
+	// 이후 요청이 403이 되어 원인이 두 단계 떨어진 곳에서 나타난다.
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(raw, &claims); err != nil {
+		t.Fatal(err)
+	}
+	if claims["aud"] != tokenURL {
+		t.Errorf("aud가 토큰 엔드포인트여야 한다: %v", claims["aud"])
+	}
+	if claims["scope"] != scope {
+		t.Errorf("scope 불일치: %v", claims["scope"])
+	}
+	if claims["iss"] != "pushpoint@example.iam.gserviceaccount.com" {
+		t.Errorf("iss가 서비스 계정 이메일이어야 한다: %v", claims["iss"])
+	}
+	if exp, iat := claims["exp"].(float64), claims["iat"].(float64); exp <= iat {
+		t.Errorf("exp가 iat보다 뒤여야 한다: %v %v", iat, exp)
+	}
+}
+
+// OAuth 클라이언트 JSON을 잘못 넣는 실수가 흔하다. 그때 "PEM 아님"으로 죽으면
+// 원인을 짐작할 수 없으므로 진단이 먼저 나와야 한다.
+func TestNew_rejectsNonServiceAccount(t *testing.T) {
+	bad, _ := json.Marshal(map[string]any{"installed": map[string]string{"client_id": "x"}})
+	_, err := New(bad)
+	if err == nil {
+		t.Fatal("서비스 계정이 아닌 키를 받아들였다")
+	}
+	if !strings.Contains(err.Error(), "서비스 계정 키가 아닙니다") {
+		t.Errorf("진단이 불친절하다: %v", err)
+	}
+}
+
+// Replace는 **비우고 쓴다**. clear를 빠뜨리면 이전 동기화의 꼬리가 남아, 지운 링크가
+// 시트에 영원히 살아 있게 된다 — 그리고 그 사실은 시트를 끝까지 스크롤해야 보인다.
+func TestReplace_clearsBeforeWriting(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	var calls []string
+	var wrote map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		if r.Method == http.MethodPut {
+			_ = json.NewDecoder(r.Body).Decode(&wrote)
+		}
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	rows := [][]any{{"id", "url"}, {1, "https://a.example"}}
+	if err := c.Replace(context.Background(), "SHEET", "links", rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("clear + update 두 번이어야 한다: %v", calls)
+	}
+	if !strings.Contains(calls[0], "clear") {
+		t.Errorf("첫 호출이 clear가 아니다 — 지운 링크가 시트에 남는다: %v", calls)
+	}
+	if !strings.HasPrefix(calls[1], "PUT") {
+		t.Errorf("두 번째가 쓰기가 아니다: %v", calls)
+	}
+	if got := wrote["values"]; got == nil {
+		t.Errorf("values를 보내지 않았다: %v", wrote)
+	}
+}
+
+// 빈 아카이브를 동기화하면 시트가 비워져야 한다 — 쓰기는 건너뛰되 clear는 해야 한다.
+// 이걸 반대로 하면(아무것도 안 함) 지운 뒤 동기화해도 옛 내용이 그대로 남는다.
+func TestReplace_emptyStillClears(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	if err := c.Replace(context.Background(), "SHEET", "links", nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 1 || !strings.Contains(calls[0], "clear") {
+		t.Errorf("빈 입력에도 clear 한 번은 나가야 한다: %v", calls)
+	}
+}
+
+// 403은 거의 항상 "시트를 서비스 계정에 공유하지 않음"이다. 그 진단이 붙지 않으면
+// 사용자가 API 콘솔을 헤맨다.
+func TestDo_forbiddenExplainsSharing(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"error":{"message":"caller does not have permission"}}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	err = c.do(context.Background(), http.MethodPut, srv.URL+"/values", map[string]any{})
+	if err == nil {
+		t.Fatal("403인데 에러가 없다")
+	}
+	if !strings.Contains(err.Error(), "공유했는지") {
+		t.Errorf("403 진단에 공유 안내가 없다: %v", err)
+	}
+	if !strings.Contains(err.Error(), c.Email()) {
+		t.Errorf("어느 계정에 공유해야 하는지 안 알려준다: %v", err)
+	}
+}
+
+// 토큰은 캐시돼야 한다. 동기화 한 번에 clear + update 두 요청이 나가는데 매번 토큰을
+// 새로 받으면 요청이 두 배가 되고, 구글의 토큰 발급에도 한도가 있다.
+func TestAccessToken_isCached(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	var tokenCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenCalls++
+		fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL
+	for i := 0; i < 3; i++ {
+		if _, err := c.accessToken(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if tokenCalls != 1 {
+		t.Errorf("토큰을 %d번 받았다 — 캐시가 안 된다", tokenCalls)
+	}
+}

@@ -142,6 +142,16 @@ bench-http:
 test-crash:
     @if [ -f scripts/test_crash.sh ]; then scripts/test_crash.sh; else echo "scripts/test_crash.sh가 아직 없습니다. M2에서 활성화됩니다."; fi
 
+# 아카이브를 Google 스프레드시트로 내보낸다 (단방향 — SQLite가 원본, 시트는 파생물)
+#
+# 저장 경로를 건드리지 않는다. 저장할 때마다 시트에 쓰면 외부 서비스가 저장 경로에
+# 들어오는데, "네트워크 없이도 저장이 완결된다"가 M4 DoD로 확인된 이 제품의 성질이다.
+# 그래서 실패해도 아카이브는 멀쩡하다.
+#
+# 필요한 환경변수는 인자 없이 실행하면 안내가 나온다.
+sheets-sync:
+    @cd backend && go run ./cmd/pushpoint sheets-sync
+
 # 벤치용 한영 혼합 시드 DB 생성 (고정 난수, 예: just seed 100000)
 seed n='10000':
     @if [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint seed -n {{n}}; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi

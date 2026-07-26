@@ -72,6 +72,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "sheets-sync":
+			if err := runSheetsSync(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "sheets-sync 실패:", err)
+				os.Exit(1)
+			}
+			return
 		case "golden-refill":
 			if err := runGoldenRefill(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "golden-refill 실패:", err)
@@ -79,7 +85,7 @@ func main() {
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval|summary-eval|golden-capture|golden-refill])\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval|summary-eval|golden-capture|golden-refill|sheets-sync])\n", os.Args[1])
 			os.Exit(2)
 		}
 	}
