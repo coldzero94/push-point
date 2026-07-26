@@ -211,7 +211,7 @@ v1의 `category`/`icon`/`usage_count` 컬럼은 폐기. 사용 수는 집계 컬
 
 **tag_embeddings** — M5에서 태그 사전 임베딩을 미리 계산해 캐시. `model` 컬럼으로 모델 교체 시 무효화 판별.
 
-**links_fts** — `title`, `description`, `note`, `tags`(태그 이름을 공백 연결한 텍스트) 4개 컬럼을 색인. 외래키 제약이 없는 가상 테이블이므로 `rowid = links.id` 규약과 store 계층의 트랜잭션 동기화(§5)로 정합성을 보장한다.
+**links_fts** — `title`, `description`, `note`, `tags`(태그 이름을 공백 연결한 텍스트) 4개 컬럼을 색인. **`description` 칸에는 `links.description`과 `links.summary`를 이어 붙여 넣는다**(2026-07-26) — 가상 테이블 컬럼이 links 컬럼과 일치할 의무가 없고, 검색은 MATCH·bm25에만 쓰며 표시값은 전부 links에서 가져오기 때문이다. 전용 컬럼을 새로 만들지 않는 이유는 가상 테이블 재생성 위험과, 정당화할 측정 세트가 없는 bm25 가중치 노브를 사지 않기 위해서다. 근거는 실측: golden 123건 중 **107건(87%)** 이 요약에만 있는 3-gram을 얻는다(`nlu/golden/README.md`). `summary`가 바뀌면 같은 트랜잭션에서 재색인한다(`SetSummary`). 외래키 제약이 없는 가상 테이블이므로 `rowid = links.id` 규약과 store 계층의 트랜잭션 동기화(§5)로 정합성을 보장한다.
 
 ---
 

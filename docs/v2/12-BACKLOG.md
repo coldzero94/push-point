@@ -59,7 +59,7 @@
 
 이 묶음은 **B1 → B2 순서로만 진행한다.** B1은 되돌리기가 재색인 한 번이고, B2는 새 테이블 + 전량 백필이다. 싼 쪽으로 먼저 사서 값어치를 확인한 뒤에 비싼 쪽을 산다.
 
-#### B1. 요약을 기존 색인에 얹기 (스키마 변경 없음)
+#### B1. 요약을 기존 색인에 얹기 (스키마 변경 없음)  ✅ 2026-07-26 완료 — 게이트 87% 통과
 
 - **무엇을 푸는가**: 제목·설명에 없던 단어로는 저장한 걸 못 찾는다. `summary`는 desc-overlap 0.102~0.125(lead-3 베이스라인 0.34~0.40)로 측정됐다 — MMR이 description과 겹치지 않는 문장을 골랐다는 뜻이고, 그게 "새 검색 표면이 실재한다"는 유일한 실측 근거다.
 - **어떻게 동작하는가**: 마이그레이션을 만들지 않는다. `reindexFTS`(`backend/internal/store/sqlite.go:206`)가 FTS의 `description` 칸에 `description || ' ' || summary`를 넣게 한다. **`links_fts`의 컬럼이 `links`의 컬럼과 일치할 의무는 없다** — `searchFTS`는 MATCH와 bm25에만 쓰고 표시값은 전부 `links`에서 가져오며, 스니펫을 안 만들기로 한 결정 덕에 색인 원문이 화면에 뜰 일도 없다. 그리고 `SetSummary`(`backend/internal/store/sqlite_tagger.go:81`, 지금은 "links_fts는 건드리지 않는다"고 주석까지 달려 있다)를 `SetRuleTags`와 같은 규약으로 승격해 같은 쓰기 트랜잭션 안에서 `reindexFTS`를 부르게 한다. 기존 링크는 1회 백필.

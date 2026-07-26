@@ -209,10 +209,21 @@ func reindexFTS(ctx context.Context, tx *sql.Tx, linkID int64) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM links_fts WHERE rowid = ?`, linkID); err != nil {
 		return fmt.Errorf("store: links_fts DELETE 실패: %w", err)
 	}
-	var title, desc, note string
+	// summary를 description 칸에 함께 넣는다.
+	//
+	// **links_fts의 컬럼이 links의 컬럼과 일치할 의무는 없다** — 검색은 MATCH와 bm25에만
+	// 쓰고 표시값은 전부 links에서 가져오며, 스니펫을 만들지 않기로 한 결정 덕에 색인
+	// 원문이 화면에 뜰 일도 없다. 그래서 전용 컬럼을 새로 만들지 않는다(가상 테이블
+	// 재생성 위험 · 정당화할 측정 세트가 없는 bm25 가중치 노브를 사지 않는다).
+	//
+	// 근거는 실측이다: golden 123건 중 **107건(87%)** 이 요약에만 있는 3-gram을 하나 이상
+	// 얻는다(nlu/golden/README.md). 즉 제목·설명이 담지 못한 어휘를 대부분의 링크에서
+	// 실제로 들여온다. 0005가 유예하며 건 재검토 트리거(요약 커버리지 85% 초과)도
+	// 실측 0.855/0.885로 이미 발동했다.
+	var title, desc, note, summary string
 	err := tx.QueryRowContext(ctx,
-		`SELECT title, description, note FROM links WHERE id = ? AND deleted_at IS NULL`, linkID,
-	).Scan(&title, &desc, &note)
+		`SELECT title, description, note, summary FROM links WHERE id = ? AND deleted_at IS NULL`, linkID,
+	).Scan(&title, &desc, &note, &summary)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // 삭제된 링크 — 색인에서 빠진 상태 유지
 	}
@@ -238,7 +249,7 @@ func reindexFTS(ctx context.Context, tx *sql.Tx, linkID int64) error {
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO links_fts (rowid, title, description, note, tags) VALUES (?, ?, ?, ?, ?)`,
-		linkID, title, desc, note, strings.Join(names, " ")); err != nil {
+		linkID, title, strings.TrimSpace(desc+" "+summary), note, strings.Join(names, " ")); err != nil {
 		return fmt.Errorf("store: links_fts INSERT 실패: %w", err)
 	}
 	return nil
