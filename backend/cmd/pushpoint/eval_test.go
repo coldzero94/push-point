@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/coby/push-point/backend/internal/tagger"
@@ -125,5 +126,67 @@ func TestZeroScored(t *testing.T) {
 				t.Errorf("zeroScored = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// validateExpectedTags가 없으면 라벨 오타가 **영구 miss**가 되어 태거 실패로 읽힌다.
+// 태그별 표에서도 P=0.00 R=0.00 행이라 "태거가 못 맞히는 태그"와 눈으로 구분되지 않는다.
+func TestValidateExpectedTags(t *testing.T) {
+	id2name := map[int64]string{1: "career", 2: "ai"}
+	entry := func(tags ...string) goldenEntry {
+		return goldenEntry{URL: "https://a.com", ExpectedTags: tags}
+	}
+
+	if err := validateExpectedTags("wild", []goldenEntry{entry("career", "ai")}, id2name); err != nil {
+		t.Errorf("사전에 있는 태그만 쓴 세트는 통과해야 한다: %v", err)
+	}
+
+	// 오타 — career를 carear로.
+	err := validateExpectedTags("wild", []goldenEntry{entry("carear")}, id2name)
+	if err == nil {
+		t.Fatal("사전에 없는 태그명을 통과시켰다")
+	}
+	if !strings.Contains(err.Error(), "carear") {
+		t.Errorf("어느 태그가 문제인지 말해야 한다: %v", err)
+	}
+
+	// 정답이 없는 항목은 자동 miss라 분모만 키운다.
+	if err := validateExpectedTags("wild", []goldenEntry{entry()}, id2name); err == nil {
+		t.Fatal("expected_tags가 빈 항목을 통과시켰다")
+	}
+
+	// 행 번호가 있어야 31줄짜리 파일에서 찾을 수 있다.
+	err = validateExpectedTags("wild", []goldenEntry{entry("ai"), entry("nope")}, id2name)
+	if err == nil || !strings.Contains(err.Error(), "2행") {
+		t.Errorf("문제 행 번호를 알려야 한다: %v", err)
+	}
+}
+
+// isThinSnapshot은 "태거를 고쳐서 얻을 수 있는 몫"의 경계를 긋는다. 세 필드를 합쳐서 보지
+// 않으면 x.com처럼 본문 0자·설명 전문인 정상 캡처를 벽으로 오인한다.
+func TestIsThinSnapshot(t *testing.T) {
+	long := strings.Repeat("가", 300)
+	short := strings.Repeat("가", 50)
+
+	if isThinSnapshot("", "", long) {
+		t.Error("본문이 충분하면 빈약이 아니다")
+	}
+	// x.com 어댑터: 본문 0자, 트윗 전문이 description에 온다.
+	if isThinSnapshot("이재훈", long, "") {
+		t.Error("설명에 내용이 있으면 본문이 비어도 빈약이 아니다")
+	}
+	// 봇 차단 페이지 — 제목이 그럴듯해도 내용이 없다.
+	if !isThinSnapshot("Reddit - Please wait for verification", "", "") {
+		t.Error("제목만 있고 내용이 없으면 빈약이다")
+	}
+	// 합산 경계 — 여기가 이 함수의 핵심이다. 어느 필드도 단독으로는 200자에 못 미치지만
+	// 합치면 240자라 빈약이 아니다. 필드를 따로 보는 구현은 이 케이스에서 갈린다.
+	part := strings.Repeat("가", 80)
+	if isThinSnapshot(part, part, part) {
+		t.Error("세 필드 합이 240자면 빈약이 아니다 — 필드별로 보면 안 된다")
+	}
+	// 반대쪽: 합이 150자면 어느 필드에 흩어져 있든 빈약이다.
+	if !isThinSnapshot(short, short, short) {
+		t.Error("합이 150자면 빈약이다")
 	}
 }
