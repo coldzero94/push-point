@@ -26,6 +26,29 @@ func (h *fieldHit) add(mul float64) {
 	}
 }
 
+// matchesKoSurface는 문서 토큰 dt가 한글 사전 표면 surface에 걸리는지 판정한다.
+//
+// **어절의 앞이나 뒤 어느 쪽이든 본다.** 예전에는 prefix만 봤고, 그래서 `"대박식당처럼"`이
+// `식당`에 닿지 않았다. 한국어 복합명사는 **head-final**이다 — `대박식당`은 수식어+**식당**,
+// `김치찌개`는 김치+**찌개**로 의미의 핵이 뒤에 온다. prefix만 보면 핵이 앞에 오는
+// `식당가` 같은 경우만 잡고, 더 흔한 쪽을 통째로 놓친다.
+//
+// 실측(2026-07-26, 153건): prefix만 → prefix+suffix로 바꾸면
+// **동결 test 0.885→0.902, wild 0.733→0.767, 한국어 wild 0.750→0.833.**
+// dev는 0.952→0.935로 1건 내려가는데, 그 1건은 오매칭이 아니라 순위 밀림이다 —
+// `유튜브 클론코딩 … 강의`에서 `클론코딩`이 `코딩`에 걸려 `dev`가 새로 붙었고(코딩 강의에
+// 맞는 태그다) 라벨에 있던 `tutorial`을 3위 밖으로 밀었다.
+//
+// **`strings.Contains`가 아닌 이유**: 위 153건에서 두 규칙의 결과가 **완전히 동일했다.**
+// 같은 값이면 좁은 쪽을 고른다 — 중간에 묻힌 표면까지 잡으면 나중에 오탐이 늘 여지가 크고,
+// 그 이득이 있다는 증거는 아직 없다.
+//
+// **한계**: 이 규칙은 나쁜 별칭을 증폭한다. `경기`(sports 별칭)가 `불경기`에도 걸리게 된다.
+// 사전 쪽 문제이고 별도 마이그레이션이 필요하다.
+func matchesKoSurface(dt, surface string) bool {
+	return strings.HasPrefix(dt, surface) || strings.HasSuffix(dt, surface)
+}
+
 // matchField는 한 필드의 토큰열에서 매칭된 tagID별 히트를 센다(1패스).
 func (d *Dictionary) matchField(docToks []string) map[int64]fieldHit {
 	hits := map[int64]fieldHit{}
@@ -40,9 +63,10 @@ func (d *Dictionary) matchField(docToks []string) map[int64]fieldHit {
 		for _, id := range d.exactLatin[dt] {
 			record(id, dt)
 		}
-		// 2) 한글 prefix — dt가 surface로 시작. Normalize가 조사를 이미 벗겼고, 복합명사는 흡수.
+		// 2) 한글 어절 경계 매칭 — dt의 앞이나 뒤가 surface. Normalize가 조사를 이미 벗겼고,
+		//    복합명사는 어느 쪽에 붙든 흡수된다(matchesKoSurface 주석 참조).
 		for _, p := range d.koPrefix {
-			if strings.HasPrefix(dt, p.surface) {
+			if matchesKoSurface(dt, p.surface) {
 				// DF는 사전 표면 기준으로 세므로 여기서도 문서 토큰(dt)이 아니라
 				// **사전 표면**을 넘긴다 — 아니면 "쿠버네티스가"와 "쿠버네티스"가 다른
 				// 통계로 갈라져 DF가 영원히 0에 머문다.
@@ -67,6 +91,11 @@ func phraseKey(first string, tail []string) string {
 
 // matchTail은 docToks[start:]가 tail과 연속(contiguous) 일치하는지 본다. tail 각 토큰은
 // 자기 클래스 규칙으로 검증: 한글 ≥2룬 = prefix, 그 외(라틴/숫자/1룬) = 정확 동등.
+//
+// **여기는 일부러 prefix로 남긴다.** 단일 토큰 매칭은 matchesKoSurface로 suffix까지 보게
+// 바꿨지만, 구문 꼬리에 같은 규칙을 적용해도 153건에서 **어떤 수도 움직이지 않았다**
+// (2026-07-26 실측). 이득의 증거가 없으면 넓히지 않는다. 구문은 이미 첫 토큰이 정확
+// 동등이라(`d.phrases[dt]` 조회) 판정이 더 빡빡한 경로이기도 하다.
 func matchTail(docToks []string, start int, tail []string) bool {
 	if start+len(tail) > len(docToks) {
 		return false
@@ -116,8 +145,11 @@ func (d *Dictionary) MatchedSurfaces(c Content) map[string]bool {
 			if len(d.exactLatin[dt]) > 0 {
 				out[dt] = true
 			}
+			// **matchField와 반드시 같은 규칙이어야 한다.** 누적 키와 조회 키가 갈라지면
+			// DF가 조용히 0에 머물고 IDF는 아무 일도 하지 않는다. 그래서 두 곳 모두
+			// matchesKoSurface를 부른다 — 규칙이 한 곳에만 있어야 어긋날 수가 없다.
 			for _, p := range d.koPrefix {
-				if strings.HasPrefix(dt, p.surface) {
+				if matchesKoSurface(dt, p.surface) {
 					out[p.surface] = true
 				}
 			}
