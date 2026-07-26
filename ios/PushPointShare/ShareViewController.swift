@@ -68,26 +68,80 @@ final class ShareViewController: UIViewController {
 
     /// 공유 출처에 따라 받는 것이 다르다(docs/v2/04-DATA-FLOW.md §7.3.1):
     ///   - 사파리: JS 전처리기(extract.js)가 DOM에서 본문까지 뽑아 딕셔너리로 넘긴다.
-    ///   - 네이티브 앱: 대개 URL 하나뿐이다. 본문 없이 저장되고 나중에 스크랩이 채운다.
+    ///   - 네이티브 앱: `NSItemProvider` 항목들. 대개 `public.url`이지만 앱에 따라
+    ///     `public.plain-text`로 캡션을 함께 준다.
+    ///
+    /// **첫 항목에서 멈추지 않고 다 훑는다.** §7.3.1의 규칙 1이 "오는 것을 전부 계약에
+    /// 매핑한다"인데, URL을 찾자마자 반환하면 같은 항목에 딸려 온 캡션을 버리게 된다.
+    /// 그게 특히 아픈 곳이 인스타그램이다 — 실측(2026-07-25)으로 서버가 그 URL을 받아도
+    /// og 메타가 0이라, 캡션이 이 링크에 대해 우리가 가질 수 있는 **유일한 내용**이다.
+    /// 그걸 버리면 저장은 되는데 제목도 설명도 태그도 없는 껍데기가 남는다.
     private func extractPayload() async throws -> [String: String] {
         guard let items = extensionContext?.inputItems as? [NSExtensionItem] else {
             throw ShareError.noInput
         }
+
+        var url: String?
+        var text: String?
+
         for item in items {
             for provider in item.attachments ?? [] {
-                // 1순위: 사파리 JS 전처리 결과 — 본문이 들어 있는 유일한 경로다.
+                // 사파리 JS 전처리 결과가 있으면 그것으로 끝이다 — 본문까지 들어 있는
+                // 유일한 경로라 다른 항목을 더 봐도 나아질 게 없다.
                 if provider.hasItemConformingToTypeIdentifier(UTType.propertyList.identifier),
                    let captured = try? await loadPropertyList(provider) {
                     return captured
                 }
-                // 2순위: URL만.
-                if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
-                   let url = try? await loadURL(provider) {
-                    return ["url": url.absoluteString]
+                if url == nil,
+                   provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
+                   let loaded = try? await loadURL(provider) {
+                    url = loaded.absoluteString
                 }
+                if text == nil,
+                   provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier),
+                   let loaded = try? await loadText(provider) {
+                    text = loaded
+                }
+                // public.image는 매핑하지 않는다. 계약(LinkInput)에 이미지를 받을 자리가
+                // 없고, 저장의 단위는 **URL**이라 이미지만 온 공유는 저장할 대상 자체가 없다.
             }
         }
-        throw ShareError.noURL
+
+        // 텍스트만 온 경우 — 그 안에 URL이 있으면 그걸 쓴다. 앱에 따라
+        // "캡션 https://..." 한 덩어리를 plain-text로만 주기 때문이다.
+        if url == nil, let text, let found = Self.firstURL(in: text) {
+            url = found
+        }
+        guard let url else { throw ShareError.noURL }
+
+        var payload = ["url": url]
+        // 캡션은 description에 넣는다. title이 아닌 이유: 제목은 스크랩이 얻어 올 수 있고
+        // 캡션을 제목 자리에 넣으면 나중에 온 진짜 제목과 경쟁한다. description은
+        // 계약상 클라이언트 캡처 필드이므로 여기가 제자리다.
+        if let text, !text.isEmpty, text != url {
+            payload["description"] = text
+        }
+        return payload
+    }
+
+    /// 텍스트에서 첫 http(s) URL. 정규식을 쓰지 않는 이유는 공유 텍스트가 짧고,
+    /// `NSDataDetector`가 링크 판정을 시스템과 같은 규칙으로 하기 때문이다.
+    private static func firstURL(in text: String) -> String? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        else { return nil }
+        let range = NSRange(text.startIndex ..< text.endIndex, in: text)
+        for match in detector.matches(in: text, range: range) {
+            if let u = match.url, u.scheme == "http" || u.scheme == "https" {
+                return u.absoluteString
+            }
+        }
+        return nil
+    }
+
+    private func loadText(_ provider: NSItemProvider) async throws -> String? {
+        let raw = try await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier)
+        let value = (raw as? String) ?? (raw as? NSString).map(String.init)
+        return value?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func loadPropertyList(_ provider: NSItemProvider) async throws -> [String: String]? {

@@ -28,6 +28,14 @@ struct ContentView: View {
     /// 적은 이유를 알 수 있게 화면에 남긴다 — 계약이 이걸 알려주는 이유가 그것이다.
     @State private var searchMode: String?
     @State private var searching = false
+    /// 다음 페이지 커서. nil이면 마지막 페이지다 — 계약이 그렇게 말한다.
+    /// **페이지 번호가 아니다.** keyset 커서라 목록에 쓰기가 일어나도 항목이 건너뛰거나
+    /// 중복되지 않는다(.claude/rules/ios.md).
+    @State private var nextCursor: String?
+    @State private var searchCursor: String?
+    /// 다음 장을 이미 받고 있는지. 없으면 마지막 카드가 화면에 머무는 동안 같은 요청이
+    /// 여러 번 나간다 — onAppear는 스크롤 중 여러 번 불린다.
+    @State private var loadingMore = false
 
     var body: some View {
         NavigationStack {
@@ -119,7 +127,11 @@ struct ContentView: View {
                         .plainRow(top: 10, bottom: 2)
                 }
                 ForEach(results, id: \.id) { link in
-                    row(link).plainRow(top: 5, bottom: 5)
+                    row(link)
+                        .plainRow(top: 5, bottom: 5)
+                        .onAppear {
+                            if link.id == results.last?.id { Task { await searchMore() } }
+                        }
                 }
             }
             .listStyle(.plain)
@@ -152,7 +164,14 @@ struct ContentView: View {
             ForEach(sections, id: \.title) { section in
                 Section {
                     ForEach(section.links, id: \.id) { link in
-                        row(link).plainRow(top: 5, bottom: 5)
+                        row(link)
+                            .plainRow(top: 5, bottom: 5)
+                            // 마지막 카드가 보이면 다음 장을 받는다. **날짜 구간이 아니라
+                            // 전체 목록의 마지막**을 기준으로 삼는다 — 구간 단위로 보면
+                            // "오늘" 섹션 끝에서도 발동해 아직 필요 없는 장을 당겨 온다.
+                            .onAppear {
+                                if link.id == links.last?.id { Task { await loadMore() } }
+                            }
                     }
                 } header: {
                     spine(section).plainRow(top: 14, bottom: 6)
@@ -376,6 +395,7 @@ struct ContentView: View {
         guard !q.isEmpty else {
             results = []
             searchMode = nil
+            searchCursor = nil
             return
         }
         do {
@@ -395,6 +415,7 @@ struct ContentView: View {
             // SearchResult는 allOf(Link + rank)라 생성기가 value1/value2로 감싼다.
             // 카드가 필요한 것은 Link 쪽이다.
             results = page.links.map(\.value1)
+            searchCursor = page.next_cursor
             searchMode = page.mode.rawValue
             loadError = nil
         } catch {
@@ -402,25 +423,80 @@ struct ContentView: View {
             // 오류로 바뀌면 사용자는 저장한 것이 사라졌다고 읽는다.
             results = []
             searchMode = nil
+            searchCursor = nil
         }
+    }
+
+    /// 검색 결과의 다음 장. 목록과 같은 이유로 필요하다 — 50건에서 끊긴 결과는
+    /// "더 없다"로 읽히는데, 검색에서 그 오해는 목록에서보다 비싸다.
+    ///
+    /// 검색 커서는 목록 커서와 **형식이 다르고 서로 호환되지 않는다**(계약). 그래서 상태를
+    /// 따로 들고 있고, 검색어가 바뀌면 버린다.
+    private func searchMore() async {
+        guard !loadingMore, let cursor = searchCursor,
+              case .running = backend.state, let client = backend.client else { return }
+        loadingMore = true
+        defer { loadingMore = false }
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        var q2 = Operations.search.Input.Query(q: q, limit: 50)
+        q2.cursor = cursor
+        if case let .tag(name) = filter { q2.tag = name }
+        guard let page = try? await client.search(.init(query: q2)).ok.body.json else { return }
+        let known = Set(results.map(\.id))
+        results.append(contentsOf: page.links.map(\.value1).filter { !known.contains($0.id) })
+        searchCursor = page.next_cursor
     }
 
     // MARK: - 로드
 
+    /// 첫 장. 커서를 버리고 처음부터 다시 받는다 — 당겨서 새로고침·필터 변경이 여기로 온다.
     private func load() async {
         guard case .running = backend.state, let client = backend.client else { return }
         do {
-            var query = Operations.listLinks.Input.Query(limit: 50)
-            switch filter {
-            case let .tag(name): query.tag = name
-            case .failed: query.status = .failed
-            case nil: break
-            }
-            let list = try await client.listLinks(.init(query: query))
-            links = try list.ok.body.json.links
+            let page = try await fetchPage(client, cursor: nil)
+            links = page.links
+            nextCursor = page.next_cursor
             loadError = nil
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    /// 다음 장. 마지막 카드가 보이면 불린다.
+    ///
+    /// **더보기 버튼을 두지 않는 이유**는 취향이 아니다. 이 앱은 아카이브이고, 목록을
+    /// 거슬러 올라가는 것이 저장한 것을 되찾는 주된 방법이다 — 그 길목마다 버튼을 세우면
+    /// 되찾기 자체가 일이 된다. 대신 실패했을 때 조용하지 않아야 해서 loadError로 드러낸다.
+    private func loadMore() async {
+        guard !loadingMore, let cursor = nextCursor,
+              case .running = backend.state, let client = backend.client else { return }
+        loadingMore = true
+        defer { loadingMore = false }
+        do {
+            let page = try await fetchPage(client, cursor: cursor)
+            // 중복 방지. keyset 커서는 원리상 안 겹치지만, 같은 커서로 두 번 불리는 경합이
+            // 남아 있으면 같은 카드가 두 장 생기고 ForEach(id:)가 런타임에 경고를 뱉는다.
+            let known = Set(links.map(\.id))
+            links.append(contentsOf: page.links.filter { !known.contains($0.id) })
+            nextCursor = page.next_cursor
+            loadError = nil
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    /// 목록 한 장. 커서만 다르고 필터는 항상 같이 간다 — 커서에 필터가 실려 있지 않으므로
+    /// 빠뜨리면 두 번째 장부터 필터가 풀린다.
+    private func fetchPage(_ client: Client, cursor: String?)
+        async throws -> Components.Schemas.LinkPage {
+        var query = Operations.listLinks.Input.Query(limit: 50)
+        query.cursor = cursor
+        switch filter {
+        case let .tag(name): query.tag = name
+        case .failed: query.status = .failed
+        case nil: break
+        }
+        return try await client.listLinks(.init(query: query)).ok.body.json
     }
 }

@@ -18,10 +18,21 @@ import Foundation
 /// 들어갈 방법은 없다.
 enum UITestMode {
     static let flag = "-uitest"
+    /// 한 페이지(50건)를 넘기는 분량을 심는다. 커서 페이지네이션은 **경계를 넘겨야만**
+    /// 검증되는 종류라, 픽스처 3건으로는 무한 스크롤이 깨져 있어도 화면이 멀쩡해 보인다.
+    /// 기본 픽스처와 분리한 이유는 속도다 — 60건 심기를 매 테스트가 치를 이유가 없다.
+    static let manyFlag = "-uitest-many"
 
     static var isActive: Bool {
         ProcessInfo.processInfo.arguments.contains(flag)
     }
+
+    static var wantsMany: Bool {
+        ProcessInfo.processInfo.arguments.contains(manyFlag)
+    }
+
+    /// 페이지 경계를 넘기는 건수. limit=50이므로 60이면 두 번째 장이 반드시 생긴다.
+    static let manyCount = 60
 
     /// 테스트용 데이터 디렉터리. 매 실행 비운다 — 이전 실행이 남긴 링크가 보이면
     /// "N건이 보여야 한다"는 단언이 실행 순서에 따라 흔들린다.
@@ -57,6 +68,10 @@ enum UITestMode {
     /// 픽스처를 앱 자신의 서버에 넣는다. 태깅은 비동기라 여기서 기다리지 않는다 —
     /// 태그가 붙었는지 보는 테스트는 자기 단언에서 기다리는 편이 정확하다.
     static func seed(using client: Client) async {
+        if wantsMany {
+            await seedMany(using: client)
+            return
+        }
         for f in fixtures {
             _ = try? await client.createLink(.init(body: .json(.init(
                 url: f.url,
@@ -64,6 +79,24 @@ enum UITestMode {
                 description: f.description,
                 body_text: f.body,
                 keywords: f.keywords
+            ))))
+        }
+    }
+
+    /// 페이지 경계 검증용 대량 픽스처.
+    ///
+    /// 제목에 **순번을 박는다.** "많이 보인다"로는 두 번째 장이 왔는지 알 수 없고,
+    /// 1장에 절대 없는 번호가 보이는지로만 판정할 수 있다. 본문을 넣지 않아 태깅·요약이
+    /// 돌지 않으므로 60건이 빠르게 들어간다.
+    ///
+    /// 저장 순서 = created_at 순서이고 목록은 최신순이므로, **먼저 넣은 것이 아래로 간다.**
+    /// 그래서 000번이 목록의 맨 끝이고, 그게 곧 "끝까지 스크롤했다"의 표식이다.
+    static func seedMany(using client: Client) async {
+        for i in 0 ..< manyCount {
+            let n = String(format: "%03d", i)
+            _ = try? await client.createLink(.init(body: .json(.init(
+                url: "https://uitest.example/many/\(n)",
+                title: "페이지 검증 링크 \(n)"
             ))))
         }
     }

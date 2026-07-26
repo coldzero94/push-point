@@ -126,6 +126,37 @@ final class BoardUITests: XCTestCase {
         XCTAssertTrue(waitForDisappearance(save), "메모가 저장되지 않았다 — 저장 버튼이 남아 있다")
     }
 
+    /// 커서 페이지네이션 — 목록이 50건에서 끊기지 않아야 한다.
+    ///
+    /// 이 결함은 **아카이브가 커지기 전까지 보이지 않는다.** 링크가 몇 건일 때는 화면이
+    /// 완벽해 보이고, 50건을 넘긴 어느 날부터 오래된 링크가 조용히 사라진다 — 사라졌다는
+    /// 신호도 없다. 저장한 것을 되찾는 것이 이 앱의 존재 이유라 그 실패는 치명적인데,
+    /// 정작 일상적인 사용으로는 절대 발견되지 않는 종류다.
+    ///
+    /// 그래서 픽스처를 60건으로 심고(`-uitest-many`), **1장에 있을 수 없는 항목**이
+    /// 보이는지로 판정한다. "많이 보인다"로는 두 번째 장이 왔는지 알 수 없다.
+    func testListPagesPastTheFirstFifty() {
+        app.terminate()
+        app.launchArguments = ["-uitest", "-uitest-many"]
+        app.launch()
+
+        // 최신순이므로 059가 맨 위, 000이 맨 끝이다. 000은 두 번째 장에만 있다.
+        XCTAssertTrue(waitForCard("페이지 검증 링크 059", timeout: 60),
+                      "대량 픽스처가 목록에 오지 않았다")
+
+        let last = app.staticTexts["페이지 검증 링크 000"]
+        XCTAssertFalse(last.exists, "첫 장에 마지막 항목이 있다 — 픽스처가 50건을 못 넘겼다")
+
+        // 끝까지 민다. 한 장(50건)을 지나야 다음 장이 붙으므로 넉넉히 준다.
+        var swipes = 0
+        while !last.exists, swipes < 40 {
+            app.swipeUp(velocity: .fast)
+            swipes += 1
+        }
+        XCTAssertTrue(last.exists,
+                      "50건 경계를 넘지 못했다 — next_cursor로 다음 장을 받지 않는다")
+    }
+
     // MARK: - 헬퍼
 
     /// 서버가 프로세스 안에서 뜨고 픽스처가 들어가기까지 시간이 걸린다.
