@@ -2,7 +2,7 @@ package main
 
 // eval·golden-capture 서브커맨드 — M3 태깅 품질 측정 하네스.
 //
-//	pushpoint eval [golden-dir]        # dev.jsonl/test.jsonl로 Recall@3 + 태그별 P/R + 베이스라인 (네트워크 0)
+//	pushpoint eval [golden-dir]        # dev/test/wild.jsonl로 Recall@3 + 태그별 P/R + 베이스라인 (네트워크 0)
 //	pushpoint golden-capture urls.tsv  # url<TAB>tag,tag 목록을 프로덕션 스크랩 경로로 스냅샷 캡처 → JSONL
 //	pushpoint golden-refill in.jsonl   # 기존 golden의 **빈 필드만** 재fetch로 채움 → JSONL
 //
@@ -46,7 +46,7 @@ type goldenEntry struct {
 	ExpectedTags []string       `json:"expected_tags"`
 }
 
-// runEval은 golden 디렉터리(기본 nlu/golden/)의 dev/test를 평가해 리포트를 출력한다.
+// runEval은 golden 디렉터리(기본 nlu/golden/)의 dev/test/wild를 평가해 리포트를 출력한다.
 func runEval(args []string) error {
 	dir := "nlu/golden"
 	if len(args) > 0 {
@@ -198,7 +198,7 @@ func goldenCorpus(entries []goldenEntry, dict *tagger.Dictionary) tagger.CorpusS
 	return tagger.CorpusStats{Docs: int64(withTerms), DF: df}
 }
 
-// evalSet은 한 세트(dev/test)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
+// evalSet은 한 세트(dev/test/wild)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
 //
 // 변형은 **full에서 신호를 하나씩 뺀 것**이다 — 그래야 Δ가 그 신호만의 기여가 된다.
 // full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /

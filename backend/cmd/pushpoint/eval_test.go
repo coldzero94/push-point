@@ -67,9 +67,20 @@ func TestClassifyTop(t *testing.T) {
 	if !slices.Contains(got, "kubernetes") {
 		t.Errorf("kubernetes 예측돼야: %v", got)
 	}
-	// top-k 상한(evalTopK) 이하
-	if len(got) > evalTopK {
-		t.Errorf("top-%d 초과: %v", evalTopK, got)
+	// **컷은 리터럴 3으로 고정한다.** 예전에는 `len(got) > evalTopK`로 상수를 자기 자신과
+	// 비교했고, 사전이 2태그뿐이라 3을 넘을 수가 없어서 **어떤 값을 넣어도 통과했다.**
+	// 보고되는 모든 수가 "@3"인데 그 3을 고정하는 것이 아무것도 없었다.
+	// 아래는 4태그가 전부 매치되는 입력이라, 자르기를 없애면 4가 나와 실패한다.
+	wide := tagger.BuildDictionary([]tagger.TagEntry{
+		{ID: 1, Name: "kubernetes", Aliases: []string{"쿠버네티스"}},
+		{ID: 2, Name: "python", Aliases: []string{"파이썬"}},
+		{ID: 3, Name: "golang", Aliases: []string{"고랭"}},
+		{ID: 4, Name: "rust", Aliases: []string{"러스트"}},
+	})
+	wideNames := map[int64]string{1: "kubernetes", 2: "python", 3: "golang", 4: "rust"}
+	all := classifyTop(tagger.Content{Title: "쿠버네티스 파이썬 고랭 러스트"}, wide, wideNames)
+	if len(all) != 3 {
+		t.Errorf("4개가 매치돼도 top-3으로 잘라야 한다: %d개 %v", len(all), all)
 	}
 	// 매치 없으면 빈 결과
 	if got := classifyTop(tagger.Content{Title: "무관한 잡담"}, dict, id2name); len(got) != 0 {
