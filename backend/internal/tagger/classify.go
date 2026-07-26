@@ -17,28 +17,23 @@ const (
 	// minBodyCorroborated는 제목·설명·도메인이 이미 같은 태그를 가리킬 때 본문에
 	// 요구하는 최소 횟수. 다른 신호가 뒷받침하므로 두 번이면 충분하다.
 	minBodyCorroborated = 2
-	// minBodyMatches는 본문 단독 신호가 인정받는 최소 횟수.
+	// 본문 매칭이 설명 매칭보다 약한 증거인 이유: 설명은 200자라 한 번 나오면 글의
+	// 주제일 가능성이 높지만, 본문은 32KB까지 가므로 어떤 단어든 한 번쯤은 스친다.
+	// 둘을 같게 취급하면 threshold=1.0에서 "본문에 한 번 언급"만으로 태그가 붙는다 —
+	// 실사용에서 월급 블로그에 travel·news가, 주가 기사에 dev가, 이강인 이적 기사에
+	// ai가 그렇게 붙었다(마지막 것은 "AI로 만든 티저 영상"과 네이버 안내 문구였다).
 	//
-	// 설명은 200자라 한 번 나오면 글의 주제일 가능성이 높지만, 본문은 32KB까지 가므로
-	// 어떤 단어든 한 번쯤은 스친다. 그 둘을 같게 취급하면 threshold=1.0에서 "본문에 한 번
-	// 언급"만으로 태그가 붙는다 — 실사용에서 월급 블로그에 travel·news가, 주가 기사에
-	// dev가 그렇게 붙었다.
+	// 무게(wBody)를 깎는 대신 **횟수**를 요구하는 이유: 무게를 깎으면 여러 번 나온
+	// 강한 본문 신호까지 같이 약해져 도메인 히트에 밀린다. 걸러야 할 것은 약한 신호다.
+	// runesPerMatch는 "본문 몇 자마다 언급 한 번을 요구할 것인가"다.
 	//
-	// 무게(wBody)를 깎는 대신 최소 횟수를 두는 이유: 무게를 깎으면 3회 이상 나온
-	// **강한** 본문 신호까지 같이 약해져 도메인 히트에 밀린다. 여기서 걸러야 할 것은
-	// 약한 신호 하나뿐이다.
+	// 계단이 아니라 비례로 두는 이유: 처음에는 2000자를 경계로 1회→3회를 요구했는데,
+	// **같은 기사가 캡처 길이만 달라져 태그를 전부 잃는** 일이 실제로 벌어졌다
+	// (1380자일 때 news·video, 2401자일 때 없음). 긴 문서에서 한 번의 언급이 약해지는
+	// 것은 연속적인 관계이므로 요구치도 연속이어야 한다.
 	//
-	// **본문만이 유일한 근거일 때는 더 요구한다.** 제목과 설명은 글이 스스로를 요약한
-	// 것이라, 거기에 한 번도 안 나오는 단어는 대개 스쳐 지나간 것이다 — 이강인 이적
-	// 기사에 ai가 붙은 실사용 사례가 그랬다. 본문의 두 번이 "AI로 만든 티저 영상"과
-	// 네이버의 안내 문구("본문의 검색 링크는 AI 자동 인식으로 제공됩니다")였는데,
-	// 둘 다 글의 주제와 무관하다. 특정 사이트의 문구를 지목해 지우는 대신, 어디에서
-	// 왔든 뒷받침 없는 본문 언급의 기준을 올린다.
-	minBodyMatches = 3
-	// longBodyRunes는 위 규칙이 적용되기 시작하는 길이. 근거는 "긴 문서"라는 조건 자체다 —
-	// 짧은 본문에서는 한 번 언급이 곧 주제이므로(설명 필드와 다를 바 없다) 걸러선 안 된다.
-	// 설명 상한(2048바이트)과 같은 자릿수로 잡아, 그보다 짧은 본문은 설명처럼 취급한다.
-	longBodyRunes = 2000
+	// 설명 상한(2048바이트)과 같은 자릿수 — 설명 한 편 분량마다 한 번씩을 기대한다.
+	runesPerMatch = 2000
 	threshold     = 1.0 // 총점이 이 미만인 태그는 컷 (설명 1매치 = 통과)
 	topK          = 5   // 링크당 최대 태그 수
 )
@@ -58,17 +53,13 @@ func Classify(c Content, d *Dictionary) []ScoredTag {
 	addField(score, d, c.Title, wTitle)
 	addField(score, d, c.Description, wDesc)
 	addField(score, d, c.Note, wNote)
-	// 본문은 길 때만 최소 매칭 횟수를 요구하고, 그 기준은 다른 신호의 뒷받침 여부로
-	// 갈린다. 여기까지의 score에 있는 태그 = 도메인·제목·설명이 이미 가리킨 태그다.
-	if utf8.RuneCountInString(c.Body) > longBodyRunes {
-		corroborated := make(map[int64]bool, len(score))
-		for id := range score {
-			corroborated[id] = true
-		}
-		addBody(score, d, c.Body, corroborated)
-	} else {
-		addFieldMin(score, d, c.Body, wBody, 1)
+	// 본문 요구치는 길이에 비례하고, 뒷받침이 있으면 한 단계 낮춘다.
+	// 여기까지의 score에 있는 태그 = 도메인·제목·설명이 이미 가리킨 태그다.
+	corroborated := make(map[int64]bool, len(score))
+	for id := range score {
+		corroborated[id] = true
 	}
+	addBody(score, d, c.Body, corroborated)
 
 	out := make([]ScoredTag, 0, len(score))
 	for id, s := range score {
@@ -102,9 +93,16 @@ func addBody(score map[int64]float64, d *Dictionary, text string, corroborated m
 	if text == "" {
 		return
 	}
+	// 길이 비례 요구치. 상한은 matchCap과 같다 — 그보다 높이면 어떤 태그도 통과할 수 없다.
+	need := 1 + utf8.RuneCountInString(text)/runesPerMatch
+	if need > matchCap {
+		need = matchCap
+	}
 	for id, n := range d.matchField(Tokenize(text)) {
-		min := minBodyMatches
-		if corroborated[id] {
+		min := need
+		if corroborated[id] && min > minBodyCorroborated {
+			// 뒷받침이 있으면 한 단계 낮춘다 — 같은 두 번이라도 제목이 거드는 두 번은
+			// 본문에만 있는 두 번보다 무겁다.
 			min = minBodyCorroborated
 		}
 		if n < min {
