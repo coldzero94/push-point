@@ -12,7 +12,22 @@ v2의 배포 단위는 단일 Go 바이너리 하나다. v1이 요구하던 Dock
 
 - Go 1.25+
 - just (`brew install just`)
-- iOS 실기기 매일 사용(M4+): **Apple Developer Program ($99/년)** — App Groups·Keychain 공유 자체는 무료 계정으로도 가능하지만, 무료 계정의 프로비저닝 프로파일은 7일마다 만료되어 매일 쓰는 앱과 양립할 수 없다. 가입은 M4 Week 1 태스크다.
+- iOS 실기기 매일 사용(M4+): **Apple Developer Program ($99/년)** — 무료 계정의 프로비저닝 프로파일은 7일마다 만료되어 매일 쓰는 앱과 양립할 수 없다.
+
+  **무료 프로비저닝(Personal Team)으로 먼저 가는 경로 (2026-07-26 채택).** 7일 만료는 매일
+  사용을 막을 뿐 **1회성 실측은 막지 않는다.** 실기기가 필요한 판정 두 가지 — 확장 메모리
+  실측과 `0xdead10cc`(App Group 파일 락을 쥔 채 서스펜드) — 는 폰 한 대만 있으면 $99 없이
+  끝난다. $99가 실제로 필요해지는 것은 M4 DoD의 "연속 7일"과 M6의 28일 스트릭뿐이다.
+
+  절차: Xcode → Settings → Accounts 에 Apple ID 로그인(자격증명 입력이라 자동화 불가) →
+  폰 USB 연결 후 신뢰 승인 → `just ios-teams`로 팀 ID 확인 → `just ios-device <TEAMID>`.
+
+  **검증되지 않은 전제 하나: 무료 팀에서 App Groups가 되는가.** [09-PLAN-REVIEW.md](09-PLAN-REVIEW.md)는
+  "공식 표상 가능"으로 반박 처리했지만, 그 표는 App Groups를 따로 적지 않고 "Advanced app
+  capabilities"로 뭉뚱그릴 뿐이라 근거가 약하다. 막히면 앱과 확장이 다른 DB를 보게 되어
+  저장 경로 전체가 죽는다. 그래서 확장의 계측(`SaveTiming`)은 App Group이 안 열리면 자기
+  컨테이너로 떨어지도록 해 뒀다 — **저장이 실패해도 메모리 수치와 실패 사실은 남는다.**
+  `just save-timing`이 그 결과(`app_group: false`)를 명시적으로 알린다.
 
 서버 측은 이게 전부다. DB 드라이버가 CGO-free(`modernc.org/sqlite`)이므로 별도 C 툴체인도, 컨테이너 런타임도 필요 없다.
 

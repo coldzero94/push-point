@@ -338,6 +338,48 @@ flow file="maestro/smoke.yaml":
     @command -v maestro >/dev/null 2>&1 || { echo "maestro 미설치 — brew install mobile-dev-inc/tap/maestro"; exit 1; }
     maestro test {{file}}
 
+# 실기기 설치 — 무료 프로비저닝(Personal Team)으로도 된다
+#
+# 무료 계정은 프로파일이 **7일마다 만료**돼 매일 쓰는 앱과는 양립하지 않지만, 1회성 실측
+# (확장 메모리·0xdead10cc)에는 충분하다. $99가 실제로 필요해지는 것은 M4 DoD의 "연속 7일"과
+# M6의 28일 스트릭뿐이다.
+#
+# 선행 조건(사람이 해야 하는 것):
+#   1. Xcode → Settings → Accounts 에 Apple ID 로그인 (자격증명 입력이라 자동화 대상 아님)
+#   2. 폰을 USB로 연결하고 "이 컴퓨터를 신뢰" 승인
+#   3. 팀 ID 확인 후 아래처럼 실행 — `just ios-device TEAMID`
+#      팀 ID는 `just ios-teams` 가 찾아 준다.
+#
+# **App Group이 무료 팀에서 거부될 수 있다.** 그러면 설치 자체가 실패하거나 저장이 죽는데,
+# 그때도 확장은 자기 컨테이너에 계측을 남기므로(SaveTiming) 메모리 수치는 건진다.
+ios-device team="": ios-gen
+    #!/usr/bin/env bash
+    set -euo pipefail
+    team="{{team}}"
+    if [ -z "$team" ]; then
+      echo "팀 ID가 필요합니다. 먼저 'just ios-teams'로 확인한 뒤 'just ios-device <TEAMID>'."
+      exit 1
+    fi
+    export PUSHPOINT_TEAM_ID="$team"
+    cd ios && xcodegen generate >/dev/null
+    xcodebuild -project PushPoint.xcodeproj -scheme PushPoint \
+        -destination 'generic/platform=iOS' -derivedDataPath .build \
+        DEVELOPMENT_TEAM="$team" -allowProvisioningUpdates | \
+        grep -E "error:|warning: .*[Pp]rovisioning|\*\* BUILD" || true
+
+# 이 머신에서 쓸 수 있는 서명 팀 목록 (무료 Personal Team 포함)
+ios-teams:
+    #!/usr/bin/env bash
+    ids=$(security find-identity -v -p codesigning 2>/dev/null | grep -c "Apple Development" || true)
+    if [ "${ids:-0}" -eq 0 ]; then
+      echo "서명 인증서가 없습니다 — Xcode → Settings → Accounts 에서 Apple ID로 먼저 로그인하세요."
+      echo "(자격증명 입력이라 이 명령이 대신할 수 없습니다.)"
+      exit 1
+    fi
+    security find-identity -v -p codesigning | grep "Apple Development"
+    echo
+    echo "괄호 안 10자리가 팀 ID입니다 → just ios-device <TEAMID>"
+
 # 단위 테스트 (PushPointTests) — 규칙을 고정하는 자리. 화면은 ios-uitest가 본다.
 #
 # 이게 없어서 `CoverPatternTests`가 **한 번도 돌지 않았다** — ios-uitest가

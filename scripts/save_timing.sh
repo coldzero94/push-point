@@ -40,8 +40,20 @@ fi
 container=$(printf '%s' "$group_line" | awk -F'\t' '{print $NF}')
 file="$container/data/save-timing.jsonl"
 
+# App Group이 안 열리면(무료 Personal Team에서 entitlement가 거부될 수 있다) 확장은 자기
+# 컨테이너에 남긴다. 저장이 못 되는 기기에서도 메모리·시간 수치는 건지자는 설계라
+# (ios/PushPointShare/SaveTiming.swift), 읽는 쪽도 두 자리를 다 본다.
 if [ ! -f "$file" ]; then
-  echo "계측 기록이 없습니다: $file"
+  data_root=$(xcrun simctl get_app_container "$udid" "$BUNDLE_ID" data 2>/dev/null || true)
+  if [ -n "$data_root" ]; then
+    alt=$(find "$data_root/Library/Application Support/pushpoint" -name save-timing.jsonl 2>/dev/null | head -1 || true)
+    [ -n "$alt" ] && file="$alt"
+  fi
+fi
+
+if [ ! -f "$file" ]; then
+  echo "계측 기록이 없습니다."
+  echo "  App Group:  $container/data/save-timing.jsonl"
   echo "공유 시트로 한 번 이상 저장한 뒤 다시 실행하세요 (기록은 확장이 남깁니다)."
   exit 1
 fi
@@ -93,6 +105,22 @@ report("성공", saved)
 report("실패", failed)
 if broken:
     print(f"  (깨진 줄 {broken}개 무시)")
+
+# App Group이 열렸는가 — 무료 Personal Team에서 가장 알고 싶은 한 가지다.
+# 필드가 없는 옛 기록은 판정에서 뺀다(그때는 App Group만 있었다).
+flags = [r["app_group"] for r in rows if "app_group" in r]
+if flags and not all(flags):
+    n = sum(1 for f in flags if not f)
+    print(f"  ⚠ App Group이 열리지 않은 저장 {n}건 — 확장 자체 컨테이너에 기록됨.")
+    print("    무료 프로비저닝에서 App Group entitlement가 거부되면 앱과 확장이 다른 DB를")
+    print("    보므로 저장이 목록에 나타나지 않는다. 그 경우 $99가 실제로 필요하다.")
+
+# 확장 메모리 — 실기기에서만 의미가 있다(시뮬레이터는 0).
+mem = [r["mem_avail_mb"] for r in rows if r.get("mem_avail_mb", 0) > 0]
+if mem:
+    print(f"  확장 잔여 메모리: 최소 {min(mem)}MB / 최대 {max(mem)}MB  ← 실기기 실측")
+elif any("mem_avail_mb" in r for r in rows):
+    print("  확장 잔여 메모리: 미측정 (시뮬레이터는 0을 준다 — 실기기에서만 값이 나온다)")
 
 over = [r for r in rows if r["ms"] > budget]
 if over:

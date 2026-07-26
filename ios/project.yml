@@ -30,6 +30,10 @@ settings:
     # 실기기에 올릴 때만 개발 팀이 필요해진다.
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: NO
+    # 팀 ID는 사람마다 다르고 개인 계정에 묶인 값이라 커밋하지 않는다.
+    # `just ios-device` 가 PUSHPOINT_TEAM_ID 를 넘겨 준다(비어 있으면 시뮬레이터 경로에는
+    # 아무 영향이 없다 — 시뮬레이터는 ad-hoc 서명으로 돌기 때문).
+    DEVELOPMENT_TEAM: ${PUSHPOINT_TEAM_ID}
 
 # 스킴을 명시하는 이유: XcodeGen이 자동 생성한 스킴은 앱에 의존하는 타깃만 테스트
 # 액션에 담는데, PushPointTests는 앱과 링크되지 않는 순수 단위 테스트라 빠졌다.

@@ -59,19 +59,45 @@ enum SaveTiming {
         Int(os_proc_available_memory() / (1024 * 1024))
     }
 
-    /// App Group의 `data/save-timing.jsonl`에 한 줄 덧붙인다.
+    /// 계측 기록을 남길 디렉터리.
+    ///
+    /// App Group이 1순위지만, **없으면 확장 자신의 컨테이너로 떨어진다.** 저장 경로는
+    /// 그렇게 하지 않는다(`AppGroup.dataDirectory()`가 nil을 그대로 드러내 앱과 확장이
+    /// 다른 DB를 보는 상태를 막는다) — 여기만 다르게 구는 이유가 있다.
+    ///
+    /// 무료 프로비저닝(Personal Team)에서 App Group entitlement가 거부될 수 있다. Apple의
+    /// 공식 비교 표는 "Advanced app capabilities"를 유료 전용으로 뭉뚱그릴 뿐 App Groups를
+    /// 따로 적지 않아 판정이 갈린다(09-PLAN-REVIEW는 가능하다고 봤으나 근거가 그 모호한
+    /// 표다). 그런데 **이 로그가 재려는 것은 App Group과 무관하다** — 확장 프로세스의
+    /// 메모리 예산과 걸린 시간이고, 둘 다 저장이 실패해도 유효한 수치다.
+    ///
+    /// 그래서 저장이 못 되는 기기에서도 "왜 못 되는지"와 "메모리는 얼마였는지"는 남는다.
+    /// 실패했다는 사실까지 잃으면 실기기 판정 자체가 불가능해진다.
+    private static func recordDirectory() -> (url: URL, shared: Bool)? {
+        if let dir = AppGroup.dataDirectory() { return (dir, true) }
+        guard let fallback = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { return nil }
+        return (fallback.appendingPathComponent("pushpoint", isDirectory: true), false)
+    }
+
+    /// 계측 한 줄을 덧붙인다.
     ///
     /// 실패해도 조용히 넘어간다. 계측이 저장을 방해하면 본말이 전도된다 — 이 파일이
     /// 없어서 아쉬운 것과 공유가 실패하는 것은 비교 대상이 아니다.
     private static func append(_ record: [String: Any]) {
-        guard let dir = AppGroup.dataDirectory(),
-              let data = try? JSONSerialization.data(withJSONObject: record),
+        guard let (dir, shared) = recordDirectory() else { return }
+        var record = record
+        // 어느 컨테이너에 썼는지 남긴다. false면 App Group이 안 열렸다는 뜻이고,
+        // 그 자체가 무료 프로비저닝에서 가장 알고 싶은 한 가지다.
+        record["app_group"] = shared
+        guard let data = try? JSONSerialization.data(withJSONObject: record),
               var line = String(data: data, encoding: .utf8)
         else { return }
         line += "\n"
 
-        let url = dir.appendingPathComponent("save-timing.jsonl")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("save-timing.jsonl")
         // 이어쓰기. 확장은 여러 번 뜨므로 덮어쓰면 마지막 한 건만 남는다.
         if let handle = try? FileHandle(forWritingTo: url) {
             defer { try? handle.close() }
