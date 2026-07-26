@@ -104,21 +104,28 @@ func addBody(score map[int64]float64, d *Dictionary, text string, corroborated m
 	if need > matchCap {
 		need = matchCap
 	}
-	for id, n := range d.matchField(Tokenize(text)) {
+	for id, h := range d.matchField(Tokenize(text)) {
 		min := need
 		if corroborated[id] && min > minBodyCorroborated {
 			// 뒷받침이 있으면 한 단계 낮춘다 — 같은 두 번이라도 제목이 거드는 두 번은
 			// 본문에만 있는 두 번보다 무겁다.
 			min = minBodyCorroborated
 		}
-		if n < min {
+		if h.n < min {
 			continue
 		}
-		if n > matchCap {
-			n = matchCap
-		}
-		score[id] += wBody * float64(n)
+		// 횟수 요구(min)는 IDF보다 **앞에** 있다. 흔한 낱말이라고 횟수를 면제해 주면
+		// 걸러야 할 약한 신호가 배율만 낮춘 채 그대로 들어온다.
+		score[id] += wBody * float64(capN(h.n)) * h.mul
 	}
+}
+
+// capN은 한 필드에서 한 태그의 기여를 matchCap으로 자른다 (키워드 스터핑 방지).
+func capN(n int) int {
+	if n > matchCap {
+		return matchCap
+	}
+	return n
 }
 
 // addFieldMin은 min회 미만 매칭은 무시한다 — 긴 필드에서 한 번 스친 언급을 걸러낸다.
@@ -126,13 +133,10 @@ func addFieldMin(score map[int64]float64, d *Dictionary, text string, weight flo
 	if text == "" {
 		return
 	}
-	for id, n := range d.matchField(Tokenize(text)) {
-		if n < min {
+	for id, h := range d.matchField(Tokenize(text)) {
+		if h.n < min {
 			continue
 		}
-		if n > matchCap {
-			n = matchCap
-		}
-		score[id] += weight * float64(n)
+		score[id] += weight * float64(capN(h.n)) * h.mul
 	}
 }

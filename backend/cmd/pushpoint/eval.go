@@ -70,7 +70,18 @@ func runEval(args []string) error {
 			return err
 		}
 		ran = true
-		evalSet(strings.ToUpper(name), entries, dict, id2name)
+		// IDF는 **기본으로 꺼져 있다** — 런타임에서도 꺼져 있기 때문이다(tagger/idf.go).
+		// `just eval`이 내는 수는 언제나 실제로 출하되는 동작이어야 한다.
+		//
+		// PP_EVAL_IDF=1이면 그 세트를 코퍼스로 삼아 켠다. 켜도 될지 판정하려면 이 실행과
+		// 기본 실행의 차이를 봐야 하고, 2026-07-26 기준 그 차이는 개선이 아니었다
+		// (Recall@3 동일, 최대 태그 article·tutorial 하락). 원인은 golden에 편중이 없다는
+		// 것이다 — PP_DF_DUMP=1로 DF 분포를 보면 어떤 표면도 문서의 38%를 넘지 않는다.
+		d := dict
+		if os.Getenv("PP_EVAL_IDF") == "1" {
+			d = dict.WithCorpus(goldenCorpus(entries, dict))
+		}
+		evalSet(strings.ToUpper(name), entries, d, id2name)
 	}
 	if !ran {
 		return fmt.Errorf("eval: golden 파일이 없습니다 (%s/{dev,test}.jsonl) — golden-capture로 만드세요", dir)
@@ -101,6 +112,40 @@ func evalContent(e goldenEntry, body, keywords bool) tagger.Content {
 // 변형은 **full에서 신호를 하나씩 뺀 것**이다 — 그래야 Δ가 그 신호만의 기여가 된다.
 // full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
 // baseline=도메인만(규칙 전체의 기여를 보는 기준선).
+// goldenCorpus는 golden 세트 자체를 코퍼스로 삼아 DF를 센다.
+//
+// 런타임에서 corpus_df가 하는 일과 **같은 계산**이다 — 런타임은 저장된 링크가 코퍼스이고
+// 여기서는 golden이 코퍼스다. 다른 코퍼스를 빌려 오면 실제로 켜질 통계와 다른 것을 재게 된다.
+func goldenCorpus(entries []goldenEntry, dict *tagger.Dictionary) tagger.CorpusStats {
+	df := map[string]int64{}
+	for _, e := range entries {
+		for s := range dict.MatchedSurfaces(evalContent(e, true, true)) {
+			df[s]++
+		}
+	}
+	// DF 분포 덤프 — IDF가 아무 일도 하지 않을 때 **왜 그런지**를 보는 유일한 창이다.
+	// 지표만 보면 "IDF가 효과 없다"로 읽히지만, 실제 원인은 코퍼스에 편중이 없다는 것일 수 있다.
+	if os.Getenv("PP_DF_DUMP") != "" {
+		type kv struct {
+			t string
+			n int64
+		}
+		var rows []kv
+		for t, n := range df {
+			rows = append(rows, kv{t, n})
+		}
+		sort.Slice(rows, func(i, j int) bool { return rows[i].n > rows[j].n })
+		fmt.Printf("  DF 상위 (문서 %d건, 표면 %d개):\n", len(entries), len(df))
+		for i, r := range rows {
+			if i >= 15 {
+				break
+			}
+			fmt.Printf("    %-24s df=%3d  ratio=%.2f\n", r.t, r.n, float64(r.n)/float64(len(entries)))
+		}
+	}
+	return tagger.CorpusStats{Docs: int64(len(entries)), DF: df}
+}
+
 func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {
 	fmt.Printf("\n=== %s (%d건) ===\n", name, len(entries))
 	if len(entries) == 0 {

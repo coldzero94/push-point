@@ -265,7 +265,14 @@ type Store interface {
 	// ApplyTags는 tag 잡 결과를 한 writer 트랜잭션으로 반영한다: source='rules' 행을 먼저
 	// 삭제(재태깅 멱등)한 뒤 scored 태그를 INSERT(같은 태그의 manual 행은 ON CONFLICT DO
 	// NOTHING으로 보존), FTS 'tags' 컬럼 재색인. 링크 부재/삭제여도 FK로 무해(멱등).
-	ApplyTags(ctx context.Context, linkID int64, scored []ScoredTag) error
+	// terms는 이 문서에서 매칭된 **사전 표면의 집합**이다. corpus_df 원장(link_terms)에
+	// 기록해 같은 트랜잭션에서 df를 갱신한다 — 태그 쓰기와 갈라 두면 재시도 한 번에
+	// 통계와 태그가 어긋난다.
+	ApplyTags(ctx context.Context, linkID int64, scored []ScoredTag, terms []string) error
+
+	// CorpusDF는 자체 코퍼스의 문서 빈도 스냅샷을 돌려준다 (표면 → df, 그리고 문서 수).
+	// 태거 IDF의 입력이다.
+	CorpusDF(ctx context.Context) (docs int64, df map[string]int64, err error)
 
 	// ListLinks는 keyset 커서 목록. tag는 태그 이름 필터, status는 links.status 필터
 	// (각각 빈 문자열이면 미적용). cursor는 이전 응답의 nextCursor (첫 페이지는 "").

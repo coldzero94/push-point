@@ -132,3 +132,51 @@ func TestRun_noBodyStillSucceeds(t *testing.T) {
 		t.Errorf("빈 요약을 쓰는 것도 정상 경로다: %v", res.SummaryErr)
 	}
 }
+
+// 태깅이 corpus_df를 채워야 한다 — 그리고 다시 돌려도 부풀지 않아야 한다.
+//
+// 이 경로 전체가 눈에 보이지 않는다: corpus_df는 API에도 화면에도 안 나온다. 태거가
+// 표면을 넘기지 않거나 넘기는 키가 매칭과 달라지면 df는 조용히 0에 머물고, 나중에 IDF를
+// 켜는 사람은 "IDF가 효과 없다"는 잘못된 결론을 얻는다. 그래서 여기서 못박는다.
+func TestRun_accumulatesCorpusDF(t *testing.T) {
+	st := newStore(t)
+	id := saveLink(t, st, "https://example.com/corpus", body)
+	ctx := context.Background()
+
+	if _, err := Run(ctx, st, id); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	docs, df, err := st.CorpusDF(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if docs != 1 {
+		t.Fatalf("문서 수 1이어야 함: %d", docs)
+	}
+	if len(df) == 0 {
+		t.Fatal("태깅이 corpus_df에 아무것도 남기지 않았다 — 표면 전달이 끊겼다")
+	}
+	// 매칭된 표면은 사전 표면이어야 한다. 문서 토큰(조사가 붙은 형태 등)이 새어 들어오면
+	// 매칭 때 쓰는 키와 달라져 df 조회가 영원히 빗나간다.
+	for term, n := range df {
+		if n != 1 {
+			t.Errorf("한 문서에서 %q의 df가 1이 아님: %d", term, n)
+		}
+	}
+
+	if _, err := Run(ctx, st, id); err != nil {
+		t.Fatalf("재Run: %v", err)
+	}
+	docs2, df2, err := st.CorpusDF(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if docs2 != docs || len(df2) != len(df) {
+		t.Errorf("재태깅이 통계를 바꿈: docs %d→%d, 표면 %d→%d", docs, docs2, len(df), len(df2))
+	}
+	for term, n := range df2 {
+		if n != 1 {
+			t.Errorf("재태깅 후 %q의 df가 부풀었다: %d", term, n)
+		}
+	}
+}

@@ -30,15 +30,19 @@ v2의 저장소는 SQLite 단일 파일(`data/pushpoint.db`)이다. v1의 Postgr
       │ rowid = links.id (store 계층이 동기화)
 ┌─────┴──────┐        ┌────────────┐
 │ links_fts  │        │ corpus_df  │  ← 독립 테이블 (TF-IDF 문서 빈도)
-│ (FTS5 가상) │        └────────────┘
-└────────────┘
+│ (FTS5 가상) │        └─────┬──────┘
+└────────────┘              │ link_terms가 원장 (links —< link_terms)
+                      ┌─────┴──────┐
+                      │ link_terms │
+                      └────────────┘
 ```
 
 - `links —< link_tags >— tags`: N:M. 태그는 통제된 사전(초기 30~50개 시드)이고, `link_tags`가 부착 출처(`source`)와 신뢰도를 함께 보관.
 - `links —< jobs`: 링크 하나에 `scrape` / `tag` / `thumb` 잡이 연쇄로 달림.
 - `links —< tag_feedback`: 사용자의 태그 추가/제거 이력. M5 재랭킹 학습 데이터.
 - `links_fts`: FTS5 가상 테이블. 외래키가 아니라 `rowid = links.id` 규약으로 연결.
-- `corpus_df`, `tag_embeddings`: 관계 없는 보조 테이블 (태깅 파이프라인용 통계·캐시).
+- `links —< link_terms`: 각 링크가 `corpus_df`에 기여한 사전 표면. 재태깅 때 지난 기여를 상쇄하기 위한 원장.
+- `corpus_df`, `tag_embeddings`: 관계 없는 보조 테이블 (태깅 파이프라인용 통계·캐시). `corpus_df`는 `link_terms`의 합계다.
 
 ---
 
@@ -127,6 +131,12 @@ CREATE TABLE corpus_df (                       -- TF-IDF용 자체 코퍼스 문
   df   INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE link_terms (                      -- 0009. corpus_df의 원장 — "이 링크가 df에 무엇을 기여했는가"
+  link_id INTEGER NOT NULL REFERENCES links(id) ON DELETE CASCADE,
+  term    TEXT NOT NULL,
+  PRIMARY KEY (link_id, term)
+) WITHOUT ROWID;
+
 CREATE TABLE tag_embeddings (                  -- M5: 태그 사전 임베딩 캐시
   tag_id    INTEGER PRIMARY KEY REFERENCES tags(id) ON DELETE CASCADE,
   model     TEXT NOT NULL,
@@ -195,7 +205,9 @@ v1의 `category`/`icon`/`usage_count` 컬럼은 폐기. 사용 수는 집계 컬
 
 **tag_feedback** — 사용자가 태그를 추가/제거할 때마다 `action`(`added`/`removed`)을 append-only로 기록. M5에서 앙상블 재랭킹 가중치 보정에 쓴다.
 
-**corpus_df** — 저장된 링크 자체를 코퍼스로 삼는 TF-IDF의 문서 빈도(document frequency) 누적. 외부 코퍼스 의존 없음.
+**corpus_df** — 저장된 링크 자체를 코퍼스로 삼는 TF-IDF의 문서 빈도(document frequency) 누적. 외부 코퍼스 의존 없음. **사전 표면(name·alias)에 대해서만** 센다 — 본문 32KB의 모든 토큰을 세면 테이블이 폭증하는데 스코어링이 쓰는 것은 사전 표면의 DF뿐이라, 나머지는 값을 치르고 버리는 값이다.
+
+**link_terms** — `corpus_df`의 원장. 각 링크가 df에 기여한 표면을 그대로 적어 둔다. 없으면 `corpus_df`를 정확히 유지할 수 없다: 태깅은 재시도·본문 보충·undelete로 **여러 번 돌고**, 올리기만 하면 df가 "그 낱말을 가진 문서 수"가 아니라 "태깅이 돈 횟수"가 되어 오래 쓸수록 통계가 조용히 실제와 멀어진다. 원장이 있으면 재태깅 때 지난 기여를 정확히 상쇄하고 새로 올릴 수 있다(`ApplyTags`와 같은 트랜잭션). 소프트 삭제도 기여를 회수한다 — 삭제한 링크는 코퍼스가 아니다.
 
 **tag_embeddings** — M5에서 태그 사전 임베딩을 미리 계산해 캐시. `model` 컬럼으로 모델 교체 시 무효화 판별.
 

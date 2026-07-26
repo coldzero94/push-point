@@ -584,6 +584,12 @@ func (s *sqliteStore) DeleteLink(ctx context.Context, id int64) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM links_fts WHERE rowid = ?`, id); err != nil {
 			return fmt.Errorf("store: links_fts 제거 실패: %w", err)
 		}
+		// 삭제된 링크는 코퍼스가 아니다 — 검색에서 빼면서 통계에는 남겨 두면, 지운 주제가
+		// 계속 "흔한 낱말"로 취급돼 앞으로 저장할 링크의 태깅을 눈에 안 보이게 끌어내린다.
+		// undelete는 scrape·tag 잡을 다시 넣으므로 그때 원장이 다시 채워진다.
+		if err := applyCorpusTerms(ctx, tx, id, nil); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM jobs WHERE link_id = ? AND status IN ('pending','failed')`, id); err != nil {
 			return fmt.Errorf("store: 삭제 링크 잡 정리 실패: %w", err)

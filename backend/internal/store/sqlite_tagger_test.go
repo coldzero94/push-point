@@ -89,7 +89,7 @@ func TestApplyTags(t *testing.T) {
 	dev := tagID(t, db, "dev")
 
 	// rules 태그 부착 — source='rules' + confidence 저장.
-	if err := s.ApplyTags(ctx, id, []ScoredTag{{TagID: kube, Confidence: 0.75}}); err != nil {
+	if err := s.ApplyTags(ctx, id, []ScoredTag{{TagID: kube, Confidence: 0.75}}, []string{"쿠버네티스"}); err != nil {
 		t.Fatalf("ApplyTags: %v", err)
 	}
 	if n := countRows(t, db, `SELECT COUNT(*) FROM link_tags WHERE link_id=? AND source='rules'`, id); n != 1 {
@@ -113,7 +113,7 @@ func TestApplyTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 다른 rules 세트로 재적용(kube 빠지고 없음) → manual(dev)은 남고, 기존 rules(kube)는 사라짐.
-	if err := s.ApplyTags(ctx, id, []ScoredTag{}); err != nil {
+	if err := s.ApplyTags(ctx, id, []ScoredTag{}, nil); err != nil {
 		t.Fatalf("재ApplyTags: %v", err)
 	}
 	if n := countRows(t, db, `SELECT COUNT(*) FROM link_tags WHERE link_id=? AND source='manual'`, id); n != 1 {
@@ -124,7 +124,7 @@ func TestApplyTags(t *testing.T) {
 	}
 
 	// 같은 태그의 manual이 있으면 rules INSERT는 ON CONFLICT로 스킵 → manual 우선 보존.
-	if err := s.ApplyTags(ctx, id, []ScoredTag{{TagID: dev, Confidence: 0.5}}); err != nil {
+	if err := s.ApplyTags(ctx, id, []ScoredTag{{TagID: dev, Confidence: 0.5}}, []string{"개발"}); err != nil {
 		t.Fatalf("ApplyTags(dev): %v", err)
 	}
 	var src string

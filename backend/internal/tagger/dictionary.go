@@ -49,6 +49,19 @@ type Dictionary struct {
 	phrases    map[string][]phraseEntry // 다중어 surface: firstTok → tail+tagID
 	nameToID   map[string]int64         // 소문자 이름 → tagID (도메인맵 해소용)
 	idToName   map[int64]string         // 동점 정렬(name asc)용
+	corpus     CorpusStats              // 자체 코퍼스 DF — 제로값이면 IDF 비활성(idf.go)
+}
+
+// WithCorpus는 자체 코퍼스 통계를 붙인 **새 사전**을 돌려준다. 사전 컴파일과 코퍼스 통계는
+// 수명이 다르다 — 사전은 시드에서 오고 코퍼스는 저장할 때마다 자란다 — 그래서
+// BuildDictionary의 인자가 아니라 별도 단계다.
+//
+// 원본을 고치지 않고 복사하는 이유: 인덱스(맵·슬라이스)는 읽기 전용으로 공유해도 되지만,
+// 제자리에서 코퍼스를 갈아 끼우면 그 사전을 이미 들고 있는 쪽의 결과가 말없이 바뀐다.
+func (d *Dictionary) WithCorpus(c CorpusStats) *Dictionary {
+	cp := *d
+	cp.corpus = c
+	return &cp
 }
 
 // BuildDictionary는 태그 항목을 매칭 인덱스로 컴파일한다. 각 태그의 name 자체 + 모든 alias를
