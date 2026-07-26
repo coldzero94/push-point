@@ -11,8 +11,32 @@
 // 그래서 플랫폼을 더하거나 빼도 "무엇을 본문으로 보는가"는 한 곳에서만 바뀐다.
 // 서버는 어느 플랫폼이 보냈는지 알 필요가 없다 — body_text가 왔다는 사실만 본다.
 
-/** 본문 후보에서 걷어낼 요소 — 내비게이션·광고·폼은 본문이 아니다. */
-const DROP_SELECTOR = 'script, style, noscript, iframe, nav, header, footer, aside, form, svg, template';
+/**
+ * 본문 후보에서 걷어낼 요소 — 내비게이션·광고·폼은 본문이 아니다.
+ *
+ * 태그 이름만으로는 부족하다. 요즘 광고·추천 위젯(Taboola·Outbrain류)은 평범한
+ * `div`라서 태그로는 안 걸리는데, 뉴스 사이트에서는 그 덩어리가 본문보다 길 때도 있다 —
+ * 실제로 nbcnews.com 기사의 요약이 통째로 협찬 문구로 채워졌다. 그래서 클래스·id·
+ * data 속성에 흔히 박히는 표식도 함께 본다.
+ */
+const DROP_SELECTOR = [
+  'script, style, noscript, iframe, nav, header, footer, aside, form, svg, template',
+  '[class*="taboola" i], [class*="outbrain" i], [class*="sponsor" i], [class*="advert" i]',
+  '[class*="promo" i], [class*="newsletter" i], [class*="related" i], [class*="recirc" i]',
+  '[id*="taboola" i], [id*="outbrain" i], [data-testid*="ad" i]',
+  'figure figcaption, [role="complementary"], [aria-hidden="true"]',
+].join(', ');
+
+/**
+ * 블록 경계를 만드는 요소 — 이들 뒤에 개행을 넣어 문장 경계를 살린다.
+ *
+ * 왜 필요한가: 아래 capture는 원본을 건드리지 않으려고 **복제본**에서 텍스트를 읽는데,
+ * 문서에 붙어 있지 않은 노드의 `innerText`는 렌더 정보를 쓸 수 없어 `textContent`처럼
+ * 동작한다(명세: 렌더되지 않는 요소는 textContent를 반환). 즉 지금까지 블록 경계가
+ * 살아남은 것은 **원본 HTML에 줄바꿈이 있던 사이트에서 우연히** 그랬을 뿐이고,
+ * 압축된 HTML(nbcnews.com)에서는 5KB 본문이 두 줄이 되어 요약기가 문장을 나눌 수 없었다.
+ */
+const BLOCK_SELECTOR = 'p, div, section, article, h1, h2, h3, h4, h5, h6, li, blockquote, pre, tr, figcaption';
 
 /** 본문 컨테이너 후보를 우선순위대로 — 없으면 body 전체. */
 const ROOT_SELECTORS = ['article', '[role="main"]', 'main', '#content', '.post-content'];
@@ -58,8 +82,12 @@ function capture(doc, url) {
   if (root) {
     const clone = root.cloneNode(true);
     clone.querySelectorAll(DROP_SELECTOR).forEach((el) => el.remove());
-    // innerText는 렌더된 텍스트(줄바꿈·숨김 요소 반영)라 textContent보다 사람이 읽는 것에 가깝다.
-    text = (clone.innerText || clone.textContent || '').replace(/[ \t ]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    // 블록 경계를 우리가 만든다. 복제본은 문서에 붙어 있지 않아 innerText가 렌더 정보를
+    // 쓸 수 없고 textContent와 같아지므로(BLOCK_SELECTOR 주석), 경계를 넣지 않으면
+    // 문단들이 한 줄로 이어붙는다 — 그러면 요약기가 문장을 나누지 못한다.
+    clone.querySelectorAll('br').forEach((el) => el.replaceWith(doc.createTextNode('\n')));
+    clone.querySelectorAll(BLOCK_SELECTOR).forEach((el) => el.append(doc.createTextNode('\n')));
+    text = (clone.textContent || '').replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   }
   return {
     url,
