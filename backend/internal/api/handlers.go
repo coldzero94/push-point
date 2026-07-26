@@ -237,6 +237,7 @@ func (s *Server) CreateLink(ctx context.Context, request gen.CreateLinkRequestOb
 		Title:       deref(request.Body.Title),
 		Description: deref(request.Body.Description),
 		BodyText:    deref(request.Body.BodyText),
+		Keywords:    deref(request.Body.Keywords),
 	}
 	id, createdAt, duplicate, err := s.store.SaveLink(ctx, in)
 	if errors.Is(err, store.ErrInvalidURL) {

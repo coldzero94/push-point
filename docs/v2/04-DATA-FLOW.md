@@ -345,8 +345,8 @@ v1의 DLQ(dead letter queue)는 사라졌다. `status='failed'`인 행이 곧 DL
 긁는 대신 **클라이언트가 렌더된 본문을 저장 요청에 실어 보낸다**. 세 부류가 한 번에 풀린다.
 
 ```
-브라우저 확장(격리 월드) → 현재 탭에서 제목·설명·본문 텍스트 추출
-                        → POST /api/v1/links {url, title, description, body_text}
+브라우저 확장(격리 월드) → 현재 탭에서 제목·설명·본문 텍스트·발행자 분류 추출
+                        → POST /api/v1/links {url, title, description, body_text, keywords}
                           (API 키는 확장 스토리지에 있고 페이지 JS는 접근 불가)
                         → 서버: body_source='client' 표시
                                 + scrape 잡(썸네일·메타용) + **tag 잡 즉시 enqueue**
@@ -354,7 +354,7 @@ v1의 DLQ(dead letter queue)는 사라졌다. `status='failed'`인 행이 곧 DL
 
 - **tag 잡을 저장 시점에 함께 넣는 이유**: tag 잡의 유일한 생성 지점이 `ApplyScrape`(스크랩 성공)라
   스크랩이 실패하는 바로 그 페이지에서는 태그·요약이 영원히 안 생긴다.
-- **우선순위**: `body_source='client'`면 이후 스크랩이 3필드를 덮지 않는다. 스크랩은 계속 돌아
+- **우선순위**: `body_source='client'`면 이후 스크랩이 3필드와 `keywords`를 덮지 않는다. 스크랩은 계속 돌아
   썸네일·author·published_at을 채우고, 확정 실패해도 링크는 `done`으로 남는다.
 - **이미 저장된 링크 보충**: 중복 저장 요청이 클라이언트 본문을 실어 오고 저장된 본문이 서버
   출처면 3필드를 **1회 보충**하고 태깅을 다시 돌린다(이미 클라이언트 본문이면 무동작).

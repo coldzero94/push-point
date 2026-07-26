@@ -13,8 +13,8 @@ import (
 func (s *sqliteStore) GetLinkContent(ctx context.Context, linkID int64) (LinkContent, error) {
 	var c LinkContent
 	err := s.db.Reader.QueryRowContext(ctx,
-		`SELECT domain, title, description, note, body_text FROM links WHERE id = ? AND deleted_at IS NULL`, linkID,
-	).Scan(&c.Domain, &c.Title, &c.Description, &c.Note, &c.Body)
+		`SELECT domain, title, description, note, body_text, keywords FROM links WHERE id = ? AND deleted_at IS NULL`, linkID,
+	).Scan(&c.Domain, &c.Title, &c.Description, &c.Note, &c.Body, &c.Keywords)
 	if errors.Is(err, sql.ErrNoRows) {
 		return LinkContent{}, ErrNotFound
 	}

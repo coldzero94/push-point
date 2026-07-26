@@ -312,6 +312,20 @@ ios-bind:
     cp extension/src/extract.js ios/PushPointShare/extract.js
     @echo "ios-bind: PPCore/PPShare.xcframework + extract.js 준비 완료"
 
+# api/openapi.yaml → ios/PushPoint/Generated/ (swift-openapi-generator)
+#
+# 계약의 세 번째 소비자다(`just gen`=Go, `just web-gen`=TS). 지금까지 이 단계만 수동이라
+# 스펙을 고칠 때 iOS 생성물이 조용히 뒤처질 수 있었다 — 규칙(.claude/rules/api.md)은 셋을
+# 함께 재생성해야 스펙 변경이 끝난 것으로 본다.
+#
+# SPM 빌드 플러그인이 아니라 CLI로 부르고 산출물을 커밋한다(재현성·드리프트 검사).
+# ios/tools/openapi-gen은 생성기를 가져오기 위해서만 존재하는 최소 패키지다.
+ios-api-gen:
+    cd ios/tools/openapi-gen && swift run swift-openapi-generator generate \
+        ../../../api/openapi.yaml --mode types --mode client \
+        --output-directory ../../PushPoint/Generated
+    @echo "ios-api-gen: ios/PushPoint/Generated/{Types,Client}.swift 갱신"
+
 # ios/project.yml → ios/PushPoint.xcodeproj (XcodeGen)
 ios-gen:
     @command -v xcodegen >/dev/null 2>&1 || { echo "xcodegen이 없습니다. 설치: brew install xcodegen"; exit 1; }

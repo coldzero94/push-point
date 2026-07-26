@@ -89,7 +89,7 @@ final class ShareViewController: UIViewController {
         else { return nil }
         // 계약 필드만 문자열로 추린다 — extract.js가 만드는 키와 같다.
         var out = ["url": url]
-        for key in ["title", "description", "body_text"] {
+        for key in ["title", "description", "body_text", "keywords"] {
             if let value = js[key] as? String, !value.isEmpty { out[key] = value }
         }
         return out

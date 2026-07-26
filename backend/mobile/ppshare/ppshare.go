@@ -57,6 +57,7 @@ type payload struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	BodyText    string `json:"body_text"`
+	Keywords    string `json:"keywords"`
 }
 
 // result는 Save의 반환 JSON. 확장 UI가 "저장됨/이미 있음"을 구분하고 태그 수를 보여줄 수 있게 한다.
@@ -145,6 +146,7 @@ func Save(payloadJSON string) (string, error) {
 		Title:       p.Title,
 		Description: p.Description,
 		BodyText:    p.BodyText,
+		Keywords:    p.Keywords,
 	})
 	if err != nil {
 		return "", err

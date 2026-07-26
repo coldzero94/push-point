@@ -4,10 +4,11 @@ package main
 //
 //	pushpoint eval [golden-dir]        # dev.jsonl/test.jsonl로 Recall@3 + 태그별 P/R + 베이스라인 (네트워크 0)
 //	pushpoint golden-capture urls.tsv  # url<TAB>tag,tag 목록을 프로덕션 스크랩 경로로 스냅샷 캡처 → JSONL
+//	pushpoint golden-refill in.jsonl   # 기존 golden의 **빈 필드만** 재fetch로 채움 → JSONL
 //
 // eval은 golden 스냅샷만 입력으로 태거를 돌린다(네트워크 0 → 시점 무관 재현). 사전은 런타임과
 // 동일하게 fresh 마이그레이션 DB에서 읽어(결정적 시드) golden==runtime을 보장한다. golden 스냅샷은
-// {title, description, body_text} — 태거 Content와 정확히 일치한다(meta_keywords는 태거가 안 써서 제외).
+// 태거 Content와 정확히 일치한다 — 태거가 쓰는 필드가 늘면 스냅샷도 늘어야 한다(train/serve skew).
 
 import (
 	"bufio"
@@ -33,6 +34,9 @@ type goldenSnapshot struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	BodyText    string `json:"body_text"`
+	// Keywords는 발행자 분류(meta keywords·article:section 등). 나중에 더해진 필드라
+	// 없는 항목이 있을 수 있고, 그때는 "" — 그 항목은 Δkeywords에 기여하지 않는다.
+	Keywords string `json:"keywords,omitempty"`
 }
 
 // goldenEntry는 golden JSONL 한 줄.
@@ -75,8 +79,28 @@ func runEval(args []string) error {
 	return nil
 }
 
-// evalSet은 한 세트(dev/test)의 지표를 계산·출력한다: 세 변형(baseline=도메인만 /
-// no-body=도메인+제목+설명 / full=+본문)의 Recall@3, 그리고 full 기준 태그별 P/R.
+// evalContent는 golden 항목을 태거 입력으로 바꾼다. 두 스위치로 변형을 만든다 —
+// 각 신호의 기여를 **그것만 빼서** 재기 위한 것이고, 도메인·제목·설명은 항상 들어간다.
+func evalContent(e goldenEntry, body, keywords bool) tagger.Content {
+	c := tagger.Content{
+		Domain:      hostOf(e.URL),
+		Title:       e.Snapshot.Title,
+		Description: e.Snapshot.Description,
+	}
+	if body {
+		c.Body = e.Snapshot.BodyText
+	}
+	if keywords {
+		c.Keywords = e.Snapshot.Keywords
+	}
+	return c
+}
+
+// evalSet은 한 세트(dev/test)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
+//
+// 변형은 **full에서 신호를 하나씩 뺀 것**이다 — 그래야 Δ가 그 신호만의 기여가 된다.
+// full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
+// baseline=도메인만(규칙 전체의 기여를 보는 기준선).
 func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {
 	fmt.Printf("\n=== %s (%d건) ===\n", name, len(entries))
 	if len(entries) == 0 {
@@ -84,27 +108,36 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 		return
 	}
 
-	var baseHit, noBodyHit, fullHit int
+	var baseHit, noBodyHit, noKWHit, fullHit, bareHit int
 	// 태그별 집계 (full 기준): TP/FP/FN + golden 등장 수.
 	tp := map[string]int{}
 	fp := map[string]int{}
 	fn := map[string]int{}
 	goldN := map[string]int{}
+	// 발행자 분류를 가진 항목 수 — Δkeywords를 몇 건 위에서 잰 것인지 없으면 해석할 수 없다.
+	withKW := 0
 
 	for _, e := range entries {
-		host := hostOf(e.URL)
 		exp := toSet(e.ExpectedTags)
 		for t := range exp {
 			goldN[t]++
 		}
+		if e.Snapshot.Keywords != "" {
+			withKW++
+		}
 
-		base := classifyTop(tagger.Content{Domain: host}, dict, id2name)
-		noBody := classifyTop(tagger.Content{Domain: host, Title: e.Snapshot.Title, Description: e.Snapshot.Description}, dict, id2name)
-		full := classifyTop(tagger.Content{Domain: host, Title: e.Snapshot.Title, Description: e.Snapshot.Description, Body: e.Snapshot.BodyText}, dict, id2name)
+		base := classifyTop(tagger.Content{Domain: hostOf(e.URL)}, dict, id2name)
+		noBody := classifyTop(evalContent(e, false, true), dict, id2name)
+		noKW := classifyTop(evalContent(e, true, false), dict, id2name)
+		full := classifyTop(evalContent(e, true, true), dict, id2name)
+		// bare = 본문도 분류도 없는 변형. 분류가 **본문의 대체재**인지 보려면 필요하다.
+		bare := classifyTop(evalContent(e, false, false), dict, id2name)
 
 		baseHit += hit(base, exp)
 		noBodyHit += hit(noBody, exp)
+		noKWHit += hit(noKW, exp)
 		fullHit += hit(full, exp)
+		bareHit += hit(bare, exp)
 
 		// 태그별 P/R은 full 예측 기준.
 		predicted := toSet(full)
@@ -126,6 +159,13 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 	fmt.Printf("Recall@%d:  full=%.3f   no-body=%.3f (Δbody %+.3f)   baseline(도메인만)=%.3f (Δrules %+.3f)\n",
 		evalTopK, float64(fullHit)/n, float64(noBodyHit)/n, float64(fullHit-noBodyHit)/n,
 		float64(baseHit)/n, float64(fullHit-baseHit)/n)
+	// 발행자 분류의 기여는 **두 축으로** 잰다. 본문이 있을 때와 없을 때가 다르기 때문이다 —
+	// 분류는 본문이 이미 말해 주는 것을 반복하는 경우가 많아 본문이 있으면 Δ가 0에 가깝고,
+	// 본문이 없을 때(스크랩 실패·SPA·봇 차단, 즉 클라이언트 캡처가 필요한 바로 그 페이지)
+	// 비로소 값을 한다. 하나만 재면 "쓸모없다"와 "필수다" 중 아무 쪽으로나 읽힌다.
+	fmt.Printf("           분류 기여: 본문 있을 때 %+.3f (no-keywords=%.3f) · 본문 없을 때 %+.3f (bare=%.3f) · 분류 있는 항목 %d/%d\n",
+		float64(fullHit-noKWHit)/n, float64(noKWHit)/n,
+		float64(noBodyHit-bareHit)/n, float64(bareHit)/n, withKW, len(entries))
 	// 언어별 — 이 앱은 한국어와 영어를 대등하게 지원해야 하므로 한쪽만 잘 되는 회귀를 드러낸다.
 	reportTagRecallByLang(entries, dict, id2name)
 
@@ -175,10 +215,7 @@ func reportTagRecallByLang(entries []goldenEntry, dict *tagger.Dictionary, id2na
 		}
 		hits := 0
 		for _, e := range set {
-			pred := classifyTop(tagger.Content{
-				Domain: hostOf(e.URL), Title: e.Snapshot.Title,
-				Description: e.Snapshot.Description, Body: e.Snapshot.BodyText,
-			}, dict, id2name)
+			pred := classifyTop(evalContent(e, true, true), dict, id2name)
 			hits += hit(pred, toSet(e.ExpectedTags))
 		}
 		fmt.Printf("  %-8s %3d건  Recall@%d=%.3f\n", label, len(set), evalTopK, ratio(hits, len(set)))
@@ -255,7 +292,7 @@ func runGoldenCapture(args []string) error {
 		}
 		e := goldenEntry{
 			URL:          rawURL,
-			Snapshot:     goldenSnapshot{Title: m.Title, Description: m.Description, BodyText: m.BodyText},
+			Snapshot:     goldenSnapshot{Title: m.Title, Description: m.Description, BodyText: m.BodyText, Keywords: m.Keywords},
 			ExpectedTags: tags,
 		}
 		if err := enc.Encode(e); err != nil {
@@ -349,4 +386,67 @@ func ratio(num, den int) float64 {
 		return 0
 	}
 	return float64(num) / float64(den)
+}
+
+// runGoldenRefill은 기존 golden JSONL을 다시 fetch해 **비어 있는 스냅샷 필드만** 채워 stdout에 낸다.
+//
+// 왜 golden-capture로 다시 뜨지 않는가: 태거가 새 필드를 쓰기 시작하면 그 필드가 없는 golden으로는
+// **개선을 측정할 수 없다**(Δ가 항상 0). 그렇다고 전체를 다시 뜨면 그 사이 바뀐 페이지 때문에
+// title·body_text까지 흔들려 **이전 측정치와 비교가 끊긴다** — 특히 test는 동결 세트라 그러면 안 된다.
+// 그래서 채우기는 단방향이다: 이미 값이 있는 필드는 절대 건드리지 않는다.
+//
+// fetch 실패는 치명적이지 않다 — 그 항목은 원본 그대로 통과시킨다(빠진 필드는 "" 그대로).
+// URL이 죽었다고 golden 항목을 잃으면 세트가 조용히 줄어 지표가 비교 불가능해진다.
+func runGoldenRefill(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("golden-refill: 사용법 pushpoint golden-refill <golden.jsonl>")
+	}
+	entries, err := loadGolden(args[0])
+	if err != nil {
+		return fmt.Errorf("golden-refill: 입력 읽기 실패: %w", err)
+	}
+
+	sc := scraper.New()
+	enc := json.NewEncoder(os.Stdout)
+	ctx := context.Background()
+	var filled, failed, already int
+
+	for _, e := range entries {
+		// 채울 것이 없으면 네트워크를 쓰지 않는다.
+		if e.Snapshot.Title != "" && e.Snapshot.Description != "" && e.Snapshot.BodyText != "" && e.Snapshot.Keywords != "" {
+			already++
+			if err := enc.Encode(e); err != nil {
+				return fmt.Errorf("golden-refill: JSONL 쓰기 실패: %w", err)
+			}
+			continue
+		}
+		m, err := sc.Fetch(ctx, e.URL)
+		if err != nil {
+			failed++
+			fmt.Fprintf(os.Stderr, "  실패(원본 유지): %s — %v\n", e.URL, err)
+		} else {
+			before := e.Snapshot
+			fill(&e.Snapshot.Title, m.Title)
+			fill(&e.Snapshot.Description, m.Description)
+			fill(&e.Snapshot.BodyText, m.BodyText)
+			fill(&e.Snapshot.Keywords, m.Keywords)
+			if e.Snapshot != before {
+				filled++
+				fmt.Fprintf(os.Stderr, "  채움: %s (keywords=%.60q)\n", e.URL, e.Snapshot.Keywords)
+			}
+		}
+		if err := enc.Encode(e); err != nil {
+			return fmt.Errorf("golden-refill: JSONL 쓰기 실패: %w", err)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "완료: %d건 중 %d 채움, %d 이미 완전, %d fetch 실패\n",
+		len(entries), filled, already, failed)
+	return nil
+}
+
+// fill은 dst가 비어 있을 때만 v를 넣는다 — 기존 값 보존이 golden-refill의 전부다.
+func fill(dst *string, v string) {
+	if *dst == "" {
+		*dst = v
+	}
 }

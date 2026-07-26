@@ -1,8 +1,8 @@
 // 캡처 규칙 — **이 파일이 플랫폼 간 공유되는 유일한 로직이다.**
 //
 // 플랫폼 API(chrome.*, browser.*, webkit.*)를 절대 참조하지 않는다. 문서 하나를 받아
-// 저장 계약({url, title, description, body_text})을 만들 뿐이라, 이 파일을 실행할 수 있는
-// 환경이면 어디서든 같은 규칙으로 캡처된다:
+// 저장 계약({url, title, description, body_text, keywords})을 만들 뿐이라, 이 파일을 실행할 수
+// 있는 환경이면 어디서든 같은 규칙으로 캡처된다:
 //
 //   Chrome/Firefox 확장 → chrome.scripting.executeScript로 페이지에 주입
 //   iOS Share Extension → WKWebView 또는 Safari의 JS preprocessing file에서 평가
@@ -46,6 +46,7 @@ const ROOT_SELECTORS = ['article', '[role="main"]', 'main', '#content', '.post-c
 const MAX_BODY_CHARS = 32000;
 const MAX_TITLE_CHARS = 300;
 const MAX_DESC_CHARS = 1000;
+const MAX_KEYWORDS_CHARS = 512;
 
 function metaContent(doc, ...keys) {
   for (const k of keys) {
@@ -56,6 +57,76 @@ function metaContent(doc, ...keys) {
     }
   }
   return '';
+}
+
+/**
+ * collectKeywords는 **발행자가 스스로 붙인 분류**를 모은다 — 우리가 본문에서 추론한 값이
+ * 아니라 사이트가 "이 글은 스포츠다"라고 선언한 값이다. 태거에서 도메인 맵과 같은 급의
+ * 신호이면서, 사이트별 등록이 필요 없다는 점에서 그보다 일반적이다.
+ *
+ * 서버(`backend/internal/scraper` parseKeywords)와 **같은 출처를 본다.** 서버가 못 가져오는
+ * 페이지를 위해 클라이언트가 캡처하는 것이므로, 여기서 덜 모으면 바로 그 페이지들에서만
+ * 신호가 빠진다.
+ *
+ * @param {Document} doc
+ * @returns {string} 콤마로 이은 분류 문자열 (없으면 '')
+ */
+function collectKeywords(doc) {
+  const parts = [];
+  const seen = new Set();
+  const add = (v) => {
+    if (typeof v !== 'string') return;
+    for (const raw of v.split(',')) {
+      const f = raw.trim();
+      if (!f) continue;
+      const key = f.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        parts.push(f);
+      }
+    }
+  };
+
+  // news_keywords는 Google News 규격 — keywords보다 정제된 값을 넣는 사이트가 많다.
+  add(metaContent(doc, 'keywords'));
+  add(metaContent(doc, 'news_keywords'));
+  // article:section(섹션)·article:tag(주제어)는 여러 개일 수 있어 첫 값만 보지 않는다.
+  doc
+    .querySelectorAll(
+      'meta[property="article:section"], meta[property="article:tag"],' +
+        'meta[name="article:section"], meta[name="article:tag"]',
+    )
+    .forEach((el) => add(el.getAttribute('content')));
+  // JSON-LD — og를 안 쓰고 schema.org만 쓰는 사이트가 있다. 스키마 모양이 제각각(배열·
+  // @graph·중첩)이라 구조를 가정하지 않고 키만 찾아 훑는다.
+  doc.querySelectorAll('script[type="application/ld+json"]').forEach((el) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(el.textContent || '');
+    } catch {
+      return; // 깨진 JSON-LD는 흔하다 — 조용히 넘긴다. 보조 신호다.
+    }
+    walkJSONLD(parsed, 0, add);
+  });
+
+  return parts.join(', ').slice(0, MAX_KEYWORDS_CHARS);
+}
+
+/** walkJSONLD는 임의 모양의 값에서 분류 키를 찾아 add에 넘긴다. depth는 깊이 폭주 방지. */
+function walkJSONLD(v, depth, add) {
+  if (depth > 8 || v === null || typeof v !== 'object') return;
+  if (Array.isArray(v)) {
+    for (const e of v) walkJSONLD(e, depth + 1, add);
+    return;
+  }
+  for (const [k, val] of Object.entries(v)) {
+    if (['articlesection', 'keywords', 'genre'].includes(k.toLowerCase())) {
+      if (typeof val === 'string') add(val);
+      else if (Array.isArray(val)) val.forEach((e) => add(e));
+    } else {
+      walkJSONLD(val, depth + 1, add);
+    }
+  }
 }
 
 /**
@@ -105,7 +176,7 @@ function pickByParagraphDensity(doc) {
  * capture는 문서에서 저장 계약 페이로드를 만든다.
  * @param {Document} doc
  * @param {string} url  캡처 대상 URL (문서의 최종 URL)
- * @returns {{url: string, title: string, description: string, body_text: string}}
+ * @returns {{url: string, title: string, description: string, body_text: string, keywords: string}}
  */
 function capture(doc, url) {
   const root = pickRoot(doc);
@@ -127,6 +198,7 @@ function capture(doc, url) {
     title: (metaContent(doc, 'og:title') || doc.title || '').trim().slice(0, MAX_TITLE_CHARS),
     description: metaContent(doc, 'og:description', 'description').slice(0, MAX_DESC_CHARS),
     body_text: text.slice(0, MAX_BODY_CHARS),
+    keywords: collectKeywords(doc),
   };
 }
 

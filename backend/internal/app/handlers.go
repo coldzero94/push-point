@@ -82,6 +82,7 @@ func scrapeResult(m scraper.Metadata) store.ScrapeResult {
 		WordCount:   m.WordCount,
 		HasImage:    m.ImageURL != "",
 		BodyText:    m.BodyText,
+		Keywords:    m.Keywords,
 	}
 }
 

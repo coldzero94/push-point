@@ -187,3 +187,100 @@ func TestContentTypeFor(t *testing.T) {
 		}
 	}
 }
+
+// 발행자 분류 수집 — 네 출처를 다 모으고 합집합을 쓴다.
+//
+// 이게 태거 개선의 핵심이라 출처별로 따로 확인한다. 사이트마다 쓰는 태그가 다르므로
+// 하나라도 조용히 빠지면 **그 사이트에서만** 신호가 사라지고, 다른 사이트는 멀쩡하니
+// 눈으로는 안 잡힌다.
+func TestParseKeywords(t *testing.T) {
+	cases := []struct {
+		name string
+		html string
+		want []string // 결과에 반드시 있어야 하는 조각들
+	}{
+		{
+			name: "meta keywords",
+			html: `<head><meta name="keywords" content="go, goroutine, channel"></head>`,
+			want: []string{"go", "goroutine", "channel"},
+		},
+		{
+			name: "news_keywords (Google News 규격)",
+			html: `<head><meta name="news_keywords" content="이강인,축구"></head>`,
+			want: []string{"이강인", "축구"},
+		},
+		{
+			name: "article:section·article:tag 여러 개",
+			html: `<head>
+				<meta property="article:section" content="스포츠">
+				<meta property="article:tag" content="해외축구">
+				<meta property="article:tag" content="이적시장">
+			</head>`,
+			want: []string{"스포츠", "해외축구", "이적시장"},
+		},
+		{
+			name: "JSON-LD articleSection",
+			html: `<head><script type="application/ld+json">
+				{"@type":"NewsArticle","articleSection":"정치","keywords":["국회","예산"]}
+			</script></head>`,
+			want: []string{"정치", "국회", "예산"},
+		},
+		{
+			name: "JSON-LD @graph 중첩",
+			html: `<head><script type="application/ld+json">
+				{"@graph":[{"@type":"WebSite"},{"@type":"Article","articleSection":["경제","부동산"]}]}
+			</script></head>`,
+			want: []string{"경제", "부동산"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := ParseHTML(strings.NewReader("<!doctype html><html>" + tc.html + "<body></body></html>"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := parseKeywords(doc)
+			for _, w := range tc.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("분류 %q가 빠졌다: %q", w, got)
+				}
+			}
+		})
+	}
+}
+
+// 같은 값이 여러 출처에 중복돼 있어도 한 번만 남아야 한다 — 뉴스 사이트는 keywords와
+// article:tag에 같은 낱말을 넣는 일이 흔한데, 그대로 두면 512바이트를 중복이 잡아먹는다.
+func TestParseKeywords_dedupes(t *testing.T) {
+	doc, err := ParseHTML(strings.NewReader(`<!doctype html><html><head>
+		<meta name="keywords" content="축구, Football">
+		<meta property="article:tag" content="축구">
+		<meta property="article:section" content="football">
+	</head><body></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := parseKeywords(doc)
+	if n := strings.Count(got, "축구"); n != 1 {
+		t.Errorf("중복 제거 실패 — %q에 축구가 %d번", got, n)
+	}
+	// 대소문자만 다른 값도 같은 것으로 본다.
+	if n := strings.Count(strings.ToLower(got), "football"); n != 1 {
+		t.Errorf("대소문자 중복 제거 실패: %q", got)
+	}
+}
+
+// 깨진 JSON-LD는 흔하다(광고 스크립트가 끼어들거나 템플릿이 새는 경우). 보조 신호이므로
+// 조용히 넘기고 나머지 출처는 그대로 살아야 한다 — 여기서 panic이 나면 스크랩 잡 전체가 죽는다.
+func TestParseKeywords_brokenJSONLDDoesNotBreakOthers(t *testing.T) {
+	doc, err := ParseHTML(strings.NewReader(`<!doctype html><html><head>
+		<meta name="keywords" content="정상값">
+		<script type="application/ld+json">{ 이건 JSON이 아니다 </script>
+	</head><body></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parseKeywords(doc); !strings.Contains(got, "정상값") {
+		t.Errorf("깨진 JSON-LD가 다른 출처를 삼켰다: %q", got)
+	}
+}

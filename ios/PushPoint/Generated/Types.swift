@@ -674,6 +674,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/LinkInput/body_text`.
             internal var body_text: Swift.String?
+            /// 발행자가 스스로 붙인 분류 (optional, 512바이트로 절단). `meta[name=keywords]`, `news_keywords`, `article:section`, `article:tag`, JSON-LD `articleSection`을 모아 콤마로 이어 붙인 값이다. **도메인 맵과 달리 사이트별 등록이 필요 없다** — 발행자가 알려주는 값이라 등록되지 않은 사이트에서도 동작한다. 태거가 제목과 같은 가중치를 준다. 서버도 스크랩할 때 같은 값을 뽑으므로, 이 필드는 서버가 fetch할 수 없는 페이지를 위한 것이다 (title·description·body_text와 같은 이유).
+            ///
+            /// - Remark: Generated from `#/components/schemas/LinkInput/keywords`.
+            internal var keywords: Swift.String?
             /// Creates a new `LinkInput`.
             ///
             /// - Parameters:
@@ -682,18 +686,21 @@ internal enum Components {
             ///   - title: 클라이언트가 캡처한 제목 (optional, 512바이트로 절단)
             ///   - description: 클라이언트가 캡처한 설명 (optional, 2048바이트로 절단)
             ///   - body_text: 클라이언트가 추출한 본문 평문 (optional, 32KB로 절단). 값이 있으면 서버는 이 링크의 본문 출처를 'client'로 표시하고, 이후 스크랩이 제목·설명·본문을 덮어쓰지 않는다. 태깅·요약이 이 본문을 입력으로 쓴다 — 그래서 스크랩이 실패해도 태그·요약이 나온다.
+            ///   - keywords: 발행자가 스스로 붙인 분류 (optional, 512바이트로 절단). `meta[name=keywords]`, `news_keywords`, `article:section`, `article:tag`, JSON-LD `articleSection`을 모아 콤마로 이어 붙인 값이다. **도메인 맵과 달리 사이트별 등록이 필요 없다** — 발행자가 알려주는 값이라 등록되지 않은 사이트에서도 동작한다. 태거가 제목과 같은 가중치를 준다. 서버도 스크랩할 때 같은 값을 뽑으므로, 이 필드는 서버가 fetch할 수 없는 페이지를 위한 것이다 (title·description·body_text와 같은 이유).
             internal init(
                 url: Swift.String,
                 note: Swift.String? = nil,
                 title: Swift.String? = nil,
                 description: Swift.String? = nil,
-                body_text: Swift.String? = nil
+                body_text: Swift.String? = nil,
+                keywords: Swift.String? = nil
             ) {
                 self.url = url
                 self.note = note
                 self.title = title
                 self.description = description
                 self.body_text = body_text
+                self.keywords = keywords
             }
             internal enum CodingKeys: String, CodingKey {
                 case url
@@ -701,6 +708,7 @@ internal enum Components {
                 case title
                 case description
                 case body_text
+                case keywords
             }
         }
         /// 링크 수정 요청 — note는 교체, tags는 전체 교체 (부분 추가/삭제 API 없음)

@@ -116,6 +116,7 @@ type ScrapeResult struct {
 	WordCount   *int64 // links.word_count (nil이면 NULL)
 	HasImage    bool   // og:image 존재 여부 — true면 ApplyScrape가 같은 트랜잭션에서 thumb 잡 enqueue
 	BodyText    string // links.body_text — 추출 본문(태거·요약 입력 전용, FTS·API 미노출)
+	Keywords    string // links.keywords — 발행자 분류(태거 입력 전용)
 }
 
 // SaveInput은 저장 요청. url 외는 전부 optional이며, Title/Description/BodyText는
@@ -129,6 +130,7 @@ type SaveInput struct {
 	Title       string
 	Description string
 	BodyText    string // 비어 있지 않으면 body_source='client'로 표시된다
+	Keywords    string // 발행자 분류(meta keywords·article:section). 태깅 입력 전용
 }
 
 // Normalize는 저장 입력을 검증·정제한다. **SaveLink가 스스로 호출하므로 어떤 진입점도
@@ -149,6 +151,7 @@ func (in SaveInput) Normalize() (SaveInput, error) {
 	in.Title = textutil.CleanMeta(in.Title, textutil.MaxTitle)
 	in.Description = textutil.CleanMeta(in.Description, textutil.MaxDescription)
 	in.BodyText = textutil.Clean(in.BodyText, textutil.MaxBodyText, true)
+	in.Keywords = textutil.CleanMeta(in.Keywords, textutil.MaxKeywords)
 	return in, nil
 }
 
@@ -159,6 +162,7 @@ type LinkContent struct {
 	Description string
 	Note        string
 	Body        string // 추출 본문(body_text) — 있으면 태거의 강한 신호
+	Keywords    string // 발행자 분류 — 사이트가 알려준 값이라 도메인 맵과 같은 급의 신호
 }
 
 // TagDictEntry는 태그 사전 한 항목(DB tags 행). 핸들러가 tagger.TagEntry로 변환한다.

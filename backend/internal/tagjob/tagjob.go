@@ -90,7 +90,10 @@ func toTagEntries(es []store.TagDictEntry) []tagger.TagEntry {
 }
 
 func toTaggerContent(c store.LinkContent) tagger.Content {
-	return tagger.Content{Domain: c.Domain, Title: c.Title, Description: c.Description, Note: c.Note, Body: c.Body}
+	return tagger.Content{
+		Domain: c.Domain, Title: c.Title, Description: c.Description,
+		Note: c.Note, Body: c.Body, Keywords: c.Keywords,
+	}
 }
 
 func toStoreScored(ss []tagger.ScoredTag) []store.ScoredTag {

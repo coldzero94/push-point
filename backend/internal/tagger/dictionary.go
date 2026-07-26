@@ -11,8 +11,11 @@ type Content struct {
 	Domain      string
 	Title       string
 	Description string
-	Note        string
-	Body        string
+	// Keywords는 발행자가 스스로 붙인 분류(meta keywords·article:section)다.
+	// 우리가 추측한 값이 아니라 사이트가 알려준 값이라 신호가 강하다.
+	Keywords string
+	Note     string
+	Body     string
 }
 
 // TagEntry는 사전 한 항목. store가 DB tags 테이블에서 읽어 넘긴다(태거는 store를 모른다).

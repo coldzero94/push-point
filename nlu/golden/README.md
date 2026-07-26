@@ -1,18 +1,22 @@
 # nlu/golden — 태깅 품질 golden set
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-20
+> Push-Point v2.1 — 마지막 업데이트: 2026-07-26
 
 `just eval`이 읽는 태깅 정확도 측정용 데이터셋. JSONL 형식으로 커밋한다.
 
 ## 스키마 (한 라인 = 한 링크)
 
 ```json
-{"url": "...", "snapshot": {"title": "...", "description": "...", "body_text": "..."}, "expected_tags": ["...", "..."]}
+{"url": "...", "snapshot": {"title": "...", "description": "...", "body_text": "...", "keywords": "..."}, "expected_tags": ["...", "..."]}
 ```
 
 - eval은 **네트워크 접근 0** — 태거 입력은 snapshot 필드만 사용한다. URL을 다시 fetch하지 않으므로 결과가 시점에 무관하게 재현된다.
-- snapshot은 **런타임 태거 입력과 정확히 같은 표면**이다(`title`·`description`·`body_text`, 도메인은 `url`에서 파생). 이게 train/serve skew를 없앤다 — 그래서 golden은 **프로덕션 스크랩 경로**(`pushpoint golden-capture`, go-trafilatura 본문 추출)로 캡처한다. 더 풍부한 소스에서 뜨지 않는다.
-- `meta_keywords`는 스키마에서 제외했다 — 태거(`tagger.Content`)가 소비하지 않으므로 넣으면 skew가 생긴다. 현대 웹에서 대체로 죽은 신호라, 훗날 eval이 이득을 보이면 그때 스크래퍼·태거에 함께 추가한다.
+- snapshot은 **런타임 태거 입력과 정확히 같은 표면**이다(`title`·`description`·`body_text`·`keywords`, 도메인은 `url`에서 파생). 이게 train/serve skew를 없앤다 — 그래서 golden은 **프로덕션 스크랩 경로**(`pushpoint golden-capture`, go-trafilatura 본문 추출)로 캡처한다. 더 풍부한 소스에서 뜨지 않는다.
+- `keywords`(발행자 분류)는 **2026-07-26에 추가했다.** 원래는 "현대 웹에서 대체로 죽은 신호"라 보고 제외했는데, 실측해 보니 dev 62건 중 18건, test 61건 중 23건에 실제로 있었다. 다만 스키마에 넣은 근거는 존재율이 아니라 **측정된 기여**다(아래).
+  - 본문이 **있을 때**는 Recall@3 기여가 0이다(dev·test 모두 +0.000) — 분류가 말하는 것을 본문이 이미 말하고 있다.
+  - 본문이 **없을 때** 비로소 값을 한다: dev +0.065, test +0.049. 그리고 본문이 없는 상황이 바로 이 필드가 필요한 상황이다 — 스크랩 실패·SPA·봇 차단, 즉 클라이언트 캡처 경로.
+  - 그래서 eval은 이 둘을 **따로** 낸다. 하나만 재면 "쓸모없다"와 "필수다" 중 아무 쪽으로나 읽힌다.
+  - golden은 개발자 문서가 많아 분류 보유율이 30% 안팎이지만, 실사용에서 자주 저장되는 한국어 뉴스는 거의 항상 `article:section`을 낸다. **즉 이 측정치는 실사용 이득의 하한이다.**
 - `expected_tags`는 태그 사전(`nlu/dictionary/`)에 존재하는 name만 사용한다.
 
 ## 분할: dev.jsonl 62 / test.jsonl 61
@@ -82,3 +86,18 @@ lead-3의 커버리지가 구조적으로 높아, 가드를 가진 쪽이 가드
 - URL·`expected_tags`는 사전 30태그를 고루 덮는 실제·대표 URL을 큐레이션하고(한국어 40 / 영어 60),
   `expected_tags`는 태거 출력이 아니라 **콘텐츠에 실제로 맞는 사전 태그**를 독립적으로 라벨한다(동결 규칙).
 - 도메인·content_type 비율을 유지하는 층화 샘플링. M5 시작 시 실사용 축적분으로 두 번째 셋을 추가한다.
+
+## 필드 추가 — `pushpoint golden-refill`
+
+태거가 새 필드를 쓰기 시작하면 그 필드가 없는 golden으로는 **개선을 측정할 수 없다**(Δ가 항상 0).
+그렇다고 `golden-capture`로 전체를 다시 뜨면 그 사이 바뀐 페이지 때문에 `title`·`body_text`까지
+흔들려 **이전 측정치와의 비교가 끊긴다** — test는 동결 세트라 특히 안 된다.
+
+`golden-refill`은 재fetch하되 **비어 있는 필드만** 채운다. 이미 값이 있는 필드는 건드리지 않는다:
+
+```
+go run ./cmd/pushpoint golden-refill nlu/golden/dev.jsonl > /tmp/dev.jsonl
+```
+
+- fetch에 실패한 항목은 원본 그대로 통과시킨다 — URL이 죽었다고 항목을 잃으면 세트가 조용히 줄어 지표 비교가 불가능해진다.
+- 2026-07-26 `keywords` 추가 시 실제로 이 도구로 채웠고, **다른 필드가 하나도 바뀌지 않았음을 확인한 뒤** 커밋했다(dev 18/62, test 23/61 채움, fetch 실패 0).
