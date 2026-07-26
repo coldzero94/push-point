@@ -71,6 +71,13 @@ paths:
           description: 링크 상태 필터
           schema:
             $ref: "#/components/schemas/LinkStatus"
+        - name: unopened
+          in: query
+          description: >-
+            `true`면 아직 열지 않은 링크만. 양방향 불리언이 아니다 — "다시 읽은 것" 필터는
+            쓰이지 않는다. 부분 인덱스가 있어 keyset 커서가 그대로 탄다.
+          schema:
+            type: boolean
       responses:
         "200":
           description: 링크 목록 페이지
@@ -208,6 +215,33 @@ paths:
       responses:
         "204":
           description: 삭제 완료 (본문 없음)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/links/{id}/open:
+    post:
+      operationId: markOpened
+      tags: [links]
+      summary: 열람 기록
+      description: >
+        이 링크를 열었다는 사실만 기록한다(`opened_at`). 클라이언트는 fire-and-forget으로
+        부르고 실패해도 재시도하지 않는다 — 저장 경로 밖이라 p99 게이트와 무관하고,
+        한 번 놓친 열람 기록이 아카이브를 손상시키지 않는다.
+
+        **횟수는 세지 않는다.** 이 신호는 푸시포인트를 통과한 열람만 잡으므로(브라우저
+        히스토리·원본 앱 직접 열기는 잡히지 않는다) 구조적으로 과소집계이고, 비율이나
+        지표로 쓰면 틀린 결론을 만든다. 링크별 사실로만 쓴다.
+      parameters:
+        - $ref: "#/components/parameters/LinkId"
+      responses:
+        "204":
+          description: 기록 완료 (본문 없음)
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -689,7 +723,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/Link"
         - type: object
-          required: [author, published_at, duration_sec, word_count, lang, summary, error, jobs]
+          required: [author, published_at, duration_sec, word_count, lang, summary, error, jobs, opened_at]
           properties:
             author:
               type: string
@@ -709,6 +743,14 @@ components:
               type: [integer, "null"]
             lang:
               type: string
+            opened_at:
+              description: >-
+                마지막으로 이 링크를 연 시각. 한 번도 안 열었으면 null. **목록 항목(`Link`)에는
+                넣지 않는다** — 카드에 표시할 자리가 없으므로(상태는 2px 레일뿐) 목록
+                페이로드를 키울 이유가 없다.
+              oneOf:
+                - $ref: "#/components/schemas/EpochSeconds"
+                - type: "null"
             error:
               type: string
               description: 최종 실패 사유. 실패 없으면 빈 문자열

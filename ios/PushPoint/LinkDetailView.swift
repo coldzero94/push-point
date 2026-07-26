@@ -224,6 +224,15 @@ struct LinkDetailView: View {
         }
     }
 
+    /// 원문 열기 — 여는 동작은 그대로 두고 **열었다는 사실만** 기록한다.
+    ///
+    /// fire-and-forget이다. 실패해도 재시도하지 않는다 — 저장 경로 밖이고, 계측이
+    /// 원문을 여는 흐름을 방해하면 본말이 전도된다.
+    private func recordOpen() {
+        guard let client = backend.client else { return }
+        Task { _ = try? await client.markOpened(.init(path: .init(id: linkID))) }
+    }
+
     private func openButton(_ d: Components.Schemas.LinkDetail) -> some View {
         Link(destination: URL(string: d.value1.url) ?? URL(string: "https://example.com")!) {
             Text("원문 열기")
@@ -234,6 +243,7 @@ struct LinkDetailView: View {
                 .background(PP.Palette.accent)
                 .clipShape(RoundedRectangle(cornerRadius: PP.Radius.control, style: .continuous))
         }
+        .simultaneousGesture(TapGesture().onEnded { recordOpen() })
     }
 
     private func absoluteTime(_ epoch: Int) -> String {

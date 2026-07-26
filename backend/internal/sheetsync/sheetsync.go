@@ -132,7 +132,7 @@ func Run(ctx context.Context, tr Transport, dataDir, tab string) (int, error) {
 	rows := [][]any{Header}
 	cursor := ""
 	for {
-		links, next, err := st.ListLinks(ctx, cursor, PageSize, "", "")
+		links, next, err := st.ListLinks(ctx, cursor, PageSize, "", "", false)
 		if err != nil {
 			return 0, fmt.Errorf("sheets: 링크 조회 실패: %w", err)
 		}

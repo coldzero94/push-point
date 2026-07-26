@@ -158,7 +158,8 @@ func toAPIDetail(d *store.LinkDetail) gen.LinkDetail {
 		DurationSec: intPtr64(d.DurationSec),
 		WordCount:   intPtr64(d.WordCount),
 		Lang:        d.Lang,
-		Summary:     d.Summary, // 상세 전용 — 목록·검색 매핑에는 없다(계약이 그렇게 좁다)
+		Summary:     d.Summary,            // 상세 전용 — 목록·검색 매핑에는 없다(계약이 그렇게 좁다)
+		OpenedAt:    intPtr64(d.OpenedAt), // 상세 전용 — 카드에는 표시할 자리가 없다
 		Error:       d.Error,
 	}
 	// 잡이 아직 없는 kind는 store가 빈 문자열을 준다 → 계약상 필드 생략(nil).
@@ -275,7 +276,8 @@ func (s *Server) ListLinks(ctx context.Context, request gen.ListLinksRequestObje
 	if err != nil {
 		return nil, err
 	}
-	items, next, err := s.store.ListLinks(ctx, cursorOf(request.Params.Cursor), limit, tag, status)
+	unopened := request.Params.Unopened != nil && *request.Params.Unopened
+	items, next, err := s.store.ListLinks(ctx, cursorOf(request.Params.Cursor), limit, tag, status, unopened)
 	if err != nil {
 		if errors.Is(err, store.ErrInvalidCursor) {
 			return nil, badRequestErr("invalid cursor")
@@ -348,6 +350,20 @@ func (s *Server) RetryLink(ctx context.Context, request gen.RetryLinkRequestObje
 		return nil, err
 	}
 	return gen.RetryLink202JSONResponse{Id: request.Id, Status: gen.LinkStatusPending}, nil
+}
+
+// MarkOpened — 이 링크를 열었다는 사실만 기록한다.
+//
+// 클라이언트는 fire-and-forget으로 부른다. 저장 경로 밖이라 p99 게이트와 무관하고,
+// 한 번 놓친 열람 기록이 아카이브를 손상시키지 않으므로 재시도 큐를 두지 않는다.
+func (s *Server) MarkOpened(ctx context.Context, request gen.MarkOpenedRequestObject) (gen.MarkOpenedResponseObject, error) {
+	if err := s.store.MarkOpened(ctx, int64(request.Id)); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return gen.MarkOpened404JSONResponse{NotFoundJSONResponse: gen.NotFoundJSONResponse(apiErr(gen.ErrorErrorCodeNotFound, "link not found"))}, nil
+		}
+		return nil, err
+	}
+	return gen.MarkOpened204Response{}, nil
 }
 
 // Search — q 3자 이상 FTS5(mode=fts) / 미만 LIKE 폴백(mode=like). 분기는 store 책임.

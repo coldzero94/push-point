@@ -263,15 +263,16 @@ func (s *sqliteStore) GetLink(ctx context.Context, id int64) (*LinkDetail, error
 		publishedAt sql.NullInt64
 		durationSec sql.NullInt64
 		wordCount   sql.NullInt64
+		openedAt    sql.NullInt64
 	)
 	err := s.db.Reader.QueryRowContext(ctx, `
 		SELECT id, url, domain, title, description, author, content_type, lang,
 		       published_at, duration_sec, word_count, thumb_path, note, status, error,
-		       created_at, updated_at, summary
+		       created_at, updated_at, summary, opened_at
 		FROM links WHERE id = ? AND deleted_at IS NULL`, id,
 	).Scan(&d.ID, &d.URL, &d.Domain, &d.Title, &d.Description, &d.Author, &d.ContentType, &d.Lang,
 		&publishedAt, &durationSec, &wordCount, &thumb, &d.Note, &d.Status, &d.Error,
-		&d.CreatedAt, &d.UpdatedAt, &d.Summary)
+		&d.CreatedAt, &d.UpdatedAt, &d.Summary, &openedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -289,6 +290,9 @@ func (s *sqliteStore) GetLink(ctx context.Context, id int64) (*LinkDetail, error
 	}
 	if wordCount.Valid {
 		d.WordCount = &wordCount.Int64
+	}
+	if openedAt.Valid {
+		d.OpenedAt = &openedAt.Int64
 	}
 
 	// 부착 태그
@@ -345,7 +349,7 @@ func (s *sqliteStore) GetLink(ctx context.Context, id int64) (*LinkDetail, error
 }
 
 // ListLinks는 keyset 커서 목록 — (created_at, id) < (?, ?), OFFSET 금지.
-func (s *sqliteStore) ListLinks(ctx context.Context, cursor string, limit int, tag, status string) ([]Link, string, error) {
+func (s *sqliteStore) ListLinks(ctx context.Context, cursor string, limit int, tag, status string, unopened bool) ([]Link, string, error) {
 	var (
 		sb   strings.Builder
 		args []any
@@ -363,6 +367,10 @@ func (s *sqliteStore) ListLinks(ctx context.Context, cursor string, limit int, t
 	if status != "" {
 		sb.WriteString(` AND l.status = ?`)
 		args = append(args, status)
+	}
+	if unopened {
+		// 부분 인덱스 idx_links_unopened가 이 조건과 정렬을 함께 탄다.
+		sb.WriteString(` AND l.opened_at IS NULL`)
 	}
 	if cursor != "" {
 		ca, cid, err := DecodeCursor(cursor)

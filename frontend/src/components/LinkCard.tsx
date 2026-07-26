@@ -27,6 +27,7 @@ import type { TagFacet } from '../lib/tags/facet'
 import type { Link, LinkTag } from '../lib/api/types'
 import { linkDisplayTitle } from '../lib/api/types'
 import { formatAbsoluteTime, formatRelativeTime, toIso } from '../lib/time'
+import { markOpened } from '../lib/api/markOpened'
 
 /**
  * The board's column ladder, declared once so every board (list, save) and every
@@ -158,7 +159,10 @@ export function LinkCard({
               href={link.url}
               target="_blank"
               rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                markOpened(link.id)
+              }}
               className="fill-step clamp-2 relative text-title text-fg-1 hover:underline"
               data-in={titleFilled}
               inert={titleFilled ? undefined : true}
@@ -226,8 +230,11 @@ export function LinkCard({
               <a
                 href={link.url}
                 target="_blank"
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
+                  rel="noreferrer"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  markOpened(link.id)
+                }}
                 aria-label="원문 열기"
                 className="flex h-24 items-center justify-center rounded-control px-6 text-fg-2 opacity-0 transition-opacity duration-(--dur-out) ease-ui hover:bg-hover focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
               >

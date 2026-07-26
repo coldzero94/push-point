@@ -25,6 +25,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { dominantFacet, makeFacetResolver } from '../lib/tags/facet'
 import { linkDisplayTitle } from '../lib/api/types'
 import type { LinkDetail, LinkTag } from '../lib/api/types'
+import { markOpened } from '../lib/api/markOpened'
 import { errorMessage } from '../lib/api/client'
 import { consumeInspectorFocus } from '../lib/keyboard/inspectorFocus'
 import { formatCount, formatDateTime, formatDay, formatDuration } from '../lib/datetime'
@@ -412,7 +413,13 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                 <div className="mt-16 flex flex-col gap-16">
                   {/* actions */}
                   <div className="flex flex-wrap items-center gap-8">
-                    <a href={link.url} target="_blank" rel="noreferrer" className={PRIMARY_ANCHOR}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => markOpened(link.id)}
+                      className={PRIMARY_ANCHOR}
+                    >
                       <Icon icon={ExternalLink} size={16} />
                       원문 열기
                     </a>
@@ -501,6 +508,12 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                   <Section label="메타">
                     <dl className="flex flex-col gap-6">
                       <MetaRow label="저장" value={formatDateTime(link.created_at)} mono />
+                      {/* 마지막 열람 — 링크별 사실 하나. 비율도 횟수도 없다:
+                          이 신호는 푸시포인트를 통과한 열람만 잡으므로 구조적으로
+                          과소집계이고, 지표로 쓰면 틀린 결론을 만든다. */}
+                      {link.opened_at ? (
+                        <MetaRow label="마지막 열람" value={formatDateTime(link.opened_at)} mono />
+                      ) : null}
                       {link.published_at != null ? <MetaRow label="발행" value={formatDay(link.published_at)} mono /> : null}
                       {link.author ? <MetaRow label="작성자" value={link.author} /> : null}
                       <MetaRow label="종류" value={link.content_type} />
