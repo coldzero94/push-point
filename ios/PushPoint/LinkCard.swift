@@ -35,22 +35,29 @@ struct LinkCard: View {
     // MARK: - 커버
 
     private var cover: some View {
-        // 종횡비를 고정해 커버가 늦게 와도 레이아웃이 흔들리지 않는다(CLS 0).
-        ZStack {
-            if let thumb = link.thumb_url, let url = resolveThumb(thumb) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    // 로드 전에도 회색을 보이지 않는다 — R4.
+        // 슬롯이 먼저 크기를 정하고 내용이 그 안을 채운다. 이미지에 종횡비를 걸면
+        // AsyncImage가 자기 비율로 컨테이너를 밀어서 사진마다 카드 높이가 달라진다 —
+        // 실제로 썸네일 있는 카드만 3:1이 안 먹었다. 빈 슬롯이 치수를 확정하므로
+        // 커버가 늦게 와도 레이아웃이 흔들리지 않는다(CLS 0).
+        Color.clear
+            // 3:1 — **iOS만의 의도적 편차**다. 웹의 16:9(§4.4)는 보드가 2~3열이라
+            // 카드 하나가 화면의 1/3이지만, 아이폰은 1열이라 같은 종횡비가 화면당
+            // 2장으로 이어진다. 커버는 "무엇이었는지 알아보는" 역할이면 충분하고,
+            // 그 역할에 화면의 절반을 쓸 이유가 없다.
+            .aspectRatio(3, contentMode: .fit)
+            .overlay {
+                if let thumb = link.thumb_url, let url = resolveThumb(thumb) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        // 로드 전에도 회색을 보이지 않는다 — R4.
+                        GeneratedCover(domain: link.domain, facet: dominantFacet)
+                    }
+                } else {
                     GeneratedCover(domain: link.domain, facet: dominantFacet)
                 }
-            } else {
-                GeneratedCover(domain: link.domain, facet: dominantFacet)
             }
-        }
-        .frame(maxWidth: .infinity)
-        .aspectRatio(2, contentMode: .fit)
-        .clipped()
+            .clipped()
     }
 
     // MARK: - 본문

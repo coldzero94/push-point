@@ -47,9 +47,8 @@ struct StatsView: View {
                     streakBlock(stats).reveal(0)
                     rhythm(stats).reveal(1)
                     weekly(stats).reveal(2)
-                    composition(stats).reveal(3)
-                    topTags(stats).reveal(4)
-                    needsAttention().reveal(5)
+                    topTags(stats).reveal(3)
+                    needsAttention().reveal(4)
                 }
             }
         } else if let loadError {
@@ -103,8 +102,8 @@ struct StatsView: View {
         }
 
         // 무엇에 관심이 갔나 — facet 라벨은 웹과 같은 단어를 쓴다(§8.1).
-        let parts = facetShares(s)
-        if let top = parts.max(by: { $0.count < $1.count }), top.facet != .neutral {
+        // 아래 목록의 묶음과 같은 계산을 써서 문장과 화면이 어긋나지 않게 한다.
+        if let top = groupedTags(s).max(by: { $0.total < $1.total }), top.facet != .neutral {
             sentences.append("주로 '\(top.facet.label)'에 관심이 갔고,")
         }
 
@@ -258,115 +257,71 @@ struct StatsView: View {
 
     // MARK: - 구성
 
-    /// facet 구성 — "요즘 나는 무엇을 모으고 있나".
-    ///
-    /// 태그를 개수순으로 늘어놓는 것은 목록이지 통찰이 아니다. 이 제품에서 색은 개별
-    /// 태그가 아니라 **facet 4개**가 갖고(§5.1), 그 넷은 각각 "만드는 것 / 형식 /
-    /// 일 바깥 / 분류 없음"이라는 서로 다른 삶의 영역이다. 그 비율이야말로 목록을
-    /// 아무리 스크롤해도 보이지 않는 값이고, 비율은 원형이 가장 정직하게 읽힌다.
-    ///
-    /// **분류 없음이 크면 그것도 신호다** — 사전이 내 관심사를 못 따라가고 있다는 뜻이라
-    /// 숨기지 않고 같이 보여준다.
-    @ViewBuilder
-    private func composition(_ s: Components.Schemas.Stats) -> some View {
-        let parts = facetShares(s)
-        let total = parts.reduce(0) { $0 + $1.count }
-        if total > 0 {
-            VStack(alignment: .leading, spacing: 12) {
-                sectionTitle("무엇을 모으고 있나", trailing: nil)
-                HStack(spacing: 20) {
-                    Chart(parts, id: \.facet) { part in
-                        SectorMark(
-                            angle: .value("건수", part.count),
-                            // 도넛으로 비우는 이유: 가운데가 비면 조각 크기를 각도로
-                            // 비교하게 되고(원판은 면적으로 착시가 생긴다), 빈 공간에
-                            // 합계를 둘 수 있다.
-                            innerRadius: .ratio(0.62),
-                            angularInset: 1.5
-                        )
-                        .foregroundStyle(part.facet.ink)
-                        .cornerRadius(2)
-                    }
-                    .frame(width: 132, height: 132)
-                    .chartLegend(.hidden)
-                    .overlay {
-                        VStack(spacing: 0) {
-                            Text("\(total)")
-                                .font(PP.Typo.head)
-                                .monospacedDigit()
-                                .foregroundStyle(PP.Palette.fg1)
-                            Text("태그").font(PP.Typo.label).foregroundStyle(PP.Palette.fg3)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 7) {
-                        ForEach(parts, id: \.facet) { part in
-                            HStack(spacing: 8) {
-                                Circle().fill(part.facet.ink).frame(width: 8, height: 8)
-                                // 한글 라벨은 웹과 같은 단어를 쓴다(§8.1).
-                                Text(part.facet.label)
-                                    .font(PP.Typo.label)
-                                    .foregroundStyle(PP.Palette.fg1)
-                                Spacer(minLength: 8)
-                                Text("\(percent(part.count, total))%")
-                                    .font(PP.Typo.metaMono)
-                                    .monospacedDigit()
-                                    .foregroundStyle(PP.Palette.fg3)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private struct FacetShare { let facet: PP.Facet; let count: Int }
-
-    /// 태그별 개수를 facet으로 접는다. 0인 facet은 빼서 범례가 비어 있지 않게 한다.
-    private func facetShares(_ s: Components.Schemas.Stats) -> [FacetShare] {
-        var sum: [PP.Facet: Int] = [:]
-        for tag in s.by_tag {
-            sum[facetOf(tag.name), default: 0] += tag.count
-        }
-        return PP.Facet.allCases
-            .compactMap { f in sum[f].map { FacetShare(facet: f, count: $0) } }
-            .filter { $0.count > 0 }
-    }
-
-    private func percent(_ value: Int, _ total: Int) -> Int {
-        total > 0 ? Int((Double(value) / Double(total) * 100).rounded()) : 0
-    }
-
     // MARK: - 태그
 
+    /// 태그를 **facet으로 묶어** 보여준다.
+    ///
+    /// 원래 여기 위에 facet 비율 도넛이 있었는데 걷어냈다. `by_tag`는 전체 기간 누적이라
+    /// 시간 축이 없어서 정작 궁금한 "요즘 관심이 어디로 옮겨갔나"를 계산할 수 없고,
+    /// 남는 것은 거의 변하지 않는 비율을 내부 분류 용어로, 아무 데도 닿지 않게 보여주는
+    /// 차트뿐이었다. 차트를 하나 더 만드는 대신 **구성이 목록의 구조로 보이게** 했다 —
+    /// 묶음을 보면 비율이 읽히고, 모든 줄은 그 태그의 목록으로 간다.
     @ViewBuilder
     private func topTags(_ s: Components.Schemas.Stats) -> some View {
-        if !s.by_tag.isEmpty {
-            let top = Array(s.by_tag.prefix(6))
-            let maxCount = top.map(\.count).max() ?? 1
-            VStack(alignment: .leading, spacing: 10) {
-                sectionTitle("자주 붙은 태그", trailing: "누르면 그 목록으로")
-                VStack(spacing: 6) {
-                    ForEach(top, id: \.name) { tag in
-                        // 누르면 그 태그의 목록으로 — 통계가 막다른 길이 되지 않게 한다.
-                        Button { onFilter(.tag(tag.name)) } label: {
-                            tagRow(tag, maxCount: maxCount)
+        let groups = groupedTags(s)
+        if !groups.isEmpty {
+            VStack(alignment: .leading, spacing: 16) {
+                sectionTitle("무엇을 모았나", trailing: "누르면 그 목록으로")
+                ForEach(groups, id: \.facet) { group in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 7) {
+                            Circle().fill(group.facet.ink).frame(width: 7, height: 7)
+                            // 한글 라벨은 웹과 같은 단어다(§8.1).
+                            Text(group.facet.label)
+                                .font(PP.Typo.label)
+                                .foregroundStyle(PP.Palette.fg2)
+                            Text("\(group.total)")
+                                .font(PP.Typo.metaMono)
+                                .monospacedDigit()
+                                .foregroundStyle(PP.Palette.fg3)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.bottom, 2)
+
+                        ForEach(group.tags, id: \.name) { tag in
+                            Button { onFilter(.tag(tag.name)) } label: {
+                                tagRow(tag, facet: group.facet)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
             }
         }
     }
 
-    /// 막대를 쓰지 않는다. facet **tint**는 칩 배경용이라 그 위에 잉크 글씨가 얹힐 때만
-    /// 구분되고, 단독 채움으로 쓰면 셋 다 "연한 무언가"로 뭉개진다 — 실제로 그렇게 보였다.
-    /// 비율은 위 도넛이 이미 말하므로 여기서는 **소속(점)과 개수**만 보여주면 된다.
-    private func tagRow(_ tag: Components.Schemas.Stats.by_tagPayloadPayload, maxCount: Int) -> some View {
+    private struct TagGroup {
+        let facet: PP.Facet
+        let tags: [Components.Schemas.Stats.by_tagPayloadPayload]
+        var total: Int { tags.reduce(0) { $0 + $1.count } }
+    }
+
+    /// facet 순서는 고정(craft → media → life → neutral)이다. 개수순으로 묶음을
+    /// 재배치하면 화면을 열 때마다 같은 태그가 다른 자리에 있어 위치 기억이 무너진다.
+    private func groupedTags(_ s: Components.Schemas.Stats) -> [TagGroup] {
+        var byFacet: [PP.Facet: [Components.Schemas.Stats.by_tagPayloadPayload]] = [:]
+        for tag in s.by_tag {
+            byFacet[facetOf(tag.name), default: []].append(tag)
+        }
+        return PP.Facet.allCases.compactMap { facet in
+            guard let tags = byFacet[facet], !tags.isEmpty else { return nil }
+            return TagGroup(facet: facet, tags: tags.sorted { $0.count > $1.count })
+        }
+    }
+
+    /// 개수는 오른쪽 정렬 고정폭이라 세로로 훑을 때 자릿수가 맞는다.
+    private func tagRow(_ tag: Components.Schemas.Stats.by_tagPayloadPayload,
+                        facet: PP.Facet) -> some View {
         HStack(spacing: 10) {
-            Circle()
-                .fill(facetOf(tag.name).ink)
-                .frame(width: 8, height: 8)
             Text(tag.name)
                 .font(PP.Typo.body)
                 .tracking(PP.Tracking.body)
@@ -381,7 +336,9 @@ struct StatsView: View {
                 .font(PP.Typo.label)
                 .foregroundStyle(PP.Palette.fg3)
         }
+        .padding(.leading, 14) // facet 점 아래로 들여써서 묶음이 보이게
         .padding(.vertical, 5)
+        .contentShape(Rectangle())
     }
 
     // MARK: - 손이 필요한 것
