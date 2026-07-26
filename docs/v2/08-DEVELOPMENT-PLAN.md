@@ -287,7 +287,7 @@ extension(`var title: String { value1.title }`)을 두어 문제를 그 자리�
 - 성능 튜닝: `/debug/pprof` 프로파일링, `just bench-http` 회귀 확인
 
 **Week 4**
-- `scripts/streak.sh` (`GET /api/v1/stats`의 by_day 기반) — **최근 28일 연속 count > 0** 확인
+- ~~`scripts/streak.sh`~~ — **2026-07-26 구현 완료**(`just streak`). 연속 정의는 iOS `StatsView`와 같다(오늘 아직 저장 안 했으면 어제부터 센다). M6에는 판정만 남는다
 - "LLM 없이 만든 자동 태깅" 기술 글 1편 공개 — M5부터 축적한 메모의 퇴고만
 
 ---
