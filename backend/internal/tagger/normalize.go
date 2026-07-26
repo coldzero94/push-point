@@ -10,6 +10,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // particles는 벗겨낼 한국어 조사. 긴 것부터 검사해야 "자동으로"에서 '으로'를 벗겨
@@ -33,6 +35,21 @@ const minStem = 2
 // 조사는 어간이 minStem 룬 이상으로 남을 때만 벗긴다("평가"의 '가'는 보존). 영어·숫자
 // 토큰은 조사 접미가 없으니 소문자화만 된다("Hello"→"hello", "said"→"said").
 func Normalize(tok string) string {
+	// **NFC로 먼저 합성한다.** 한글은 "한"(U+D55C) 한 글자로도, "ᄒ+ᅡ+ᆫ"(U+1112 U+1161
+	// U+11AB) 세 코드포인트로도 표현된다. 눈에는 똑같고 바이트는 다르다.
+	//
+	// 이걸 안 하면 사전 매칭이 통째로 빗나간다. golden을 NFD로 바꿔 재면
+	// **dev 0.952 → 0.710, test 0.885 → 0.689**이다(2026-07-26 실측). 정규화가 없으면
+	// 그냥 나빠지는 게 아니라 한국어 태깅의 3분의 1이 사라진다.
+	//
+	// 도달 경로는 가설이 아니다: macOS 파일명은 NFD이고, 일부 웹 폼·클립보드·iOS 공유
+	// 경로가 NFD를 그대로 넘긴다. 그리고 **증상이 조용하다** — 태그가 덜 붙을 뿐
+	// 오류도 로그도 없어서, 그날 저장한 것들만 태그가 없는 채로 남는다.
+	//
+	// 여기 두는 이유: `Normalize`는 사전 매칭과 `corpus_df` 누적이 **둘 다 지나는**
+	// 유일한 관문이다(이 파일 머리 주석의 규약). 한쪽만 정규화하면 누적 키와 조회 키가
+	// 갈라져 df가 조용히 0에 머문다.
+	tok = norm.NFC.String(tok)
 	tok = strings.ToLower(strings.TrimFunc(tok, isTrimPunct))
 	if tok == "" {
 		return ""
