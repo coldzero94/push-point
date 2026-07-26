@@ -43,7 +43,11 @@ struct TagEditor: View {
                                 row(name, facet: facet)
                             }
                         } header: {
-                            Text(heading(for: facet))
+                            // PP.Facet.label을 쓴다. 여기서 문구를 새로 적으면 웹·디자인
+                            // 문서와 갈라지는데, 실제로 그렇게 갈라진 적이 있다 —
+                            // DesignSystem.swift에 "두 클라이언트가 같은 단어를 써야 한다"고
+                            // 적혀 있는데도 40줄 옆에서 다른 문구를 하드코딩했다.
+                            Text(facet.label)
                                 .font(PP.Typo.label)
                                 .foregroundStyle(PP.Palette.fg3)
                         }
@@ -98,14 +102,5 @@ struct TagEditor: View {
 
     private func names(in facet: PP.Facet) -> [String] {
         dictionary.filter { $0.value == facet }.keys.sorted()
-    }
-
-    private func heading(for facet: PP.Facet) -> String {
-        switch facet {
-        case .craft: "만드는 것"
-        case .media: "보는 것"
-        case .life: "사는 것"
-        case .neutral: "그 밖"
-        }
     }
 }

@@ -211,10 +211,22 @@ func TestSaveRejectsBadInput(t *testing.T) {
 // 이 패키지의 존재 이유를 지키는 테스트다. scraper를 실수로 import하면 확장의
 // RSS가 13.4MB → 64.2MB로 뛰어 메모리 예산을 위협하는데, 그건 **빌드도 테스트도
 // 통과하면서** 조용히 벌어진다. 그래서 의존성 그래프를 직접 본다.
-func TestExtensionBudget_noHeavyDeps(t *testing.T) {
-	// go가 아예 없을 때만 건너뛴다. 아무 exec 오류에나 Skip을 걸면 빌드가 깨져
-	// go list가 실패하는 순간 이 가드가 조용히 사라진다 — 그건 이 테스트가 막으려는
-	// 실패 양상과 정확히 같다(CI에는 항상 툴체인이 있다).
+// 확장이 링크하는 **모듈 전체**를 고정한다 — 금지 목록이 아니라 허용 목록이다.
+//
+// 원래는 `{scraper, trafilatura, goquery, ...}` 이름 목록이었는데, 그건 **이미 아는 것만**
+// 막는다. 실제 위험은 아직 없는 의존이다: M5가 ONNX 추론을 `internal/tagger`에 넣기로
+// 돼 있고(`.claude/rules/nlu.md`), 의존 사슬 `ppshare → tagjob → tagger`에는 분기가 없다.
+// 즉 M5가 무거운 라이브러리를 들여오면 **확장이 자동으로 링크하는데 테스트도 빌드도
+// 초록이다.** 회귀가 드러나는 유일한 창구는 실기기이고 그건 아직 없다.
+//
+// 여기 목록을 손대는 것 자체는 잘못이 아니다 — 다만 **손대는 순간 판단이 필요하다**는
+// 것이 요점이다. 확장 예산(~120MB)은 추측이 아니라 실측으로만 판정한다:
+// 08 §M4의 RSS 표를 갱신하고 그 수치와 함께 이 목록에 추가하라.
+//
+// scraper를 링크만 해도 RSS가 13.4MB → 64.2MB로 뛴 것이 이 가드가 있는 이유다.
+func TestExtensionBudget_moduleAllowlist(t *testing.T) {
+	// go가 아예 없을 때만 건너뛴다. 아무 exec 오류에나 Skip을 걸면 빌드가 깨지는 순간
+	// 이 가드가 조용히 사라진다 — 그건 이 테스트가 막으려는 실패 양상과 정확히 같다.
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skipf("go 툴체인 없음 — 건너뜀: %v", err)
 	}
@@ -222,13 +234,41 @@ func TestExtensionBudget_noHeavyDeps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go list -deps 실패 — 의존성 가드를 확인할 수 없다: %v", err)
 	}
-	// scraper 자신과, scraper만 끌고 오는 무거운 라이브러리들.
-	banned := []string{"internal/scraper", "trafilatura", "go-readability", "domdistiller", "goquery"}
+
+	// 2026-07-26 실측. 접두어로 비교한다(하위 패키지가 전부 걸리도록).
+	allowed := []string{
+		"github.com/coby/push-point/",
+		"github.com/dustin/go-humanize",
+		"github.com/golang-migrate/migrate/",
+		"github.com/google/uuid",
+		"github.com/mattn/go-isatty",
+		"github.com/ncruces/go-strftime",
+		"github.com/remyoudompheng/bigfft",
+		"golang.org/x/",
+		"modernc.org/libc",
+		"modernc.org/mathutil",
+		"modernc.org/memory",
+		"modernc.org/sqlite",
+	}
+
 	for _, dep := range strings.Split(string(out), "\n") {
-		for _, b := range banned {
-			if strings.Contains(dep, b) {
-				t.Errorf("확장 바인드가 %q를 링크한다 — RSS가 ~50MB 늘어 메모리 예산을 위협한다 (경유: %s)", b, dep)
+		dep = strings.TrimSpace(dep)
+		// 표준 라이브러리는 첫 경로 요소에 점이 없다.
+		first, _, _ := strings.Cut(dep, "/")
+		if dep == "" || !strings.Contains(first, ".") {
+			continue
+		}
+		ok := false
+		for _, a := range allowed {
+			if strings.HasPrefix(dep, a) {
+				ok = true
+				break
 			}
+		}
+		if !ok {
+			t.Errorf("확장 바인드가 목록에 없는 %q를 링크한다.\n"+
+				"확장 메모리 예산(~120MB)은 실측으로만 판정한다 — 08 §M4의 RSS 표를 "+
+				"갱신하고 그 수치와 함께 이 목록에 추가하라. scraper는 링크만 해도 +51MB였다.", dep)
 		}
 	}
 }
