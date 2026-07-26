@@ -59,7 +59,10 @@ func runEval(args []string) error {
 	fmt.Printf("사전 %d개 태그 로드 (fresh 마이그레이션 시드)\n", len(id2name))
 
 	ran := false
-	for _, name := range []string{"dev", "test"} {
+	// wild는 **dev/test와 합치지 않고 따로 낸다.** 합치면 하나의 평균 뒤로 숨는데,
+	// 이 세트의 존재 이유가 정확히 그 평균이 가리던 격차를 보이게 하는 것이다
+	// (2026-07-26 실측: dev 0.952 / test 0.918 vs wild 0.710).
+	for _, name := range []string{"dev", "test", "wild"} {
 		path := filepath.Join(dir, name+".jsonl")
 		entries, err := loadGolden(path)
 		if err != nil {
@@ -84,7 +87,7 @@ func runEval(args []string) error {
 		evalSet(strings.ToUpper(name), entries, d, id2name)
 	}
 	if !ran {
-		return fmt.Errorf("eval: golden 파일이 없습니다 (%s/{dev,test}.jsonl) — golden-capture로 만드세요", dir)
+		return fmt.Errorf("eval: golden 파일이 없습니다 (%s/{dev,test,wild}.jsonl) — golden-capture로 만드세요", dir)
 	}
 	fmt.Println("\n측정치는 기록용이다 (M3엔 게이트 없음 — 게이트는 M5 진입, 동결 test 기준).")
 	return nil
