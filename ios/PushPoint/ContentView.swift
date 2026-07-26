@@ -122,9 +122,12 @@ struct ContentView: View {
             }
         }
         // 방향으로 성격을 나눈다. **오른쪽 끝은 파괴적인 것만** — iOS 전반의 관용이고,
-        // 그래야 손이 기억한 방향이 다른 화면에서 배신하지 않는다. 왼쪽 끝은 되돌릴 수
-        // 있는 것: 실패한 링크는 재시도가 가장 필요한 동작이므로 그 자리를 내주고,
-        // 정상 링크는 원문 열기를 둔다.
+        // 그래야 손이 기억한 방향이 다른 화면에서 배신하지 않는다.
+        //
+        // 왼쪽 끝은 되돌릴 수 있는 것. 정상 링크에는 **공유**를 둔다 — 원문 열기는
+        // 카드를 눌러 들어간 상세의 기본 버튼과 같은 동작이라 여기 두면 중복이고,
+        // "저장한 것을 남에게 보낸다"는 목록에서만 할 수 있는 다른 동작이다.
+        // 실패한 링크는 공유할 내용 자체가 없으므로 재시도가 그 자리를 가져간다.
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             if link.status == .failed {
                 Button { Task { await retry(link) } } label: {
@@ -132,13 +135,17 @@ struct ContentView: View {
                 }
                 .tint(PP.Palette.warn)
             } else if let url = URL(string: link.url) {
-                Link(destination: url) { Label("원문", systemImage: "safari") }
+                // 원문 URL만 보낸다. "via Push-Point" 같은 꼬리표는 붙이지 않는다 —
+                // 받는 쪽 메시지를 지저분하게 만들고, 이 앱은 단일 사용자가 전제라
+                // (CLAUDE.md) 홍보로 얻을 것도 없다.
+                ShareLink(item: url) { Label("공유", systemImage: "square.and.arrow.up") }
                     .tint(PP.Palette.accent)
             }
         }
         .contextMenu {
             if let url = URL(string: link.url) {
                 Link(destination: url) { Label("원문 열기", systemImage: "safari") }
+                ShareLink(item: url) { Label("공유", systemImage: "square.and.arrow.up") }
             }
             Button(role: .destructive) { Task { await delete(link) } } label: {
                 Label("삭제", systemImage: "trash")

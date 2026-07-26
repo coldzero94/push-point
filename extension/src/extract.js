@@ -58,14 +58,47 @@ function metaContent(doc, ...keys) {
   return '';
 }
 
-/** 본문 컨테이너를 고른다 — 가장 앞선 후보 중 텍스트가 충분한 것. */
+/**
+ * 본문 컨테이너를 고른다.
+ *
+ * 1순위는 시맨틱 후보(article, main 등)다. 맞으면 가장 정확하다.
+ *
+ * 2순위는 **문단 밀도**다. 시맨틱 태그를 안 쓰는 사이트에서 곧바로 body로 폴백하면
+ * 페이지 크롬이 통째로 본문이 된다 — marketwatch.com에서 실제로 그랬고, 캡처된 본문이
+ * 사이트 검색 UI와 시세 티커("DJIA51947.250.46%S&P 500...")로 시작했다. 그 상태로는
+ * 광고 셀렉터를 아무리 늘려도 못 막는다. 크롬에는 `<p>`가 거의 없다는 성질을 쓰면
+ * 목록·티커·내비게이션을 한 번에 걸러낼 수 있다.
+ */
 function pickRoot(doc) {
   for (const sel of ROOT_SELECTORS) {
     const el = doc.querySelector(sel);
     // 후보가 껍데기뿐인 사이트가 있어 최소 길이로 거른다.
     if (el && (el.innerText || '').trim().length > 200) return el;
   }
-  return doc.body;
+  return pickByParagraphDensity(doc) || doc.body;
+}
+
+/**
+ * 문단 텍스트가 가장 많은 컨테이너를 고른다.
+ *
+ * 후보의 **직계 자식** `<p>`만 센다. 조상까지 세면 body가 항상 이기므로 의미가 없다.
+ * 동점이면 더 깊은(= 더 좁은) 쪽이 낫다 — 얕은 컨테이너일수록 크롬을 더 안고 있다.
+ */
+function pickByParagraphDensity(doc) {
+  let best = null;
+  let bestLen = 0;
+  for (const el of doc.querySelectorAll('article, main, section, div')) {
+    let len = 0;
+    for (const child of el.children) {
+      if (child.tagName === 'P') len += (child.textContent || '').trim().length;
+    }
+    // 문단 몇 줄로는 본문이라 하기 어렵다. 요약 가드(200룬)와 같은 자릿수로 둔다.
+    if (len > bestLen && len > 200) {
+      best = el;
+      bestLen = len;
+    }
+  }
+  return best;
 }
 
 /**
