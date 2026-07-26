@@ -14,6 +14,9 @@ const (
 	wNote    = 1.0 // 개인 메모 매칭: 매칭당
 	wBody    = 1.0 // 본문 매칭: 매칭당 (matchCap이 본문 반복 스터핑을 억제)
 	matchCap = 3   // 한 필드에서 한 태그의 기여 상한 (키워드 스터핑 방지)
+	// minBodyCorroborated는 제목·설명·도메인이 이미 같은 태그를 가리킬 때 본문에
+	// 요구하는 최소 횟수. 다른 신호가 뒷받침하므로 두 번이면 충분하다.
+	minBodyCorroborated = 2
 	// minBodyMatches는 본문 단독 신호가 인정받는 최소 횟수.
 	//
 	// 설명은 200자라 한 번 나오면 글의 주제일 가능성이 높지만, 본문은 32KB까지 가므로
@@ -24,7 +27,14 @@ const (
 	// 무게(wBody)를 깎는 대신 최소 횟수를 두는 이유: 무게를 깎으면 3회 이상 나온
 	// **강한** 본문 신호까지 같이 약해져 도메인 히트에 밀린다. 여기서 걸러야 할 것은
 	// 약한 신호 하나뿐이다.
-	minBodyMatches = 2
+	//
+	// **본문만이 유일한 근거일 때는 더 요구한다.** 제목과 설명은 글이 스스로를 요약한
+	// 것이라, 거기에 한 번도 안 나오는 단어는 대개 스쳐 지나간 것이다 — 이강인 이적
+	// 기사에 ai가 붙은 실사용 사례가 그랬다. 본문의 두 번이 "AI로 만든 티저 영상"과
+	// 네이버의 안내 문구("본문의 검색 링크는 AI 자동 인식으로 제공됩니다")였는데,
+	// 둘 다 글의 주제와 무관하다. 특정 사이트의 문구를 지목해 지우는 대신, 어디에서
+	// 왔든 뒷받침 없는 본문 언급의 기준을 올린다.
+	minBodyMatches = 3
 	// longBodyRunes는 위 규칙이 적용되기 시작하는 길이. 근거는 "긴 문서"라는 조건 자체다 —
 	// 짧은 본문에서는 한 번 언급이 곧 주제이므로(설명 필드와 다를 바 없다) 걸러선 안 된다.
 	// 설명 상한(2048바이트)과 같은 자릿수로 잡아, 그보다 짧은 본문은 설명처럼 취급한다.
@@ -48,12 +58,17 @@ func Classify(c Content, d *Dictionary) []ScoredTag {
 	addField(score, d, c.Title, wTitle)
 	addField(score, d, c.Description, wDesc)
 	addField(score, d, c.Note, wNote)
-	// 본문은 길 때만 최소 매칭 횟수를 요구한다.
-	bodyMin := 1
+	// 본문은 길 때만 최소 매칭 횟수를 요구하고, 그 기준은 다른 신호의 뒷받침 여부로
+	// 갈린다. 여기까지의 score에 있는 태그 = 도메인·제목·설명이 이미 가리킨 태그다.
 	if utf8.RuneCountInString(c.Body) > longBodyRunes {
-		bodyMin = minBodyMatches
+		corroborated := make(map[int64]bool, len(score))
+		for id := range score {
+			corroborated[id] = true
+		}
+		addBody(score, d, c.Body, corroborated)
+	} else {
+		addFieldMin(score, d, c.Body, wBody, 1)
 	}
-	addFieldMin(score, d, c.Body, wBody, bodyMin)
 
 	out := make([]ScoredTag, 0, len(score))
 	for id, s := range score {
@@ -78,6 +93,28 @@ func Classify(c Content, d *Dictionary) []ScoredTag {
 // addField는 한 필드를 토큰화·매칭해 태그별 (상한 적용) 매칭 수 × weight를 score에 더한다.
 func addField(score map[int64]float64, d *Dictionary, text string, weight float64) {
 	addFieldMin(score, d, text, weight, 1)
+}
+
+// addBody는 본문 매칭을 더한다. 뒷받침이 있는 태그와 없는 태그에 서로 다른 최소
+// 횟수를 적용한다 — 같은 두 번이라도 제목이 거드는 두 번과 본문에만 있는 두 번은
+// 증거로서 무게가 다르다.
+func addBody(score map[int64]float64, d *Dictionary, text string, corroborated map[int64]bool) {
+	if text == "" {
+		return
+	}
+	for id, n := range d.matchField(Tokenize(text)) {
+		min := minBodyMatches
+		if corroborated[id] {
+			min = minBodyCorroborated
+		}
+		if n < min {
+			continue
+		}
+		if n > matchCap {
+			n = matchCap
+		}
+		score[id] += wBody * float64(n)
+	}
 }
 
 // addFieldMin은 min회 미만 매칭은 무시한다 — 긴 필드에서 한 번 스친 언급을 걸러낸다.

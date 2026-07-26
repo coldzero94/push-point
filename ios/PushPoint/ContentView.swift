@@ -26,8 +26,7 @@ struct ContentView: View {
         NavigationStack {
             content
                 .background(PP.Palette.canvas)
-            .navigationTitle("Push-Point")
-            .refreshable { await load() }
+                .navigationTitle("Push-Point")
             .navigationDestination(item: $opening) { target in
                 LinkDetailView(linkID: target.id, facetOf: { facets[$0] ?? .neutral })
             }
@@ -55,16 +54,35 @@ struct ContentView: View {
                                    description: Text(message))
         case .running:
             if let loadError {
-                ContentUnavailableView("목록을 불러오지 못했습니다",
-                                       systemImage: "wifi.exclamationmark",
-                                       description: Text(loadError))
+                // 빈/오류 상태도 스크롤 뷰에 담는다. ContentUnavailableView는 스크롤이
+                // 아니라서 그대로 두면 **바로 그때** — 다시 시도하고 싶은 순간 — 당겨서
+                // 새로고침이 안 된다.
+                refreshableState {
+                    ContentUnavailableView("목록을 불러오지 못했습니다",
+                                           systemImage: "wifi.exclamationmark",
+                                           description: Text(loadError))
+                }
             } else if links.isEmpty {
-                ContentUnavailableView("아직 저장한 링크가 없습니다", systemImage: "tray",
-                                       description: Text("사파리나 앱에서 공유 시트로 보내 보세요."))
+                refreshableState {
+                    ContentUnavailableView("아직 저장한 링크가 없습니다", systemImage: "tray",
+                                           description: Text("공유 시트로 링크를 보내면 여기에 쌓입니다."))
+                }
             } else {
                 board
             }
         }
+    }
+
+    /// 스크롤되지 않는 상태 화면을 당길 수 있게 감싼다. 내용이 화면보다 짧아도
+    /// 제스처가 잡히도록 최소 높이를 준다.
+    private func refreshableState<Content: View>(@ViewBuilder _ content: () -> Content)
+        -> some View {
+        ScrollView {
+            content()
+                .frame(maxWidth: .infinity, minHeight: 420)
+        }
+        .scrollBounceBehavior(.always)
+        .refreshable { await load() }
     }
 
     /// 보드를 `List`로 만든다. 카드 모양은 그대로지만 스와이프 액션과 셀 재활용이
@@ -89,6 +107,10 @@ struct ContentView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .environment(\.defaultMinListHeaderHeight, 0)
+        // 당겨서 새로고침은 **스크롤 뷰 자신**에 붙어야 한다. 바깥 컨테이너에 걸면
+        // 목록이 비어 있을 때(ContentUnavailableView는 스크롤이 아니다) 제스처를 받을
+        // 대상이 없어 조용히 아무 일도 일어나지 않는다.
+        .refreshable { await load() }
     }
 
     /// `NavigationLink` 대신 버튼 + `navigationDestination`을 쓴다.
@@ -135,9 +157,6 @@ struct ContentView: View {
                 }
                 .tint(PP.Palette.warn)
             } else if let url = URL(string: link.url) {
-                // 원문 URL만 보낸다. "via Push-Point" 같은 꼬리표는 붙이지 않는다 —
-                // 받는 쪽 메시지를 지저분하게 만들고, 이 앱은 단일 사용자가 전제라
-                // (CLAUDE.md) 홍보로 얻을 것도 없다.
                 ShareLink(item: url) { Label("공유", systemImage: "square.and.arrow.up") }
                     .tint(PP.Palette.accent)
             }
