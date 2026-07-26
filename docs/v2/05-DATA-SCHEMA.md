@@ -30,15 +30,19 @@ v2의 저장소는 SQLite 단일 파일(`data/pushpoint.db`)이다. v1의 Postgr
       │ rowid = links.id (store 계층이 동기화)
 ┌─────┴──────┐        ┌────────────┐
 │ links_fts  │        │ corpus_df  │  ← 독립 테이블 (TF-IDF 문서 빈도)
-│ (FTS5 가상) │        └────────────┘
-└────────────┘
+│ (FTS5 가상) │        └─────┬──────┘
+└────────────┘              │ link_terms가 원장 (links —< link_terms)
+                      ┌─────┴──────┐
+                      │ link_terms │
+                      └────────────┘
 ```
 
 - `links —< link_tags >— tags`: N:M. 태그는 통제된 사전(초기 30~50개 시드)이고, `link_tags`가 부착 출처(`source`)와 신뢰도를 함께 보관.
 - `links —< jobs`: 링크 하나에 `scrape` / `tag` / `thumb` 잡이 연쇄로 달림.
 - `links —< tag_feedback`: 사용자의 태그 추가/제거 이력. M5 재랭킹 학습 데이터.
 - `links_fts`: FTS5 가상 테이블. 외래키가 아니라 `rowid = links.id` 규약으로 연결.
-- `corpus_df`, `tag_embeddings`: 관계 없는 보조 테이블 (태깅 파이프라인용 통계·캐시).
+- `links —< link_terms`: 각 링크가 `corpus_df`에 기여한 사전 표면. 재태깅 때 지난 기여를 상쇄하기 위한 원장.
+- `corpus_df`, `tag_embeddings`: 관계 없는 보조 테이블 (태깅 파이프라인용 통계·캐시). `corpus_df`는 `link_terms`의 합계다.
 
 ---
 
@@ -73,7 +77,8 @@ CREATE TABLE links (
                                                   -- 본문 추출(go-trafilatura). 태거·요약 입력 전용 — FTS·API 미노출
   summary      TEXT NOT NULL DEFAULT '',        -- 0005에서 ALTER ADD COLUMN. 추출식 요약(M5 Phase A)
   body_source  TEXT NOT NULL DEFAULT ''          -- 0006. '' | 'server' | 'client'
-    CHECK (body_source IN ('', 'server', 'client'))
+    CHECK (body_source IN ('', 'server', 'client')),
+  keywords     TEXT NOT NULL DEFAULT ''          -- 0008. 발행자 분류(meta keywords·article:section 등). 태거 입력 전용
 );
 CREATE INDEX idx_links_list   ON links(created_at DESC, id DESC) WHERE deleted_at IS NULL;
 CREATE INDEX idx_links_status ON links(status) WHERE deleted_at IS NULL;
@@ -126,6 +131,12 @@ CREATE TABLE corpus_df (                       -- TF-IDF용 자체 코퍼스 문
   df   INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE link_terms (                      -- 0009. corpus_df의 원장 — "이 링크가 df에 무엇을 기여했는가"
+  link_id INTEGER NOT NULL REFERENCES links(id) ON DELETE CASCADE,
+  term    TEXT NOT NULL,
+  PRIMARY KEY (link_id, term)
+) WITHOUT ROWID;
+
 CREATE TABLE tag_embeddings (                  -- M5: 태그 사전 임베딩 캐시
   tag_id    INTEGER PRIMARY KEY REFERENCES tags(id) ON DELETE CASCADE,
   model     TEXT NOT NULL,
@@ -157,6 +168,7 @@ CREATE VIRTUAL TABLE links_fts USING fts5(
 | `body_text` | 스크래퍼가 `go-trafilatura`로 추출한 **본문 텍스트**(보일러플레이트 제거). **규칙 태거(M3)·추출식 요약(M5)의 입력 전용** — `links_fts`에 넣지 않고(trigram 3자 윈도우가 본문에 폭증) `api/openapi.yaml`에도 노출하지 않는다(내부 파생물). 길이 상한(32KB, 룬 경계)으로 병적 outlier만 자른다. 추출 실패·SPA·비-아티클(video/post)이면 빈 문자열 — 태거는 title/description으로 graceful degrade |
 | `summary` | body_text에서 고른 핵심 문장 2~3개를 개행으로 이은 **추출식 요약**(M5 Phase A — LLM 없이 원문 문장 선택이라 환각 0). tag 잡이 태깅과 같은 본문 처리에서 함께 쓴다. **`LinkDetail`에만 노출**하고 목록(`Link`)·검색(`SearchResult`)에는 싣지 않는다 — 요약은 원문 대체재가 아니라 "열까 말까"의 판단 보조다. `links_fts`에도 넣지 않는다(가상 테이블 재생성 위험 — 재검토는 stage 2). 본문이 얇거나(200룬 미만) 산문이 3문장 미만이거나 description과 사실상 같으면(겹침 0.8 이상) 빈 문자열이고, 그때 UI는 아무것도 그리지 않는다 |
 | `body_source` | 본문 출처. `''`(아직 없음) / `server`(스크래퍼가 추출) / `client`(브라우저 확장·Share Extension이 **렌더된 페이지에서 캡처해 저장 요청에 실어 보냄**). `client`면 이후 스크랩이 `title`·`description`·`body_text`를 덮어쓰지 않는다 — 서버가 못 가져오는 페이지(SPA·봇 차단·로그인 벽)라서 클라이언트가 준 것이므로 서버 재시도 결과가 항상 더 나쁘다. 같은 이유로 scrape 잡이 확정 실패해도 이 링크의 `status`는 `failed`가 아니라 `done`이다(`error`는 그대로 기록) |
+| `keywords` | **발행자가 스스로 붙인 분류.** `meta[name=keywords]`·`news_keywords`·`article:section`·`article:tag`·JSON-LD `articleSection`을 모아 콤마로 이은 값(512바이트 상한). 우리가 본문에서 추론한 값이 아니라 사이트가 선언한 값이라 태거에서 제목과 같은 가중치를 받는다. **도메인 맵과 같은 급의 신호이면서 사이트별 등록이 필요 없다** — 등록되지 않은 사이트에서도 동작한다. `body_text`와 같은 규칙으로 다룬다: 스크랩이 채우되 클라이언트 캡처 값은 덮지 않고, 빈 값이 기존 값을 지우지 않는다. **태거 입력 전용** — `links_fts`·API 응답 어디에도 노출하지 않는다 |
 | `status` / `error` | 처리 파이프라인 상태와 최종 실패 사유 (§4 참고) |
 | `created_at` / `updated_at` / `deleted_at` | epoch 초. 삭제는 소프트 삭제 |
 
@@ -193,7 +205,9 @@ v1의 `category`/`icon`/`usage_count` 컬럼은 폐기. 사용 수는 집계 컬
 
 **tag_feedback** — 사용자가 태그를 추가/제거할 때마다 `action`(`added`/`removed`)을 append-only로 기록. M5에서 앙상블 재랭킹 가중치 보정에 쓴다.
 
-**corpus_df** — 저장된 링크 자체를 코퍼스로 삼는 TF-IDF의 문서 빈도(document frequency) 누적. 외부 코퍼스 의존 없음.
+**corpus_df** — 저장된 링크 자체를 코퍼스로 삼는 TF-IDF의 문서 빈도(document frequency) 누적. 외부 코퍼스 의존 없음. **사전 표면(name·alias)에 대해서만** 센다 — 본문 32KB의 모든 토큰을 세면 테이블이 폭증하는데 스코어링이 쓰는 것은 사전 표면의 DF뿐이라, 나머지는 값을 치르고 버리는 값이다.
+
+**link_terms** — `corpus_df`의 원장. 각 링크가 df에 기여한 표면을 그대로 적어 둔다. 없으면 `corpus_df`를 정확히 유지할 수 없다: 태깅은 재시도·본문 보충·undelete로 **여러 번 돌고**, 올리기만 하면 df가 "그 낱말을 가진 문서 수"가 아니라 "태깅이 돈 횟수"가 되어 오래 쓸수록 통계가 조용히 실제와 멀어진다. 원장이 있으면 재태깅 때 지난 기여를 정확히 상쇄하고 새로 올릴 수 있다(`ApplyTags`와 같은 트랜잭션). 소프트 삭제도 기여를 회수한다 — 삭제한 링크는 코퍼스가 아니다.
 
 **tag_embeddings** — M5에서 태그 사전 임베딩을 미리 계산해 캐시. `model` 컬럼으로 모델 교체 시 무효화 판별.
 

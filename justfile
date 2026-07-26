@@ -142,6 +142,23 @@ bench-http:
 test-crash:
     @if [ -f scripts/test_crash.sh ]; then scripts/test_crash.sh; else echo "scripts/test_crash.sh가 아직 없습니다. M2에서 활성화됩니다."; fi
 
+# Google 스프레드시트 연결 — 명령 한 번 + 붙여넣기 한 번으로 끝난다
+#
+# 클라우드 콘솔도, JSON 키도, API 켜기도 없다. 스크립트를 클립보드에 넣고 브라우저를
+# 열어 주므로, 사용자는 붙여넣고 배포한 뒤 URL만 되돌려 주면 된다.
+sheets-setup:
+    @cd backend && go run ./cmd/pushpoint sheets-setup
+
+# 아카이브를 Google 스프레드시트로 내보낸다 (단방향 — SQLite가 원본, 시트는 파생물)
+#
+# 저장 경로를 건드리지 않는다. 저장할 때마다 시트에 쓰면 외부 서비스가 저장 경로에
+# 들어오는데, "네트워크 없이도 저장이 완결된다"가 M4 DoD로 확인된 이 제품의 성질이다.
+# 그래서 실패해도 아카이브는 멀쩡하다.
+#
+# 필요한 환경변수는 인자 없이 실행하면 안내가 나온다.
+sheets-sync:
+    @cd backend && go run ./cmd/pushpoint sheets-sync
+
 # 벤치용 한영 혼합 시드 DB 생성 (고정 난수, 예: just seed 100000)
 seed n='10000':
     @if [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint seed -n {{n}}; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi
@@ -311,6 +328,141 @@ ios-bind:
     # 복사가 아니라 각자 관리하면 브라우저와 iOS의 저장 결과가 조용히 갈라진다.
     cp extension/src/extract.js ios/PushPointShare/extract.js
     @echo "ios-bind: PPCore/PPShare.xcframework + extract.js 준비 완료"
+
+# api/openapi.yaml → ios/PushPoint/Generated/ (swift-openapi-generator)
+#
+# 계약의 세 번째 소비자다(`just gen`=Go, `just web-gen`=TS). 지금까지 이 단계만 수동이라
+# 스펙을 고칠 때 iOS 생성물이 조용히 뒤처질 수 있었다 — 규칙(.claude/rules/api.md)은 셋을
+# 함께 재생성해야 스펙 변경이 끝난 것으로 본다.
+#
+# SPM 빌드 플러그인이 아니라 CLI로 부르고 산출물을 커밋한다(재현성·드리프트 검사).
+# ios/tools/openapi-gen은 생성기를 가져오기 위해서만 존재하는 최소 패키지다.
+ios-api-gen:
+    cd ios/tools/openapi-gen && swift run swift-openapi-generator generate \
+        ../../../api/openapi.yaml --mode types --mode client \
+        --output-directory ../../PushPoint/Generated
+    # 어떤 계약으로 생성했는지 스탬프를 남긴다. CI는 macOS·Swift 없이 이 해시만
+    # 비교해 "스펙을 고치고 iOS 재생성을 잊은" 상태를 잡는다.
+    @shasum -a 256 api/openapi.yaml | awk '{print $1}' > ios/PushPoint/Generated/.openapi.sha256
+    @echo "ios-api-gen: ios/PushPoint/Generated/{Types,Client}.swift 갱신"
+
+# M4 DoD 판정 — 공유 저장이 2초를 지켰는지 (확장이 남긴 계측 기록을 읽는다)
+save-timing udid="":
+    @scripts/save_timing.sh {{udid}}
+
+# Maestro 플로우 — 부팅된 시뮬레이터의 **실제 데이터**에 대고 화면이 멀쩡한지 본다
+#
+# XCUITest(just ios-uitest)와 역할이 다르다. 저쪽은 픽스처를 심는 CI 게이트이고,
+# 이쪽은 내 진짜 아카이브가 든 앱을 그대로 훑는다 — 그래서 내용은 단언하지 않는다.
+flow file="maestro/smoke.yaml":
+    @command -v maestro >/dev/null 2>&1 || { echo "maestro 미설치 — brew install mobile-dev-inc/tap/maestro"; exit 1; }
+    maestro test {{file}}
+
+# 실기기 설치 — 무료 프로비저닝(Personal Team)으로도 된다
+#
+# 무료 계정은 프로파일이 **7일마다 만료**돼 매일 쓰는 앱과는 양립하지 않지만, 1회성 실측
+# (확장 메모리·0xdead10cc)에는 충분하다. $99가 실제로 필요해지는 것은 M4 DoD의 "연속 7일"과
+# M6의 28일 스트릭뿐이다.
+#
+# 선행 조건(사람이 해야 하는 것):
+#   1. Xcode → Settings → Accounts 에 Apple ID 로그인 (자격증명 입력이라 자동화 대상 아님)
+#   2. 폰을 USB로 연결하고 "이 컴퓨터를 신뢰" 승인
+#   3. 팀 ID 확인 후 아래처럼 실행 — `just ios-device TEAMID`
+#      팀 ID는 `just ios-teams` 가 찾아 준다.
+#
+# **App Group이 무료 팀에서 거부될 수 있다.** 그러면 설치 자체가 실패하거나 저장이 죽는데,
+# 그때도 확장은 자기 컨테이너에 계측을 남기므로(SaveTiming) 메모리 수치는 건진다.
+ios-device team="": ios-gen
+    #!/usr/bin/env bash
+    set -euo pipefail
+    team="{{team}}"
+    if [ -z "$team" ]; then
+      echo "팀 ID가 필요합니다. 먼저 'just ios-teams'로 확인한 뒤 'just ios-device <TEAMID>'."
+      exit 1
+    fi
+    export PUSHPOINT_TEAM_ID="$team"
+    cd ios && xcodegen generate >/dev/null
+    xcodebuild -project PushPoint.xcodeproj -scheme PushPoint \
+        -destination 'generic/platform=iOS' -derivedDataPath .build \
+        DEVELOPMENT_TEAM="$team" -allowProvisioningUpdates | \
+        grep -E "error:|warning: .*[Pp]rovisioning|\*\* BUILD" || true
+
+# 이 머신에서 쓸 수 있는 서명 팀 목록 (무료 Personal Team 포함)
+ios-teams:
+    #!/usr/bin/env bash
+    ids=$(security find-identity -v -p codesigning 2>/dev/null | grep -c "Apple Development" || true)
+    if [ "${ids:-0}" -eq 0 ]; then
+      echo "서명 인증서가 없습니다 — Xcode → Settings → Accounts 에서 Apple ID로 먼저 로그인하세요."
+      echo "(자격증명 입력이라 이 명령이 대신할 수 없습니다.)"
+      exit 1
+    fi
+    security find-identity -v -p codesigning | grep "Apple Development"
+    echo
+    echo "괄호 안 10자리가 팀 ID입니다 → just ios-device <TEAMID>"
+
+# 단위 테스트 (PushPointTests) — 규칙을 고정하는 자리. 화면은 ios-uitest가 본다.
+#
+# 이게 없어서 `CoverPatternTests`가 **한 번도 돌지 않았다** — ios-uitest가
+# `-only-testing:PushPointUITests`로 잘라내기 때문이다. 그 테스트는 웹과 iOS의 커버 해시가
+# 갈라지는 것을 잡으려고 기준값을 박아 둔 것인데, 갈라져도 양쪽 다 정상 동작하는 것처럼
+# 보이므로 안 돌면 존재하지 않는 것과 같다.
+ios-test device="iPhone 17": ios-gen
+    #!/usr/bin/env bash
+    # set -o pipefail이 없으면 파이프라인 종료 코드가 grep 것이 되고, `|| true`가 그마저
+    # 0으로 덮는다 — 실측으로 xcodebuild exit 65가 레시피 exit 0이 됐다. 즉 **게이트가
+    # 실패를 보고할 수 없었다.** `|| true`를 grep 단계 안으로 옮기면 xcodebuild의 상태가
+    # 파이프라인 상태로 남고, grep의 no-match만 무력화된다.
+    set -uo pipefail
+    cd ios && xcodebuild test -project PushPoint.xcodeproj -scheme PushPoint \
+        -destination 'platform=iOS Simulator,name={{device}}' \
+        -only-testing:PushPointTests \
+        -derivedDataPath .build CODE_SIGN_IDENTITY="-" | \
+        { grep -E "Test Case|error:|\*\* TEST" || true; }
+
+# iOS 생성물 드리프트 검사 — Go(gen-check)·웹(web-gen-check)과 같은 자리
+#
+# 계약의 세 소비자 중 iOS만 검사가 없었다. 생성 레시피(ios-api-gen)는 있는데 드리프트를
+# 잡는 쪽이 없으면, 스펙을 고치고 iOS만 재생성을 잊어도 아무것도 실패하지 않는다.
+ios-api-gen-check:
+    @just ios-api-gen >/dev/null && git diff --exit-code ios/PushPoint/Generated
+
+# 계약 스탬프만 검사 — Swift 툴체인 없이 돌아서 리눅스 CI에서도 쓸 수 있다.
+#
+# 완전한 검사(ios-api-gen-check)는 macOS + Swift가 필요해 CI에 넣기 비싸다. 스탬프는
+# "이 생성물이 어느 openapi.yaml에서 나왔는가"만 보므로 **스펙을 고치고 iOS 재생성을
+# 잊은** 경우를 잡는다 — 그게 실제로 일어나는 드리프트다.
+ios-stamp-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    f=ios/PushPoint/Generated/.openapi.sha256
+    if [ ! -f "$f" ]; then echo "스탬프가 없습니다 — just ios-api-gen 실행 후 커밋하세요"; exit 1; fi
+    want=$(shasum -a 256 api/openapi.yaml | awk '{print $1}')
+    got=$(cat "$f")
+    if [ "$want" != "$got" ]; then
+      echo "iOS 생성물이 지금 계약에서 나오지 않았습니다."
+      echo "  api/openapi.yaml : $want"
+      echo "  스탬프           : $got"
+      echo "just ios-api-gen 을 돌리고 생성물과 스탬프를 함께 커밋하세요."
+      exit 1
+    fi
+    echo "ios-stamp-check OK"
+
+# 화면을 실제로 조작하는 UI 테스트 (XCUITest, 시뮬레이터)
+#
+# 앱을 `-uitest`로 띄운다 — 임시 디렉터리 + 자체 픽스처라 시뮬레이터에 무엇이 들어
+# 있든 결과가 같고, **사용자의 실제 아카이브는 건드리지 않는다**(ios/PushPoint/UITestMode.swift).
+#
+# 이게 있어야 목록·검색·태그 편집을 사람 눈 없이 검증할 수 있다. 지금까지 이 영역의
+# 실패는 전부 "타입은 맞고 화면만 틀린" 종류였고, 컴파일러도 단위 테스트도 못 잡았다.
+ios-uitest device="iPhone 17": ios-gen
+    #!/usr/bin/env bash
+    # 종료 코드 처리는 ios-test와 같은 이유다 — 그쪽 주석 참조.
+    set -uo pipefail
+    cd ios && xcodebuild test -project PushPoint.xcodeproj -scheme PushPoint \
+        -destination 'platform=iOS Simulator,name={{device}}' \
+        -only-testing:PushPointUITests \
+        -derivedDataPath .build CODE_SIGN_IDENTITY="-" | \
+        { grep -E "Test Case|error:|\*\* TEST" || true; }
 
 # ios/project.yml → ios/PushPoint.xcodeproj (XcodeGen)
 ios-gen:

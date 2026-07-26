@@ -3,11 +3,13 @@ package tagjob
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/coby/push-point/backend/internal/queue"
 	"github.com/coby/push-point/backend/internal/store"
+	"github.com/coby/push-point/backend/internal/tagger"
 )
 
 // body는 요약 가드(MinBodyRunes=200, MinProseSents=3)를 통과하고 시드 사전의
@@ -131,4 +133,118 @@ func TestRun_noBodyStillSucceeds(t *testing.T) {
 	if res.SummaryErr != nil {
 		t.Errorf("빈 요약을 쓰는 것도 정상 경로다: %v", res.SummaryErr)
 	}
+}
+
+// 태깅이 corpus_df를 채워야 한다 — 그리고 다시 돌려도 부풀지 않아야 한다.
+//
+// 이 경로 전체가 눈에 보이지 않는다: corpus_df는 API에도 화면에도 안 나온다. 태거가
+// 표면을 넘기지 않거나 넘기는 키가 매칭과 달라지면 df는 조용히 0에 머물고, 나중에 IDF를
+// 켜는 사람은 "IDF가 효과 없다"는 잘못된 결론을 얻는다. 그래서 여기서 못박는다.
+func TestRun_accumulatesCorpusDF(t *testing.T) {
+	st := newStore(t)
+	// **띄어 쓰지 않은 복합명사**를 일부러 넣는다. 공유 픽스처(body)는 "쿠버네티스 클러스터"로
+	// 띄어 써서 문서 토큰과 사전 표면이 같아지는데, 그러면 아래 "키가 사전 표면인가" 단언이
+	// 무엇을 검사하든 통과한다 — 실측으로 그 상태였다. 한글 매칭은 전방일치라
+	// "쿠버네티스클러스터"가 표면 "쿠버네티스"에 걸리고, 그때 둘이 달라진다.
+	id := saveLink(t, st, "https://example.com/corpus",
+		"쿠버네티스클러스터를 운영하며 겪은 일을 정리한다. "+
+			"golang으로 작성한 컨트롤러가 리소스 변화를 감지해 원하는 상태로 수렴시킨다. "+
+			"오토스케일러가 관측 지표를 기준으로 레플리카 수를 조정하는 과정을 살펴본다.")
+	ctx := context.Background()
+
+	if _, err := Run(ctx, st, id); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	docs, df, err := st.CorpusDF(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if docs != 1 {
+		t.Fatalf("문서 수 1이어야 함: %d", docs)
+	}
+	if len(df) == 0 {
+		t.Fatal("태깅이 corpus_df에 아무것도 남기지 않았다 — 표면 전달이 끊겼다")
+	}
+	// **키가 사전 표면인지**를 본다. df==1만 보던 이전 단언은 수학적으로 실패할 수 없었다 —
+	// 문서 1건 + 중복 없는 집합이므로 무슨 키가 들어오든 df는 항상 1이다. 실측: match.go의
+	// `out[p.surface]`를 `out[dt]`로 바꿔도 17개 패키지 전부 통과했다.
+	//
+	// 이게 중요한 이유: `MatchedSurfaces`는 `matchField`의 매칭 규칙을 손으로 복제한 두
+	// 번째 구현이라 키가 갈라질 실제 위험이 있고, 누적 키와 조회 키가 어긋나면 df가
+	// **조용히 0에 머문다**(idf.go가 없는 키를 df=0으로 읽는다).
+	surfaces := map[string]bool{}
+	for _, s := range dictSurfaces(t, st) {
+		surfaces[s] = true
+	}
+	for term, n := range df {
+		if n != 1 {
+			t.Errorf("한 문서에서 %q의 df가 1이 아님: %d", term, n)
+		}
+		if !surfaces[term] {
+			t.Errorf("사전 표면이 아닌 키가 corpus_df에 쌓였다: %q — 누적 키와 조회 키가 갈라지면 "+
+				"df가 조용히 0에 머문다", term)
+		}
+	}
+
+	if _, err := Run(ctx, st, id); err != nil {
+		t.Fatalf("재Run: %v", err)
+	}
+	docs2, df2, err := st.CorpusDF(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if docs2 != docs || len(df2) != len(df) {
+		t.Errorf("재태깅이 통계를 바꿈: docs %d→%d, 표면 %d→%d", docs, docs2, len(df), len(df2))
+	}
+	for term, n := range df2 {
+		if n != 1 {
+			t.Errorf("재태깅 후 %q의 df가 부풀었다: %d", term, n)
+		}
+	}
+}
+
+// 발행자 분류가 태거까지 **실제로 도달하는지**.
+//
+// 이 브랜치의 헤드라인 기능인데 테스트가 양 끝만 잡고 있었다 — 추출(scraper)과 저장(store)과
+// 스코어링(tagger)에는 있는데 **잇는 지점**에 없었다. 실측: `toTaggerContent`에서
+// `Keywords: c.Keywords`를 지워도 17개 패키지 전부 통과했다. keywords는 API·화면에
+// 노출되지 않아 증상도 없다.
+//
+// 제목·본문을 비워 다른 신호를 배제한다 — 그래야 태그가 붙었을 때 분류 덕분이라고
+// 말할 수 있다.
+func TestRun_keywordsReachTheTagger(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	id, _, _, err := st.SaveLink(ctx, store.SaveInput{
+		URL:      "https://example.com/kw-only",
+		Keywords: "쿠버네티스",
+		// 본문은 태그 잡이 저장 시점에 걸리게 하는 최소치만. 사전 표면은 넣지 않는다.
+		BodyText: "이 문장에는 사전에 있는 낱말이 들어 있지 않다.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Run(ctx, st, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(res.Names, "kubernetes") {
+		t.Errorf("분류가 태거에 도달하지 않았다 — 붙은 태그: %v", res.Names)
+	}
+}
+
+// dictSurfaces는 사전이 실제로 쓰는 표면 목록. 테스트가 "무엇이 정당한 키인가"를
+// 손으로 적으면 사전이 바뀔 때마다 같이 틀리므로 사전에게 묻는다.
+func dictSurfaces(t *testing.T, st store.Store) []string {
+	t.Helper()
+	entries, err := st.LoadTagDict(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	te := make([]tagger.TagEntry, len(entries))
+	for i, e := range entries {
+		te[i] = tagger.TagEntry{ID: e.ID, Name: e.Name, Aliases: e.Aliases, Facet: e.Facet}
+	}
+	return tagger.BuildDictionary(te).Surfaces()
 }

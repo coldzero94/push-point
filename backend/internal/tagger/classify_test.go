@@ -109,3 +109,38 @@ func TestClassify_topKAndDeterministic(t *testing.T) {
 		t.Errorf("결정적이어야: %v != %v", a, b)
 	}
 }
+
+// 발행자 분류(keywords)는 제목과 같은 무게로 단독 통과해야 한다.
+//
+// 이 신호를 쓰는 이유가 여기 다 들어 있다: 제목이 "이강인, 극적 결승골"이면 어떤 사전으로도
+// 축구를 못 맞히지만, 발행자는 `article:section=스포츠`로 이미 알려주고 있었다. 본문에서
+// 추론한 값이 아니라 사이트가 선언한 값이라 한 번 나와도 믿을 수 있다.
+func TestClassify_keywordsSignal(t *testing.T) {
+	d := testDict()
+	// 제목·설명·본문 어디에도 단서가 없고 분류만 있는 경우.
+	got := Classify(Content{Title: "새 릴리스 소식", Keywords: "golang, 개발"}, d)
+	if !slices.Contains(ids(got), int64(2)) {
+		t.Errorf("keywords만으로 golang이 안 붙음: %v", ids(got))
+	}
+	if !slices.Contains(ids(got), int64(1)) {
+		t.Errorf("keywords만으로 dev가 안 붙음: %v", ids(got))
+	}
+}
+
+// keywords 한 번 = 제목 한 번. 도메인(3.0)보다는 약하고 설명(1.0)보다는 강하다는 순서가
+// 유지되는지 본다 — 가중치를 만지다 순서가 뒤집히면 조용히 품질이 바뀐다.
+func TestClassify_keywordsWeighsLikeTitle(t *testing.T) {
+	d := testDict()
+	byKeywords := Classify(Content{Keywords: "쿠버네티스"}, d)
+	byTitle := Classify(Content{Title: "쿠버네티스"}, d)
+	byDesc := Classify(Content{Description: "쿠버네티스"}, d)
+	if len(byKeywords) != 1 || len(byTitle) != 1 || len(byDesc) != 1 {
+		t.Fatalf("각 필드가 태그 하나씩을 내야 한다: kw=%v title=%v desc=%v", byKeywords, byTitle, byDesc)
+	}
+	if byKeywords[0].Confidence != byTitle[0].Confidence {
+		t.Errorf("keywords와 title의 무게가 다르다: %v vs %v", byKeywords[0].Confidence, byTitle[0].Confidence)
+	}
+	if byKeywords[0].Confidence <= byDesc[0].Confidence {
+		t.Errorf("keywords가 description보다 약하다: %v vs %v", byKeywords[0].Confidence, byDesc[0].Confidence)
+	}
+}

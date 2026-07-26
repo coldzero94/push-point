@@ -28,7 +28,7 @@ internal protocol APIProtocol: Sendable {
     func listLinks(_ input: Operations.listLinks.Input) async throws -> Operations.listLinks.Output
     /// 링크 저장
     ///
-    /// `INSERT INTO links` + `INSERT INTO jobs(kind='scrape')`를 한 트랜잭션으로 커밋하고 즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다. `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group 로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`). 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(pending 복귀, note 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
+    /// `INSERT INTO links` + `INSERT INTO jobs(kind='scrape')`를 한 트랜잭션으로 커밋하고 즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다. `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`). 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(pending 복귀, note 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
     ///
     ///
     /// - Remark: HTTP `POST /api/v1/links`.
@@ -101,6 +101,22 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/search`.
     /// - Remark: Generated from `#/paths//api/v1/search/get(search)`.
     func search(_ input: Operations.search.Input) async throws -> Operations.search.Output
+    /// 스프레드시트 연결 상태
+    ///
+    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/sheets`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)`.
+    func getSheetsStatus(_ input: Operations.getSheetsStatus.Input) async throws -> Operations.getSheetsStatus.Output
+    /// 지금 동기화
+    ///
+    /// 아카이브 전량을 시트에 다시 쓴다(교체). 동기 호출이며 링크 수에 비례해 몇 초 걸릴 수 있다 — 저장 API가 아니므로 p99 게이트 대상이 아니다. 연결돼 있지 않으면 409.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/sheets/sync`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/sync/post(syncSheets)`.
+    func syncSheets(_ input: Operations.syncSheets.Input) async throws -> Operations.syncSheets.Output
     /// 통계 조회
     ///
     /// iOS 위젯용 데이터를 한 번의 호출로 제공한다 (구현 완료 — 위젯 활용은 M6).
@@ -147,7 +163,7 @@ extension APIProtocol {
     }
     /// 링크 저장
     ///
-    /// `INSERT INTO links` + `INSERT INTO jobs(kind='scrape')`를 한 트랜잭션으로 커밋하고 즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다. `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group 로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`). 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(pending 복귀, note 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
+    /// `INSERT INTO links` + `INSERT INTO jobs(kind='scrape')`를 한 트랜잭션으로 커밋하고 즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다. `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`). 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(pending 복귀, note 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
     ///
     ///
     /// - Remark: HTTP `POST /api/v1/links`.
@@ -297,6 +313,26 @@ extension APIProtocol {
             query: query,
             headers: headers
         ))
+    }
+    /// 스프레드시트 연결 상태
+    ///
+    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/sheets`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)`.
+    internal func getSheetsStatus(headers: Operations.getSheetsStatus.Input.Headers = .init()) async throws -> Operations.getSheetsStatus.Output {
+        try await getSheetsStatus(Operations.getSheetsStatus.Input(headers: headers))
+    }
+    /// 지금 동기화
+    ///
+    /// 아카이브 전량을 시트에 다시 쓴다(교체). 동기 호출이며 링크 수에 비례해 몇 초 걸릴 수 있다 — 저장 API가 아니므로 p99 게이트 대상이 아니다. 연결돼 있지 않으면 409.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/sheets/sync`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/sync/post(syncSheets)`.
+    internal func syncSheets(headers: Operations.syncSheets.Input.Headers = .init()) async throws -> Operations.syncSheets.Output {
+        try await syncSheets(Operations.syncSheets.Input(headers: headers))
     }
     /// 통계 조회
     ///
@@ -674,6 +710,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/LinkInput/body_text`.
             internal var body_text: Swift.String?
+            /// 발행자가 스스로 붙인 분류 (optional, 512바이트로 절단). `meta[name=keywords]`, `news_keywords`, `article:section`, `article:tag`, JSON-LD `articleSection`을 모아 콤마로 이어 붙인 값이다. **도메인 맵과 달리 사이트별 등록이 필요 없다** — 발행자가 알려주는 값이라 등록되지 않은 사이트에서도 동작한다. 태거가 제목과 같은 가중치를 준다. 서버도 스크랩할 때 같은 값을 뽑으므로, 이 필드는 서버가 fetch할 수 없는 페이지를 위한 것이다 (title·description·body_text와 같은 이유).
+            ///
+            /// - Remark: Generated from `#/components/schemas/LinkInput/keywords`.
+            internal var keywords: Swift.String?
             /// Creates a new `LinkInput`.
             ///
             /// - Parameters:
@@ -682,18 +722,21 @@ internal enum Components {
             ///   - title: 클라이언트가 캡처한 제목 (optional, 512바이트로 절단)
             ///   - description: 클라이언트가 캡처한 설명 (optional, 2048바이트로 절단)
             ///   - body_text: 클라이언트가 추출한 본문 평문 (optional, 32KB로 절단). 값이 있으면 서버는 이 링크의 본문 출처를 'client'로 표시하고, 이후 스크랩이 제목·설명·본문을 덮어쓰지 않는다. 태깅·요약이 이 본문을 입력으로 쓴다 — 그래서 스크랩이 실패해도 태그·요약이 나온다.
+            ///   - keywords: 발행자가 스스로 붙인 분류 (optional, 512바이트로 절단). `meta[name=keywords]`, `news_keywords`, `article:section`, `article:tag`, JSON-LD `articleSection`을 모아 콤마로 이어 붙인 값이다. **도메인 맵과 달리 사이트별 등록이 필요 없다** — 발행자가 알려주는 값이라 등록되지 않은 사이트에서도 동작한다. 태거가 제목과 같은 가중치를 준다. 서버도 스크랩할 때 같은 값을 뽑으므로, 이 필드는 서버가 fetch할 수 없는 페이지를 위한 것이다 (title·description·body_text와 같은 이유).
             internal init(
                 url: Swift.String,
                 note: Swift.String? = nil,
                 title: Swift.String? = nil,
                 description: Swift.String? = nil,
-                body_text: Swift.String? = nil
+                body_text: Swift.String? = nil,
+                keywords: Swift.String? = nil
             ) {
                 self.url = url
                 self.note = note
                 self.title = title
                 self.description = description
                 self.body_text = body_text
+                self.keywords = keywords
             }
             internal enum CodingKeys: String, CodingKey {
                 case url
@@ -701,6 +744,7 @@ internal enum Components {
                 case title
                 case description
                 case body_text
+                case keywords
             }
         }
         /// 링크 수정 요청 — note는 교체, tags는 전체 교체 (부분 추가/삭제 API 없음)
@@ -728,6 +772,59 @@ internal enum Components {
             internal enum CodingKeys: String, CodingKey {
                 case note
                 case tags
+            }
+        }
+        /// 스프레드시트 연결 상태와 마지막 동기화 결과
+        ///
+        /// - Remark: Generated from `#/components/schemas/SheetsStatus`.
+        internal struct SheetsStatus: Codable, Hashable, Sendable {
+            /// 연결됐는지. false면 나머지 필드는 비어 있다
+            ///
+            /// - Remark: Generated from `#/components/schemas/SheetsStatus/connected`.
+            internal var connected: Swift.Bool
+            /// 시트 주소. 없으면 빈 문자열
+            ///
+            /// - Remark: Generated from `#/components/schemas/SheetsStatus/sheet_url`.
+            internal var sheet_url: Swift.String?
+            /// 마지막 동기화 시각(unix epoch 초). 한 번도 안 했으면 null
+            ///
+            /// - Remark: Generated from `#/components/schemas/SheetsStatus/last_sync_at`.
+            internal var last_sync_at: Swift.Int?
+            /// 마지막에 쓴 링크 수
+            ///
+            /// - Remark: Generated from `#/components/schemas/SheetsStatus/last_rows`.
+            internal var last_rows: Swift.Int?
+            /// 마지막 동기화가 실패했다면 그 이유. 성공했으면 빈 문자열
+            ///
+            /// - Remark: Generated from `#/components/schemas/SheetsStatus/last_error`.
+            internal var last_error: Swift.String?
+            /// Creates a new `SheetsStatus`.
+            ///
+            /// - Parameters:
+            ///   - connected: 연결됐는지. false면 나머지 필드는 비어 있다
+            ///   - sheet_url: 시트 주소. 없으면 빈 문자열
+            ///   - last_sync_at: 마지막 동기화 시각(unix epoch 초). 한 번도 안 했으면 null
+            ///   - last_rows: 마지막에 쓴 링크 수
+            ///   - last_error: 마지막 동기화가 실패했다면 그 이유. 성공했으면 빈 문자열
+            internal init(
+                connected: Swift.Bool,
+                sheet_url: Swift.String? = nil,
+                last_sync_at: Swift.Int? = nil,
+                last_rows: Swift.Int? = nil,
+                last_error: Swift.String? = nil
+            ) {
+                self.connected = connected
+                self.sheet_url = sheet_url
+                self.last_sync_at = last_sync_at
+                self.last_rows = last_rows
+                self.last_error = last_error
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case connected
+                case sheet_url
+                case last_sync_at
+                case last_rows
+                case last_error
             }
         }
         /// 커서 페이지네이션 응답 래퍼
@@ -1570,7 +1667,7 @@ internal enum Operations {
     }
     /// 링크 저장
     ///
-    /// `INSERT INTO links` + `INSERT INTO jobs(kind='scrape')`를 한 트랜잭션으로 커밋하고 즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다. `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트(Share Extension의 App Group 로컬 큐)가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`). 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(pending 복귀, note 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
+    /// `INSERT INTO links` + `INSERT INTO jobs(kind='scrape')`를 한 트랜잭션으로 커밋하고 즉시 응답한다 (p99 < 50ms). 스크랩·태깅·썸네일은 백그라운드 잡으로 처리된다. `url_hash`(SHA-256(url)) 기반으로 멱등하다 — 클라이언트가 같은 요청을 재시도해도 중복 생성이 없다 (중복 시 200 `duplicate:true`). 소프트 삭제된 링크의 URL을 다시 저장하면 같은 행을 복원(pending 복귀, note 교체, scrape 재-enqueue)하고 신규 저장처럼 201로 응답한다.
     ///
     ///
     /// - Remark: HTTP `POST /api/v1/links`.
@@ -3790,6 +3887,375 @@ internal enum Operations {
             /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
             ///
             /// - Remark: Generated from `#/paths//api/v1/search/get(search)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 스프레드시트 연결 상태
+    ///
+    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/sheets`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)`.
+    internal enum getSheetsStatus {
+        internal static let id: Swift.String = "getSheetsStatus"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/sheets/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.getSheetsStatus.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.getSheetsStatus.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.getSheetsStatus.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.getSheetsStatus.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/sheets/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/sheets/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.SheetsStatus)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.SheetsStatus {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.getSheetsStatus.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.getSheetsStatus.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 연결 상태
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.getSheetsStatus.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.getSheetsStatus.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 지금 동기화
+    ///
+    /// 아카이브 전량을 시트에 다시 쓴다(교체). 동기 호출이며 링크 수에 비례해 몇 초 걸릴 수 있다 — 저장 API가 아니므로 p99 게이트 대상이 아니다. 연결돼 있지 않으면 409.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/sheets/sync`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/sync/post(syncSheets)`.
+    internal enum syncSheets {
+        internal static let id: Swift.String = "syncSheets"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/sheets/sync/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.syncSheets.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.syncSheets.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.syncSheets.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.syncSheets.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/sheets/sync/POST/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/sheets/sync/POST/responses/200/content/application\/json`.
+                    case json(Components.Schemas.SheetsStatus)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.SheetsStatus {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.syncSheets.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.syncSheets.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 동기화 결과
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/sync/post(syncSheets)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.syncSheets.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.syncSheets.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/sync/post(syncSheets)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct Conflict: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/sheets/sync/POST/responses/409/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/sheets/sync/POST/responses/409/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.syncSheets.Output.Conflict.Body
+                /// Creates a new `Conflict`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.syncSheets.Output.Conflict.Body) {
+                    self.body = body
+                }
+            }
+            /// 아직 연결되지 않음 (`pushpoint sheets-setup` 필요)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/sync/post(syncSheets)/responses/409`.
+            ///
+            /// HTTP response code: `409 conflict`.
+            case conflict(Operations.syncSheets.Output.Conflict)
+            /// The associated value of the enum case if `self` is `.conflict`.
+            ///
+            /// - Throws: An error if `self` is not `.conflict`.
+            /// - SeeAlso: `.conflict`.
+            internal var conflict: Operations.syncSheets.Output.Conflict {
+                get throws {
+                    switch self {
+                    case let .conflict(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "conflict",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/sync/post(syncSheets)/responses/500`.
             ///
             /// HTTP response code: `500 internalServerError`.
             case internalServerError(Components.Responses.InternalError)

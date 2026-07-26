@@ -8,12 +8,17 @@ import (
 
 // 스코어 가중치·컷 — 미측정 베이스라인. Stage3 golden(dev.jsonl)에서 튜닝한다(설계 결정).
 const (
-	wDomain  = 3.0 // 도메인맵 히트: 태그당 (가장 강한 신호)
-	wTitle   = 2.0 // 제목 매칭: 매칭당
-	wDesc    = 1.0 // 설명 매칭: 매칭당
-	wNote    = 1.0 // 개인 메모 매칭: 매칭당
-	wBody    = 1.0 // 본문 매칭: 매칭당 (matchCap이 본문 반복 스터핑을 억제)
-	matchCap = 3   // 한 필드에서 한 태그의 기여 상한 (키워드 스터핑 방지)
+	wDomain = 3.0 // 도메인맵 히트: 태그당 (가장 강한 신호)
+	wTitle  = 2.0 // 제목 매칭: 매칭당
+	// wKeywords는 발행자가 붙인 분류의 무게. 제목과 같은 급이다 — 우리가 본문에서
+	// 추론한 값이 아니라 **사이트가 이 글을 뭐라고 분류했는지**이고, 대개 서너 낱말뿐이라
+	// 스쳐 지나갈 여지가 없다. 도메인 맵과 같은 성격의 강한 신호이면서, 사이트별 등록이
+	// 필요 없다는 점에서 그보다 일반적이다 — 등록되지 않은 도메인에서도 동작한다.
+	wKeywords = 2.0
+	wDesc     = 1.0 // 설명 매칭: 매칭당
+	wNote     = 1.0 // 개인 메모 매칭: 매칭당
+	wBody     = 1.0 // 본문 매칭: 매칭당 (matchCap이 본문 반복 스터핑을 억제)
+	matchCap  = 3   // 한 필드에서 한 태그의 기여 상한 (키워드 스터핑 방지)
 	// minBodyCorroborated는 제목·설명·도메인이 이미 같은 태그를 가리킬 때 본문에
 	// 요구하는 최소 횟수. 다른 신호가 뒷받침하므로 두 번이면 충분하다.
 	minBodyCorroborated = 2
@@ -39,7 +44,7 @@ const (
 )
 
 // Classify는 콘텐츠를 사전에 대해 분류해 상위 태그(≤topK, threshold 이상)를 돌려준다.
-// 신호 = 도메인맵 + title/description/note 필드별 사전 매칭의 가법 스코어. 필드마다 따로
+// 신호 = 도메인맵 + title/keywords/description/note/body 필드별 사전 매칭의 가법 스코어. 필드마다 따로
 // 토큰화해 구문이 필드 경계를 넘지 못하게 한다. 출력은 결정적(score desc, 동점 name asc).
 func Classify(c Content, d *Dictionary) []ScoredTag {
 	score := map[int64]float64{}
@@ -51,6 +56,7 @@ func Classify(c Content, d *Dictionary) []ScoredTag {
 		}
 	}
 	addField(score, d, c.Title, wTitle)
+	addField(score, d, c.Keywords, wKeywords)
 	addField(score, d, c.Description, wDesc)
 	addField(score, d, c.Note, wNote)
 	// 본문 요구치는 길이에 비례하고, 뒷받침이 있으면 한 단계 낮춘다.
@@ -98,21 +104,28 @@ func addBody(score map[int64]float64, d *Dictionary, text string, corroborated m
 	if need > matchCap {
 		need = matchCap
 	}
-	for id, n := range d.matchField(Tokenize(text)) {
+	for id, h := range d.matchField(Tokenize(text)) {
 		min := need
 		if corroborated[id] && min > minBodyCorroborated {
 			// 뒷받침이 있으면 한 단계 낮춘다 — 같은 두 번이라도 제목이 거드는 두 번은
 			// 본문에만 있는 두 번보다 무겁다.
 			min = minBodyCorroborated
 		}
-		if n < min {
+		if h.n < min {
 			continue
 		}
-		if n > matchCap {
-			n = matchCap
-		}
-		score[id] += wBody * float64(n)
+		// 횟수 요구(min)는 IDF보다 **앞에** 있다. 흔한 낱말이라고 횟수를 면제해 주면
+		// 걸러야 할 약한 신호가 배율만 낮춘 채 그대로 들어온다.
+		score[id] += wBody * float64(capN(h.n)) * h.mul
 	}
+}
+
+// capN은 한 필드에서 한 태그의 기여를 matchCap으로 자른다 (키워드 스터핑 방지).
+func capN(n int) int {
+	if n > matchCap {
+		return matchCap
+	}
+	return n
 }
 
 // addFieldMin은 min회 미만 매칭은 무시한다 — 긴 필드에서 한 번 스친 언급을 걸러낸다.
@@ -120,13 +133,10 @@ func addFieldMin(score map[int64]float64, d *Dictionary, text string, weight flo
 	if text == "" {
 		return
 	}
-	for id, n := range d.matchField(Tokenize(text)) {
-		if n < min {
+	for id, h := range d.matchField(Tokenize(text)) {
+		if h.n < min {
 			continue
 		}
-		if n > matchCap {
-			n = matchCap
-		}
-		score[id] += weight * float64(n)
+		score[id] += weight * float64(capN(h.n)) * h.mul
 	}
 }

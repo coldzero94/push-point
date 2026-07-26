@@ -373,7 +373,7 @@ func (f *fakeStore) GetLinkContent(ctx context.Context, linkID int64) (store.Lin
 
 func (f *fakeStore) LoadTagDict(ctx context.Context) ([]store.TagDictEntry, error) { return nil, nil }
 
-func (f *fakeStore) ApplyTags(ctx context.Context, linkID int64, scored []store.ScoredTag) error {
+func (f *fakeStore) ApplyTags(ctx context.Context, linkID int64, scored []store.ScoredTag, terms []string) error {
 	return nil
 }
 
@@ -1125,4 +1125,8 @@ func TestCreateLinkCleansCaptureFields(t *testing.T) {
 	if !utf8.ValidString(in.BodyText) {
 		t.Error("절단이 룬 경계를 깼다")
 	}
+}
+
+func (f *fakeStore) CorpusDF(ctx context.Context) (int64, map[string]int64, error) {
+	return 0, nil, nil
 }

@@ -136,3 +136,74 @@ func TestClientCapture_undeleteResetsSource(t *testing.T) {
 		t.Errorf("undelete 후 스크랩이 막힘: %+v", c)
 	}
 }
+
+// 발행자 분류는 저장 → 태거 입력까지 온전히 도착해야 한다. 이 필드는 API 응답 어디에도
+// 노출되지 않으므로(태거 입력 전용) 화면으로는 끊긴 걸 알 수 없다 — 여기서만 잡힌다.
+func TestKeywords_reachesTagger(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	ctx := context.Background()
+
+	id, _, _, err := s.SaveLink(ctx, SaveInput{URL: "https://k.example/a", Keywords: "스포츠, 해외축구"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.GetLinkContent(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Keywords != "스포츠, 해외축구" {
+		t.Errorf("저장한 분류가 태거 입력에 도착하지 않음: %q", c.Keywords)
+	}
+}
+
+// 스크랩이 분류를 채우되, body_text와 같은 규칙을 따라야 한다:
+// 빈 결과가 기존 값을 지우지 않고, 클라이언트가 준 값은 서버 재시도가 덮지 않는다.
+func TestApplyScrape_keywordsFollowsBodyRules(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	ctx := context.Background()
+
+	// (1) 서버 출처 링크: 스크랩이 분류를 채운다.
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://k.example/server"})
+	if err := s.ApplyScrape(ctx, id, ScrapeResult{ContentType: "article", Keywords: "정치"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetLinkContent(ctx, id); c.Keywords != "정치" {
+		t.Errorf("스크랩이 분류를 못 채움: %q", c.Keywords)
+	}
+	// (2) 재시도에서 분류를 못 뽑았다 — 기존 값이 남아야 한다.
+	if err := s.ApplyScrape(ctx, id, ScrapeResult{ContentType: "article", Keywords: ""}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetLinkContent(ctx, id); c.Keywords != "정치" {
+		t.Errorf("빈 스크랩 결과가 기존 분류를 지움: %q", c.Keywords)
+	}
+
+	// (3) 클라이언트 캡처 링크: 서버 스크랩이 덮지 않는다 — 서버가 못 가져오는 페이지라
+	// 클라이언트가 준 것이므로 서버 결과가 항상 더 나쁘다.
+	cid, _, _, _ := s.SaveLink(ctx, SaveInput{
+		URL: "https://k.example/client", BodyText: "클라이언트가 캡처한 본문", Keywords: "스포츠",
+	})
+	if err := s.ApplyScrape(ctx, cid, ScrapeResult{ContentType: "article", Keywords: "쓰레기 분류"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := s.GetLinkContent(ctx, cid); c.Keywords != "스포츠" {
+		t.Errorf("서버 스크랩이 클라이언트 분류를 덮음: %q", c.Keywords)
+	}
+}
+
+// 이미 저장된(스크랩 실패한) 링크에 확장이 나중에 분류를 실어 오면 보충돼야 한다 —
+// 클라이언트 캡처 보충의 전체 취지가 이것이고, keywords만 빠지면 태그가 덜 붙는다.
+func TestClientCapture_backfillsKeywords(t *testing.T) {
+	s, _, _ := newTestStore(t)
+	ctx := context.Background()
+	id, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://k.example/late"})
+
+	if _, _, dup, err := s.SaveLink(ctx, SaveInput{
+		URL: "https://k.example/late", BodyText: "나중에 확장이 보낸 본문", Keywords: "경제, 부동산",
+	}); err != nil || !dup {
+		t.Fatalf("중복 보충 경로를 타야 한다: dup=%v err=%v", dup, err)
+	}
+	if c, _ := s.GetLinkContent(ctx, id); c.Keywords != "경제, 부동산" {
+		t.Errorf("보충이 분류를 넣지 않음: %q", c.Keywords)
+	}
+}

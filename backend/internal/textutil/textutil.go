@@ -20,6 +20,9 @@ const (
 	// MaxTitle/MaxDescription은 목록·카드에 쓰이는 짧은 필드의 상한.
 	MaxTitle       = 512
 	MaxDescription = 2048
+	// MaxKeywords는 발행자 분류의 상한. 태그 몇 개 분량이면 충분하고, 길면 그건
+	// 분류가 아니라 SEO 키워드 스터핑이라 태거에 소음만 넣는다.
+	MaxKeywords = 512
 )
 
 // CapRunes는 s를 최대 limit 바이트로 자르되 UTF-8 룬 경계에서 끊는다(멀티바이트 깨짐 방지).

@@ -3,10 +3,12 @@ package scraper
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -166,7 +168,111 @@ func parseMetadata(doc *goquery.Document, base *url.URL) Metadata {
 	if img := metaContent(doc, "og:image", "og:image:url"); img != "" {
 		m.ImageURL = resolveURL(base, img)
 	}
+
+	m.Keywords = parseKeywords(doc)
 	return m
+}
+
+// parseKeywords는 **발행자가 스스로 붙인 분류**를 모은다 — 우리가 본문에서 추론한 것이
+// 아니라 사이트가 "이 글은 스포츠다"라고 선언한 값이다.
+//
+// 도메인 맵과 같은 급의 신호이면서 그보다 일반적이다: 도메인 맵은 사이트를 하나씩
+// 등록해야 하지만 이 메타 태그들은 사실상 모든 뉴스·블로그 CMS가 내보낸다. 등록되지 않은
+// 사이트에서도 동작한다는 뜻이다.
+//
+// 네 출처를 다 모으고 합집합을 쓴다(하나만 고르지 않는다) — 사이트마다 쓰는 태그가 다르고,
+// 여러 개가 있을 때 어느 하나가 더 정확하다고 볼 근거가 없다. 태거는 매칭 수를 matchCap으로
+// 자르므로 중복 나열이 점수를 부풀리지도 않는다.
+func parseKeywords(doc *goquery.Document) string {
+	var parts []string
+	seen := map[string]bool{}
+	add := func(v string) {
+		// 콤마로 나눠 넣는 이유는 중복 제거를 위해서다. 태거는 어차피 다시 토큰화한다.
+		for _, f := range strings.Split(v, ",") {
+			f = strings.TrimSpace(f)
+			if f == "" {
+				continue
+			}
+			if key := strings.ToLower(f); !seen[key] {
+				seen[key] = true
+				parts = append(parts, f)
+			}
+		}
+	}
+
+	// news_keywords는 Google News 규격 — keywords보다 정제된 값을 넣는 사이트가 많다.
+	add(metaContent(doc, "keywords"))
+	add(metaContent(doc, "news_keywords"))
+	// article:section은 섹션(정치·스포츠), article:tag는 개별 주제어. 둘 다 여러 개일 수 있어
+	// metaContent(첫 값만)가 아니라 전부 훑는다.
+	doc.Find(`meta[property="article:section"], meta[property="article:tag"], meta[name="article:section"], meta[name="article:tag"]`).
+		Each(func(_ int, s *goquery.Selection) {
+			if v, ok := s.Attr("content"); ok {
+				add(v)
+			}
+		})
+	// JSON-LD — og를 안 쓰고 schema.org만 쓰는 사이트가 있다. 스키마 모양이
+	// 사이트마다 제각각(배열·@graph·중첩)이라 구조를 가정하지 않고 키만 찾아 훑는다.
+	doc.Find(`script[type="application/ld+json"]`).Each(func(_ int, s *goquery.Selection) {
+		var v any
+		if json.Unmarshal([]byte(s.Text()), &v) != nil {
+			return // 깨진 JSON-LD는 흔하다 — 조용히 넘긴다. 이건 보조 신호다.
+		}
+		// 정렬한다. collectJSONLDKeywords가 맵을 순회해 순서가 실행마다 달라지는데,
+		// 512바이트에서 잘릴 때 **어느 분류가 살아남는지**가 그 순서에 좌우된다.
+		// 지금 golden에서는 최대 315바이트라 초과가 없지만, 같은 페이지가 실행마다
+		// 다른 태그를 얻는 상태를 남겨 둘 이유가 없다.
+		kws := collectJSONLDKeywords(v, 0)
+		slices.Sort(kws)
+		for _, kw := range kws {
+			add(kw)
+		}
+	})
+
+	return textutil.CleanMeta(strings.Join(parts, ", "), textutil.MaxKeywords)
+}
+
+// collectJSONLDKeywords는 임의 모양의 JSON-LD 값을 훑어 articleSection·keywords·genre의
+// 문자열 값을 모은다. depth는 순환 참조가 아니라 **깊이 폭주**를 막는 안전장치다
+// (json.Unmarshal 결과는 순환할 수 없지만 중첩은 얼마든지 깊을 수 있다).
+func collectJSONLDKeywords(v any, depth int) []string {
+	if depth > 8 {
+		return nil
+	}
+	var out []string
+	switch t := v.(type) {
+	case map[string]any:
+		for k, val := range t {
+			switch strings.ToLower(k) {
+			case "articlesection", "keywords", "genre":
+				out = append(out, jsonLDStrings(val)...)
+			default:
+				out = append(out, collectJSONLDKeywords(val, depth+1)...)
+			}
+		}
+	case []any:
+		for _, e := range t {
+			out = append(out, collectJSONLDKeywords(e, depth+1)...)
+		}
+	}
+	return out
+}
+
+// jsonLDStrings는 문자열 하나 또는 문자열 배열 — 두 모양 다 허용하는 스펙을 평탄화한다.
+func jsonLDStrings(v any) []string {
+	switch t := v.(type) {
+	case string:
+		return []string{t}
+	case []any:
+		var out []string
+		for _, e := range t {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // metaContent는 keys를 순서대로 훑어 property/name 어느 쪽이든 첫 비어 있지 않은

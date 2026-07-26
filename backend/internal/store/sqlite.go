@@ -118,6 +118,7 @@ func (s *sqliteStore) SaveLink(ctx context.Context, in SaveInput) (int64, int64,
 				UPDATE links SET
 				       title       = CASE WHEN ? <> '' THEN ? ELSE title END,
 				       description = CASE WHEN ? <> '' THEN ? ELSE description END,
+				       keywords    = CASE WHEN ? <> '' THEN ? ELSE keywords END,
 				       body_text   = ?,
 				       body_source = 'client',
 				       status      = CASE WHEN status = 'failed' THEN 'done' ELSE status END,
@@ -125,6 +126,7 @@ func (s *sqliteStore) SaveLink(ctx context.Context, in SaveInput) (int64, int64,
 				WHERE id = ?`,
 				in.Title, in.Title,
 				in.Description, in.Description,
+				in.Keywords, in.Keywords,
 				in.BodyText, id); err != nil {
 				return fmt.Errorf("store: 클라이언트 본문 보충 실패: %w", err)
 			}
@@ -150,12 +152,14 @@ func (s *sqliteStore) SaveLink(ctx context.Context, in SaveInput) (int64, int64,
 				       title       = CASE WHEN ? <> '' THEN ? ELSE title END,
 				       description = CASE WHEN ? <> '' THEN ? ELSE description END,
 				       body_text   = CASE WHEN ? <> '' THEN ? ELSE body_text END,
+				       keywords    = CASE WHEN ? <> '' THEN ? ELSE keywords END,
 				       updated_at = unixepoch()
 				WHERE id = ?`,
 				note, bodySource,
 				in.Title, in.Title,
 				in.Description, in.Description,
 				in.BodyText, in.BodyText,
+				in.Keywords, in.Keywords,
 				id); err != nil {
 				return fmt.Errorf("store: 링크 undelete 실패: %w", err)
 			}
@@ -172,9 +176,9 @@ func (s *sqliteStore) SaveLink(ctx context.Context, in SaveInput) (int64, int64,
 			return fmt.Errorf("store: url_hash 중복 확인 실패: %w", err)
 		}
 		if err := tx.QueryRowContext(ctx, `
-			INSERT INTO links (url, url_hash, domain, note, title, description, body_text, body_source)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at`,
-			url, hash, hostOf(url), note, in.Title, in.Description, in.BodyText, bodySource,
+			INSERT INTO links (url, url_hash, domain, note, title, description, body_text, body_source, keywords)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at`,
+			url, hash, hostOf(url), note, in.Title, in.Description, in.BodyText, bodySource, in.Keywords,
 		).Scan(&id, &createdAt); err != nil {
 			return fmt.Errorf("store: links INSERT 실패: %w", err)
 		}
@@ -579,6 +583,12 @@ func (s *sqliteStore) DeleteLink(ctx context.Context, id int64) error {
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM links_fts WHERE rowid = ?`, id); err != nil {
 			return fmt.Errorf("store: links_fts 제거 실패: %w", err)
+		}
+		// 삭제된 링크는 코퍼스가 아니다 — 검색에서 빼면서 통계에는 남겨 두면, 지운 주제가
+		// 계속 "흔한 낱말"로 취급돼 앞으로 저장할 링크의 태깅을 눈에 안 보이게 끌어내린다.
+		// undelete는 scrape·tag 잡을 다시 넣으므로 그때 원장이 다시 채워진다.
+		if err := applyCorpusTerms(ctx, tx, id, nil); err != nil {
+			return err
 		}
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM jobs WHERE link_id = ? AND status IN ('pending','failed')`, id); err != nil {

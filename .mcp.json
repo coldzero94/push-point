@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "maestro": {
+      "type": "stdio",
+      "command": "/opt/homebrew/bin/maestro",
+      "args": [
+        "mcp",
+        "--no-viewer",
+        "--working-dir",
+        "/Users/coby/chanyoung/push-point"
+      ],
+      "env": {}
+    }
+  }
+}

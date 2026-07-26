@@ -21,6 +21,27 @@ struct ContentView: View {
     @State private var undoTask: Task<Void, Never>?
     /// 열어 볼 링크. NavigationLink 대신 이 값으로 이동한다 — 아래 row 주석 참조.
     @State private var opening: OpeningLink?
+    /// 검색어. 비어 있으면 평소의 보드, 있으면 검색 결과가 그 자리를 대신한다.
+    @State private var query = ""
+    @State private var results: [Components.Schemas.Link] = []
+    /// 서버가 어느 경로로 찾았는지(fts | like). 두 글자 이하로 친 사용자가 결과가
+    /// 적은 이유를 알 수 있게 화면에 남긴다 — 계약이 이걸 알려주는 이유가 그것이다.
+    @State private var searchMode: String?
+    @State private var searching = false
+    /// 검색 실패. **loadError와 따로 둔다** — searchContent는 loadError를 읽지 않고,
+    /// 검색이 실패했다고 목록 화면 전체를 오류로 바꾸면 저장한 것이 사라진 것처럼 보인다.
+    @State private var searchError: String?
+    /// 검색 결과 다음 장 실패. 첫 장 실패와 화면에서 다뤄야 할 자리가 다르다 —
+    /// 이쪽은 이미 보이는 결과 아래에 붙는 푸터다.
+    @State private var searchMoreError: String?
+    /// 다음 페이지 커서. nil이면 마지막 페이지다 — 계약이 그렇게 말한다.
+    /// **페이지 번호가 아니다.** keyset 커서라 목록에 쓰기가 일어나도 항목이 건너뛰거나
+    /// 중복되지 않는다(.claude/rules/ios.md).
+    @State private var nextCursor: String?
+    @State private var searchCursor: String?
+    /// 다음 장을 이미 받고 있는지. 없으면 마지막 카드가 화면에 머무는 동안 같은 요청이
+    /// 여러 번 나간다 — onAppear는 스크롤 중 여러 번 불린다.
+    @State private var loadingMore = false
 
     var body: some View {
         NavigationStack {
@@ -28,11 +49,20 @@ struct ContentView: View {
                 .background(PP.Palette.canvas)
                 .navigationTitle("Push-Point")
             .navigationDestination(item: $opening) { target in
-                LinkDetailView(linkID: target.id, facetOf: { facets[$0] ?? .neutral })
+                LinkDetailView(linkID: target.id,
+                               facetOf: { facets[$0] ?? .neutral },
+                               dictionary: facets)
             }
         }
+        // 검색은 목록 안에 있다 — 별도 탭으로 빼지 않았다. 찾는 대상이 바로 이 목록이고,
+        // 탭을 나누면 "필터가 걸린 목록"과 "검색 결과"라는 거의 같은 두 화면을 사용자가
+        // 구분해 가며 써야 한다. `.searchable`은 iOS가 이미 가르쳐 둔 자리이기도 하다.
+        .searchable(text: $query, prompt: "제목 · 메모 · 태그")
         .task(id: backend.state) { await load() }
         .task(id: filter) { await load() }
+        // 타이핑마다 요청을 보내지 않는다. 한 글자마다 FTS를 때리면 폰 안에서 도는
+        // 서버라 더 잘 보인다 — 입력이 멎은 뒤에 한 번만 간다.
+        .task(id: query) { await runSearch() }
         // 확인창 대신 되돌리기. 확인창은 **모든** 삭제를 느리게 만들어 흔한 경우에
         // 세금을 매기고, 서버가 소프트 삭제라 되살릴 수단이 실제로 있다.
         .overlay(alignment: .bottom) {
@@ -53,7 +83,9 @@ struct ContentView: View {
                                    systemImage: "exclamationmark.triangle",
                                    description: Text(message))
         case .running:
-            if let loadError {
+            if !query.isEmpty {
+                searchContent
+            } else if let loadError {
                 // 빈/오류 상태도 스크롤 뷰에 담는다. ContentUnavailableView는 스크롤이
                 // 아니라서 그대로 두면 **바로 그때** — 다시 시도하고 싶은 순간 — 당겨서
                 // 새로고침이 안 된다.
@@ -70,6 +102,74 @@ struct ContentView: View {
             } else {
                 board
             }
+        }
+    }
+
+    /// 검색 결과.
+    ///
+    /// 결과도 **같은 카드**로 그린다. 검색이 따로 생긴 화면이 아니라 같은 보드를 좁혀 본
+    /// 것이라는 감각이 유지돼야 하고, 카드가 이미 제목·설명·태그·커버를 다 보여주므로
+    /// 검색 전용 행을 새로 만들 이유가 없다.
+    ///
+    /// 다만 날짜 척추는 없앤다. 검색 결과의 정렬은 bm25 관련도이지 시간이 아니라서,
+    /// 시간으로 끊으면 있지도 않은 시간 순서를 주장하게 된다.
+    @ViewBuilder
+    private var searchContent: some View {
+        if searching && results.isEmpty {
+            refreshableState { ProgressView().padding(.top, 60) }
+        } else if let searchError {
+            // **빈 결과보다 먼저 본다.** 순서가 뒤바뀌면 실패가 "결과가 없습니다"라는
+            // 단정문으로 위장되고, 그건 사용자에게 "이 검색어로는 저장한 게 없다"는
+            // 거짓말이 된다 — 아카이브에서 가장 나쁜 실패 방식이다.
+            refreshableState {
+                ContentUnavailableView {
+                    Label("검색하지 못했습니다", systemImage: "wifi.exclamationmark")
+                } description: {
+                    Text(searchError)
+                } actions: {
+                    Button("다시 시도") { Task { await runSearch(debounce: false) } }
+                }
+            }
+        } else if results.isEmpty {
+            refreshableState {
+                ContentUnavailableView("결과가 없습니다", systemImage: "magnifyingglass",
+                                       description: Text("\u{201C}\(query)\u{201D}와 맞는 링크를 찾지 못했습니다."))
+            }
+        } else {
+            List {
+                if let mode = searchMode, mode == "like" {
+                    // 세 글자 미만은 FTS가 아니라 LIKE로 간다(계약). 결과가 적을 때
+                    // 사용자가 "없구나"가 아니라 "더 치면 되는구나"로 읽어야 한다.
+                    Text("두 글자 이하는 제목·메모만 훑습니다. 세 글자부터 전문 검색으로 바뀝니다.")
+                        .font(PP.Typo.meta)
+                        .foregroundStyle(PP.Palette.fg3)
+                        .plainRow(top: 10, bottom: 2)
+                }
+                ForEach(results, id: \.id) { link in
+                    row(link)
+                        .plainRow(top: 5, bottom: 5)
+                        .onAppear {
+                            if link.id == results.last?.id { Task { await searchMore() } }
+                        }
+                }
+                // 다음 장 실패는 화면상 "여기가 끝"과 구분되지 않는다. 커서는 보존돼
+                // 있으므로 같은 자리에서 그대로 재시도된다.
+                if let searchMoreError {
+                    HStack(spacing: 10) {
+                        Text(searchMoreError)
+                            .font(PP.Typo.meta)
+                            .foregroundStyle(PP.Palette.danger)
+                        Button("다시 시도") { Task { await searchMore() } }
+                            .font(PP.Typo.label)
+                            .foregroundStyle(PP.Palette.accent)
+                        Spacer()
+                    }
+                    .plainRow(top: 10, bottom: 10)
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .refreshable { await runSearch() }
         }
     }
 
@@ -97,7 +197,14 @@ struct ContentView: View {
             ForEach(sections, id: \.title) { section in
                 Section {
                     ForEach(section.links, id: \.id) { link in
-                        row(link).plainRow(top: 5, bottom: 5)
+                        row(link)
+                            .plainRow(top: 5, bottom: 5)
+                            // 마지막 카드가 보이면 다음 장을 받는다. **날짜 구간이 아니라
+                            // 전체 목록의 마지막**을 기준으로 삼는다 — 구간 단위로 보면
+                            // "오늘" 섹션 끝에서도 발동해 아직 필요 없는 장을 당겨 온다.
+                            .onAppear {
+                                if link.id == links.last?.id { Task { await loadMore() } }
+                            }
                     }
                 } header: {
                     spine(section).plainRow(top: 14, bottom: 6)
@@ -309,22 +416,135 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - 검색
+
+    /// 입력이 멎은 뒤에 한 번만 요청한다.
+    ///
+    /// `.task(id:)`는 id가 바뀌면 이전 작업을 **취소**하므로, 앞에 슬립을 두면 그것만으로
+    /// 디바운스가 된다 — 타이머도 상태도 필요 없다. 취소된 작업은 슬립에서 죽고 요청까지
+    /// 가지 않는다.
+    private func runSearch(debounce: Bool = true) async {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else {
+            results = []
+            searchMode = nil
+            searchCursor = nil
+            searchError = nil
+            searchMoreError = nil
+            return
+        }
+        if debounce {
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return // 취소됨 — 다음 글자가 들어왔다
+            }
+        }
+        guard case .running = backend.state, let client = backend.client else { return }
+        searching = true
+        defer { searching = false }
+        do {
+            var q2 = Operations.search.Input.Query(q: q, limit: 50)
+            // 태그 필터가 걸려 있으면 검색에도 그대로 적용한다 — 화면에 필터 칩이 떠
+            // 있는데 검색만 그걸 무시하면 사용자가 본 것과 다른 결과가 나온다.
+            if case let .tag(name) = filter { q2.tag = name }
+            let page = try await client.search(.init(query: q2)).ok.body.json
+            // SearchResult는 allOf(Link + rank)라 생성기가 value1/value2로 감싼다.
+            // 카드가 필요한 것은 Link 쪽이다.
+            results = page.links.map(\.value1)
+            searchCursor = page.next_cursor
+            searchMode = page.mode.rawValue
+            searchError = nil
+            searchMoreError = nil
+        } catch {
+            // 검색 실패를 목록 오류 자리에 쓰지 않는다 — 목록은 멀쩡한데 화면 전체가
+            // 오류로 바뀌면 사용자는 저장한 것이 사라졌다고 읽는다. 대신 **검색 화면에서**
+            // 드러낸다. 이걸 안 하면 실패가 "결과가 없습니다"라는 단정문이 되어,
+            // 저장해 둔 것이 없다는 거짓말을 하게 된다.
+            results = []
+            searchMode = nil
+            searchCursor = nil
+            searchError = error.localizedDescription
+        }
+    }
+
+    /// 검색 결과의 다음 장. 목록과 같은 이유로 필요하다 — 50건에서 끊긴 결과는
+    /// "더 없다"로 읽히는데, 검색에서 그 오해는 목록에서보다 비싸다.
+    ///
+    /// 검색 커서는 목록 커서와 **형식이 다르고 서로 호환되지 않는다**(계약). 그래서 상태를
+    /// 따로 들고 있고, 검색어가 바뀌면 버린다.
+    private func searchMore() async {
+        guard !loadingMore, let cursor = searchCursor,
+              case .running = backend.state, let client = backend.client else { return }
+        loadingMore = true
+        defer { loadingMore = false }
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        var q2 = Operations.search.Input.Query(q: q, limit: 50)
+        q2.cursor = cursor
+        if case let .tag(name) = filter { q2.tag = name }
+        do {
+            let page = try await client.search(.init(query: q2)).ok.body.json
+            let known = Set(results.map(\.id))
+            results.append(contentsOf: page.links.map(\.value1).filter { !known.contains($0.id) })
+            searchCursor = page.next_cursor
+            searchMoreError = nil
+        } catch {
+            // 삼키면 "여기가 끝"과 구분되지 않는다 — 이 함수의 주석이 경고하는 바로 그
+            // 오해를 만들게 된다. searchCursor를 그대로 두므로 재시도가 같은 자리에서 이어진다.
+            searchMoreError = "다음 결과를 불러오지 못했습니다"
+        }
+    }
+
     // MARK: - 로드
 
+    /// 첫 장. 커서를 버리고 처음부터 다시 받는다 — 당겨서 새로고침·필터 변경이 여기로 온다.
     private func load() async {
         guard case .running = backend.state, let client = backend.client else { return }
         do {
-            var query = Operations.listLinks.Input.Query(limit: 50)
-            switch filter {
-            case let .tag(name): query.tag = name
-            case .failed: query.status = .failed
-            case nil: break
-            }
-            let list = try await client.listLinks(.init(query: query))
-            links = try list.ok.body.json.links
+            let page = try await fetchPage(client, cursor: nil)
+            links = page.links
+            nextCursor = page.next_cursor
             loadError = nil
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    /// 다음 장. 마지막 카드가 보이면 불린다.
+    ///
+    /// **더보기 버튼을 두지 않는 이유**는 취향이 아니다. 이 앱은 아카이브이고, 목록을
+    /// 거슬러 올라가는 것이 저장한 것을 되찾는 주된 방법이다 — 그 길목마다 버튼을 세우면
+    /// 되찾기 자체가 일이 된다. 대신 실패했을 때 조용하지 않아야 해서 loadError로 드러낸다.
+    private func loadMore() async {
+        guard !loadingMore, let cursor = nextCursor,
+              case .running = backend.state, let client = backend.client else { return }
+        loadingMore = true
+        defer { loadingMore = false }
+        do {
+            let page = try await fetchPage(client, cursor: cursor)
+            // 중복 방지. keyset 커서는 원리상 안 겹치지만, 같은 커서로 두 번 불리는 경합이
+            // 남아 있으면 같은 카드가 두 장 생기고 ForEach(id:)가 런타임에 경고를 뱉는다.
+            let known = Set(links.map(\.id))
+            links.append(contentsOf: page.links.filter { !known.contains($0.id) })
+            nextCursor = page.next_cursor
+            loadError = nil
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    /// 목록 한 장. 커서만 다르고 필터는 항상 같이 간다 — 커서에 필터가 실려 있지 않으므로
+    /// 빠뜨리면 두 번째 장부터 필터가 풀린다.
+    private func fetchPage(_ client: Client, cursor: String?)
+        async throws -> Components.Schemas.LinkPage {
+        var query = Operations.listLinks.Input.Query(limit: 50)
+        query.cursor = cursor
+        switch filter {
+        case let .tag(name): query.tag = name
+        case .failed: query.status = .failed
+        case nil: break
+        }
+        return try await client.listLinks(.init(query: query)).ok.body.json
     }
 }

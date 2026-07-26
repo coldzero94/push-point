@@ -116,6 +116,7 @@ type ScrapeResult struct {
 	WordCount   *int64 // links.word_count (nil이면 NULL)
 	HasImage    bool   // og:image 존재 여부 — true면 ApplyScrape가 같은 트랜잭션에서 thumb 잡 enqueue
 	BodyText    string // links.body_text — 추출 본문(태거·요약 입력 전용, FTS·API 미노출)
+	Keywords    string // links.keywords — 발행자 분류(태거 입력 전용)
 }
 
 // SaveInput은 저장 요청. url 외는 전부 optional이며, Title/Description/BodyText는
@@ -129,6 +130,7 @@ type SaveInput struct {
 	Title       string
 	Description string
 	BodyText    string // 비어 있지 않으면 body_source='client'로 표시된다
+	Keywords    string // 발행자 분류(meta keywords·article:section). 태깅 입력 전용
 }
 
 // Normalize는 저장 입력을 검증·정제한다. **SaveLink가 스스로 호출하므로 어떤 진입점도
@@ -149,6 +151,7 @@ func (in SaveInput) Normalize() (SaveInput, error) {
 	in.Title = textutil.CleanMeta(in.Title, textutil.MaxTitle)
 	in.Description = textutil.CleanMeta(in.Description, textutil.MaxDescription)
 	in.BodyText = textutil.Clean(in.BodyText, textutil.MaxBodyText, true)
+	in.Keywords = textutil.CleanMeta(in.Keywords, textutil.MaxKeywords)
 	return in, nil
 }
 
@@ -159,6 +162,7 @@ type LinkContent struct {
 	Description string
 	Note        string
 	Body        string // 추출 본문(body_text) — 있으면 태거의 강한 신호
+	Keywords    string // 발행자 분류 — 사이트가 알려준 값이라 도메인 맵과 같은 급의 신호
 }
 
 // TagDictEntry는 태그 사전 한 항목(DB tags 행). 핸들러가 tagger.TagEntry로 변환한다.
@@ -260,8 +264,19 @@ type Store interface {
 
 	// ApplyTags는 tag 잡 결과를 한 writer 트랜잭션으로 반영한다: source='rules' 행을 먼저
 	// 삭제(재태깅 멱등)한 뒤 scored 태그를 INSERT(같은 태그의 manual 행은 ON CONFLICT DO
-	// NOTHING으로 보존), FTS 'tags' 컬럼 재색인. 링크 부재/삭제여도 FK로 무해(멱등).
-	ApplyTags(ctx context.Context, linkID int64, scored []ScoredTag) error
+	// NOTHING으로 보존), FTS 'tags' 컬럼 재색인.
+	//
+	// **삭제된 링크에는 쓰지 않는다 — ErrNotFound다.** 소프트 삭제라 FK CASCADE가
+	// 발동하지 않으므로 "부재여도 FK로 무해"가 성립하지 않는다. 그냥 쓰면 삭제로
+	// 회수한 corpus_df 기여가 되살아나고 되돌릴 주체가 없다.
+	// terms는 이 문서에서 매칭된 **사전 표면의 집합**이다. corpus_df 원장(link_terms)에
+	// 기록해 같은 트랜잭션에서 df를 갱신한다 — 태그 쓰기와 갈라 두면 재시도 한 번에
+	// 통계와 태그가 어긋난다.
+	ApplyTags(ctx context.Context, linkID int64, scored []ScoredTag, terms []string) error
+
+	// CorpusDF는 자체 코퍼스의 문서 빈도 스냅샷을 돌려준다 (표면 → df, 그리고 문서 수).
+	// 태거 IDF의 입력이다.
+	CorpusDF(ctx context.Context) (docs int64, df map[string]int64, err error)
 
 	// ListLinks는 keyset 커서 목록. tag는 태그 이름 필터, status는 links.status 필터
 	// (각각 빈 문자열이면 미적용). cursor는 이전 응답의 nextCursor (첫 페이지는 "").

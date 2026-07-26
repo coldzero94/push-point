@@ -44,6 +44,7 @@ func (s *sqliteStore) ApplyScrape(ctx context.Context, linkID int64, m ScrapeRes
 				body_text   = CASE WHEN body_source = 'client' OR ? = '' THEN body_text ELSE ? END,
 				body_source = CASE WHEN body_source = 'client' THEN body_source
 				                   WHEN ? <> '' THEN 'server' ELSE body_source END,
+				keywords    = CASE WHEN body_source = 'client' OR ? = '' THEN keywords ELSE ? END,
 				author = ?, content_type = ?, lang = ?,
 				published_at = ?, duration_sec = ?, word_count = ?,
 				status = 'done', error = '', updated_at = unixepoch()
@@ -51,6 +52,7 @@ func (s *sqliteStore) ApplyScrape(ctx context.Context, linkID int64, m ScrapeRes
 			m.Title, m.Description,
 			m.BodyText, m.BodyText,
 			m.BodyText,
+			m.Keywords, m.Keywords,
 			m.Author, m.ContentType, m.Lang,
 			m.PublishedAt, m.DurationSec, m.WordCount, linkID)
 		if err != nil {

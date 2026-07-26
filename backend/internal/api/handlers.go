@@ -20,6 +20,7 @@ import (
 type Server struct {
 	store     store.Store
 	thumbsDir string // DATA_DIR/thumbs 절대화된 루트 — 경로 탈출 검증 기준
+	dataDir   string // 시트 연결 정보(sheets.json)를 읽고 쓰는 자리
 	logger    *slog.Logger
 }
 
@@ -31,7 +32,7 @@ func NewServer(st store.Store, dataDir string, logger *slog.Logger) *Server {
 		logger.Error("thumbs 루트 절대화 실패", "err", err)
 		abs = filepath.Clean(filepath.Join(dataDir, "thumbs"))
 	}
-	return &Server{store: st, thumbsDir: abs, logger: logger}
+	return &Server{store: st, thumbsDir: abs, dataDir: dataDir, logger: logger}
 }
 
 var _ gen.StrictServerInterface = (*Server)(nil)
@@ -237,6 +238,7 @@ func (s *Server) CreateLink(ctx context.Context, request gen.CreateLinkRequestOb
 		Title:       deref(request.Body.Title),
 		Description: deref(request.Body.Description),
 		BodyText:    deref(request.Body.BodyText),
+		Keywords:    deref(request.Body.Keywords),
 	}
 	id, createdAt, duplicate, err := s.store.SaveLink(ctx, in)
 	if errors.Is(err, store.ErrInvalidURL) {

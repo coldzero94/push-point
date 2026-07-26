@@ -39,7 +39,7 @@ v2는 API 서버와 워커가 하나의 Go 프로세스(`backend/cmd/pushpoint/m
 
 > **M2 인터림 (tagger 부재)**: step 4~5는 tagger가 등록된 스테디 상태(M3 이후)다. tagger는 M3(Phase A)에서 도입되므로(08 마일스톤·아래 `backend/internal/tagger` 절), M2 시점에는 scrape 성공 트랜잭션이 `tag` 잡을 만들지 않고 `links.status`가 곧바로 `done`이 된다 (`thumb` 잡은 og:image가 있으면 M2에서도 연쇄 enqueue). 따라서 M2 스테디 상태의 링크 전이는 `pending → scraping → done`이며, `tagging` 상태는 M3부터 도달한다.
 
-클라이언트 관점에서는 "저장은 순간, 나머지는 알아서"다. 공유 시트가 2초 내 닫히는 UX는 클라이언트의 App Group 로컬 큐 우선 기록이 보장하고(서버가 꺼져 있어도 성립 — [02-TECH-SPEC.md](02-TECH-SPEC.md) iOS 절), 이 비동기 구조는 저장 API의 p99 < 50ms 응답을 만든다.
+클라이언트 관점에서는 "저장은 순간, 나머지는 알아서"다. 공유 시트가 2초 내 닫히는 UX는 확장이 App Group의 공유 SQLite에 직접 쓰는 것이 보장하고(서버가 없어도 성립 — [02-TECH-SPEC.md](02-TECH-SPEC.md) iOS 절), 이 비동기 구조는 저장 API의 p99 < 50ms 응답을 만든다.
 
 ## 2. 저장소 구조와 패키지별 역할
 

@@ -11,6 +11,7 @@ package tagjob
 
 import (
 	"context"
+	"sort"
 
 	"github.com/coby/push-point/backend/internal/store"
 	"github.com/coby/push-point/backend/internal/summarizer"
@@ -52,8 +53,12 @@ func Run(ctx context.Context, st store.Store, linkID int64) (Result, error) {
 		return Result{}, err
 	}
 	dict := tagger.BuildDictionary(toTagEntries(entries))
-	scored := tagger.Classify(toTaggerContent(content), dict)
-	if err := st.ApplyTags(ctx, linkID, toStoreScored(scored)); err != nil {
+	tc := toTaggerContent(content)
+	scored := tagger.Classify(tc, dict)
+	// corpus_df 원장에 이 문서가 무엇을 기여하는지 함께 넘긴다. **매칭된 태그가 아니라
+	// 매칭된 표면**이다 — `go`와 `golang`은 같은 태그를 가리키지만 변별력이 전혀 달라서,
+	// 태그 단위로 세면 나중에 IDF가 그 차이를 볼 수 없다.
+	if err := st.ApplyTags(ctx, linkID, toStoreScored(scored), sortedKeys(dict.MatchedSurfaces(tc))); err != nil {
 		return Result{}, err
 	}
 
@@ -90,7 +95,10 @@ func toTagEntries(es []store.TagDictEntry) []tagger.TagEntry {
 }
 
 func toTaggerContent(c store.LinkContent) tagger.Content {
-	return tagger.Content{Domain: c.Domain, Title: c.Title, Description: c.Description, Note: c.Note, Body: c.Body}
+	return tagger.Content{
+		Domain: c.Domain, Title: c.Title, Description: c.Description,
+		Note: c.Note, Body: c.Body, Keywords: c.Keywords,
+	}
 }
 
 func toStoreScored(ss []tagger.ScoredTag) []store.ScoredTag {
@@ -98,5 +106,16 @@ func toStoreScored(ss []tagger.ScoredTag) []store.ScoredTag {
 	for i, s := range ss {
 		out[i] = store.ScoredTag{TagID: s.TagID, Confidence: s.Confidence}
 	}
+	return out
+}
+
+// sortedKeys는 집합을 결정적 순서의 슬라이스로 만든다. 순서가 결과를 바꾸지는 않지만,
+// 같은 입력에 같은 SQL 순서가 나와야 테스트와 로그를 읽을 수 있다.
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
 }

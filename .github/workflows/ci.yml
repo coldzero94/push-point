@@ -43,6 +43,12 @@ jobs:
           go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
           just gen-check
 
+      # 계약의 세 번째 소비자(iOS)도 드리프트를 검사한다. 완전한 재생성은 macOS +
+      # Swift가 필요해 여기 못 넣으므로, 어느 계약에서 생성했는지 스탬프만 대조한다 —
+      # 실제로 일어나는 드리프트는 "스펙을 고치고 iOS 재생성을 잊음"이고 그건 잡힌다.
+      - name: iOS 생성물 계약 스탬프 검사 (just ios-stamp-check)
+        run: just ios-stamp-check
+
       - name: enum 정합 검사 (openapi.yaml ↔ migrations CHECK)
         run: |
           if [ -f scripts/lint_enums.sh ]; then bash scripts/lint_enums.sh; else echo "lint_enums.sh 없음 — 건너뜀"; fi

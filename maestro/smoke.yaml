@@ -1,0 +1,17 @@
+# 스모크 — 앱이 뜨고, 목록이 그려지고, 두 탭을 오간다.
+#
+# XCUITest(ios/PushPointUITests/)와 **일부러 겹치지 않는다.** 저쪽은 CI 게이트라
+# 픽스처를 심고 저장까지 단언하고, 여기는 에이전트가 화면을 눈으로 보는 자리다 —
+# 실제 데이터가 든 시뮬레이터에 그대로 붙어 "지금 이 화면이 멀쩡한가"만 본다.
+# 그래서 이 플로우는 데이터 내용을 단언하지 않는다(내용은 사람마다 다르다).
+appId: com.pushpoint.app
+---
+- launchApp
+- assertVisible: "Push-Point"
+# 검색창은 목록 화면의 정체성이다 — 없으면 화면이 잘못 그려진 것이다.
+- assertVisible: "제목 · 메모 · 태그"
+- tapOn: "통계"
+- assertVisible: "최근 30일"
+- assertVisible: "무엇을 모았나"
+- tapOn: "목록"
+- assertVisible: "Push-Point"
