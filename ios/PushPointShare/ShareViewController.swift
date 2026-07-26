@@ -25,6 +25,10 @@ final class ShareViewController: UIViewController {
     }
 
     private func run() async {
+        // 계측 시작은 run()의 첫 줄이다. extractPayload는 Safari에서 JS 전처리 결과를
+        // 기다리므로 **저장 시간의 일부**이고, 그 뒤부터 재면 사용자가 겪는 시간이 아니라
+        // 우리가 보고 싶은 시간을 재게 된다.
+        let started = SaveTiming.begin()
         do {
             let payload = try await extractPayload()
             let result = try save(payload)
@@ -44,9 +48,14 @@ final class ShareViewController: UIViewController {
                 await SaveNotifier.notifySaved(title: title, host: host,
                                                tags: result.tagNames, duplicate: result.duplicate)
             }
+            // 배너까지 띄운 뒤에 잰다 — 사용자에게 "됐다"가 보이는 시점이 곧 응답이고,
+            // 저장 함수가 반환한 시점이 아니다.
+            SaveTiming.end(started, outcome: result.duplicate ? "duplicate" : "saved",
+                           tags: result.tags)
         } catch {
             Self.log.error("저장 실패: \(error.localizedDescription)")
             await SaveNotifier.notifyFailed(message: error.localizedDescription)
+            SaveTiming.end(started, outcome: "failed")
         }
         finish()
     }

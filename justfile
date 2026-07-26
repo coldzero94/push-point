@@ -326,6 +326,10 @@ ios-api-gen:
         --output-directory ../../PushPoint/Generated
     @echo "ios-api-gen: ios/PushPoint/Generated/{Types,Client}.swift 갱신"
 
+# M4 DoD 판정 — 공유 저장이 2초를 지켰는지 (확장이 남긴 계측 기록을 읽는다)
+save-timing udid="":
+    @scripts/save_timing.sh {{udid}}
+
 # Maestro 플로우 — 부팅된 시뮬레이터의 **실제 데이터**에 대고 화면이 멀쩡한지 본다
 #
 # XCUITest(just ios-uitest)와 역할이 다르다. 저쪽은 픽스처를 심는 CI 게이트이고,

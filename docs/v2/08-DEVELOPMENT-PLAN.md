@@ -283,9 +283,14 @@ extension(`var title: String { value1.title }`)을 두어 문제를 그 자리�
 | M1 | `just gen-check` | 생성물 드리프트 0 (`just gen` 재실행 후 git diff 없음) |
 | M2 | `just test-crash` | 빌드→fixture 서버→저장→kill -9→재기동→전량 done 단언 |
 | M3 | `just eval` | 베이스라인 대비 리포트 기록 (게이트 판정은 M5 진입 시) |
-| M4 | 시뮬레이터 공유 절차 + 클라이언트 계측 로그 | 공유 탭→응답 2초 미만, 서버 오프라인 시에도 큐 적재 성공·유실 0 |
+| M4 | 시뮬레이터 공유 절차 + `just save-timing` | 공유 탭→응답 2초 미만 (초과 시 exit 1), 서버 오프라인 시에도 저장 성공·유실 0 |
 | M5 | `just eval` (동결 test) | Phase A 베이스라인+15pp(진입), 앙상블 Phase A+10pp(종료) |
 | M6 | `scripts/streak.sh` (GET /api/v1/stats by_day) | 최근 28일 연속 count > 0 |
+
+`just save-timing`은 Share Extension이 App Group에 쌓는 `save-timing.jsonl`을 읽는다
+(`ios/PushPointShare/SaveTiming.swift`). 공유 자체는 사람이 밟는 절차라 자동화하지 않았고,
+**판정만** 스크립트가 한다 — 성공과 실패를 나눠 세는 이유는 실패가 느린 것(대개 타임아웃)이
+성공이 느린 것과 다른 문제인데 섞으면 평균만 좋아 보이기 때문이다.
 
 bench-http / test-crash / seed 레시피는 justfile에 기존 가드 패턴("M1/M2에서 활성화" 안내)으로 포함돼 있다. `just bench`(go test 마이크로벤치)는 유지하되, **go test 벤치는 평균만 내므로 p99 판정 수단이 아니다 — p99 판정은 bench-http가 담당한다.**
 
@@ -336,6 +341,20 @@ bench-http / test-crash / seed 레시피는 justfile에 기존 가드 패턴("M1
 2. Android — iOS에서의 저장 습관이 자리 잡은 뒤
 3. 멀티유저 — 남에게 권할 만한 물건이 됐을 때. Store/Queue/Tagger 인터페이스 뒤 구현체 교체 + `deploy/k8s-future/` 부활로 대응
 
+기능 후보는 [12-BACKLOG.md](12-BACKLOG.md)가 따로 관리한다 (2026-07-26 신설). 위 세 항목이
+"방향"이라면 그쪽은 **착수·폐기 조건이 붙은 구체적 후보**다. 지금 살아 있는 넷은:
+
+| 후보 | 요지 | 착수 조건 |
+|---|---|---|
+| `scripts/streak.sh` | M6 Week 4가 이미 이름까지 지정했는데 파일이 없다 — 연속 저장일 판정기 | 없음 (M6 산출물) |
+| 검색 계측 하네스 | 검색 p99 < 30ms 게이트를 **재는 명령이 리포에 없다**. `nlu/golden/search.jsonl` + `just eval-search` + `just bench-search` | 검색을 실제로 건드릴 마음이 있을 때 |
+| 요약을 FTS 색인에 | `summary`가 desc와 안 겹치는 문장을 고른다는 실측(overlap 0.10~0.13)이 있어 새 검색 표면이 실재한다 | golden 123건에서 "요약에만 있는 3-gram"을 얻는 링크 비율 **30% 이상** |
+| `links.opened_at` | 코어 루프 5단계 중 마지막(재열람)만 계측이 0이다 | 없음 |
+
+**그 문서에서 더 값진 절은 3절이 아니라 4절이다** — 검토했으나 자른 20건이 이유와 함께 있고,
+같은 아이디어가 다시 올라올 때 재논의를 막는 것이 그 문서의 주된 존재 이유다. 새 기능이
+떠오르면 3절보다 4절을 먼저 찾아보라.
+
 ---
 
-관련 문서: [02-TECH-SPEC.md](02-TECH-SPEC.md), [03-SYSTEM-ARCHITECTURE.md](03-SYSTEM-ARCHITECTURE.md), [07-DEPLOYMENT.md](07-DEPLOYMENT.md)
+관련 문서: [02-TECH-SPEC.md](02-TECH-SPEC.md), [03-SYSTEM-ARCHITECTURE.md](03-SYSTEM-ARCHITECTURE.md), [07-DEPLOYMENT.md](07-DEPLOYMENT.md), [12-BACKLOG.md](12-BACKLOG.md)
