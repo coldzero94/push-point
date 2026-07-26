@@ -32,7 +32,7 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 | M2 스크래퍼 | 3주 | 워커 풀 + 파싱(사이트 어댑터) + 썸네일 + 재시도/복구 + 북마크·Takeout 임포트 | `just test-crash` 통과, 대표 도메인 세트에서 3s 내 제목·썸네일, 실링크 300건+ 적재, **매일 실사용 시작** |
 | M3 태깅 A + 검색 | 4주 | 규칙 태거(한국어 정규화) + 태그 사전 + FTS5/LIKE 검색 + eval 하네스 | `just eval` 동작, golden set(dev/test 분할) 구축, 베이스라인 대비 측정치 기록 |
 | M4 iOS | 5주 | Share Extension + 목록 + 검색 + 상세 편집 + Tailscale 실기기 | 서버 오프라인에도 공유 저장 2초 내 성공·유실 0건, 연속 7일 하루 1건+ 저장 |
-| M5 태깅 B | 4주 | Go 토크나이저 + ONNX 베이크오프 + 앙상블 + tag_feedback 반영 + 추출식 요약(LLM 없이) | 진입: Phase A 베이스라인+15pp. 종료: 앙상블 Phase A+10pp (참고 80%) |
+| M5 태깅 B | **재범위** | ~~4주 통짜 ONNX 앙상블~~ → Phase 0 계측·부채(1.5주) → Phase 1 오프라인 스파이크(1주, 폐기 전제) → Phase 2 조건부 통합(2주) | 종료: 앙상블이 Phase A 대비 **회귀 0 + 개선 5건 이상**(동결 test). 원안 취소 경위는 §M5 |
 | M6 다듬기 | 4주 | 위젯 + 성능 튜닝 + 공개 글 (Live Activity는 이후 후보) | `scripts/streak.sh` 4주 연속 일일 사용, 기술 글 1편 |
 | M-Web 웹 앱 | 병렬 트랙 | Vite+React+TS SPA, `api/openapi.yaml` 계약 소비(openapi-typescript), 6개 화면, Go embed 서빙 | `just web-gen-check` 드리프트 0 + `just web-build` 성공(단일 바이너리 embed), iOS와 대등한 기능 |
 
@@ -114,9 +114,9 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 - `PATCH /api/v1/links/{id}` 태그 전체 교체 + tag_feedback 기록
 
 **Week 4**
-- golden set 구축: M2 임포트+실사용 축적분에서 층화 샘플링(도메인·content_type 비율 유지)한 100건을 `nlu/golden/` JSONL로 — **dev 50 / test 50 분할, test는 동결**. 스키마 `{url, snapshot: {title, description, meta_keywords, body_text}, expected_tags: []}` (eval은 네트워크 접근 0, snapshot만 입력)
+- golden set 구축: M2 임포트+실사용 축적분에서 층화 샘플링(도메인·content_type 비율 유지)한 100건을 `nlu/golden/` JSONL로 — **dev / test 분할, test는 동결**(실제 결과: dev 62 / test 61). 스키마 `{url, snapshot: {title, description, body_text, keywords}, expected_tags: []}` (eval은 네트워크 접근 0, snapshot만 입력)
 - `just eval` 구현: top-3 Recall(hit = 예측 top-3 ∩ expected_tags ≥ 1) + 태그별 precision/recall·부착 빈도 표 출력. "도메인 휴리스틱만" 베이스라인을 항상 함께 측정
-- 규칙 튜닝(dev만 사용) → **베이스라인 대비 측정치 기록. 정확도 게이트는 M4 진입을 차단하지 않는다 — 판정은 M5 진입 조건으로 이동** (Phase A ≥ 베이스라인+15pp)
+- 규칙 튜닝(dev만 사용) → **베이스라인 대비 측정치 기록. 정확도 게이트는 M4 진입을 차단하지 않는다 — 판정은 M5 진입 조건으로 이동** (재정의된 M5 진입 게이트 — 02-TECH-SPEC.md)
 
 ### M4 iOS (5주)
 
@@ -252,31 +252,87 @@ extension(`var title: String { value1.title }`)을 두어 문제를 그 자리�
 어떤 태그가 붙었는지 전달된다. 배너에 태그를 노출하는 것은 장식이 아니라, 서버·네트워크
 없이 태깅이 끝났다는 자립 모드의 주장을 사용자가 매번 확인하는 지점이다.
 
-### M5 태깅 B (4주)
+### M5 태깅 B — **원안 취소, 재범위 (2026-07-26)**
 
-진입 조건: **Phase A가 베이스라인 대비 +15pp 이상** (동결 test 셋 기준, 절대 60%는 참고치). M5 시작 시 실사용 축적분으로 두 번째 golden set을 추가한다.
+> **원안(4주 통짜 ONNX 앙상블)은 착수 취소했다.** 난이도가 아니라 **판정 불가**가 이유다.
+> 아래는 실측으로 다시 잡은 범위이고, 근거는 전부 2026-07-26 조사에서 재현한 값이다.
 
-**Week 1**
-- 모델 후보 3종 베이크오프: (a) multilingual-e5-small-ko 계열 (ONNX 기제공, 384-dim, 1순위 검토 — "query:/passage:" 프리픽스 규약 주의), (b) jhgan/ko-sroberta-multitask int8 (110M), (c) BM-K/KoSimCSE int8 (110M, ONNX 직접 변환 필요). 크기·지연·정확도 실측으로 선정 (변환 스크립트·아티팩트는 `nlu/models/`)
-- Go 토크나이저 선정: sugarme/tokenizer 또는 knights-analytics/hugot (onnxruntime_go는 텐서 입출력만 제공)
+#### 왜 원안을 취소했는가 — 산술 셋
 
-**Week 2**
-- 진입 게이트: **Python HF 토크나이저와 토큰 ID 시퀀스 100% 일치 골든 테스트** (한글 NFC 정규화 포함) 통과 후 추론 구현 착수
-- yalue/onnxruntime_go로 Go 내 추론, `tag_embeddings` 캐시 생성·갱신
-- 배포 형태 3택 결정: (1) libonnxruntime.dylib을 embed 후 시작 시 data/로 추출 (cgo 빌드 감수), (2) hugot 순수 Go 백엔드 (~8배 느리지만 태깅은 비동기 3s 예산 내), (3) Phase A 유지
+**(가) 종료 게이트가 만점을 요구한다.** 동결 test Phase A = 54/61 = 0.885. "+10pp 이상"은
+≥ 0.985인데 60/61 = 0.9836이 미달이므로 **통과 가능한 결과가 61/61 하나뿐**이다.
+통과 조합은 `(개선 7, 회귀 0)` 단 하나. 이 게이트는 Phase A ≤ 0.90에서만 성립하는데,
+Phase A가 예상(참고치 80%)을 크게 넘으면서 **잘해서 벌받는 구조**가 됐다.
 
-**Week 3**
-- 문서 임베딩 vs 태그 임베딩 코사인 유사도 분류 → Phase A와 점수 앙상블
+**(나) 미스의 대부분은 재랭킹으로 못 고친다.** test 미스 7건을 해부하면 **6건은 정답 태그
+점수가 정확히 0.000**이다 — threshold 미달이 아니라 아예 매칭이 없다. 순위만 바꿔 되는 건
+1건이고, **재랭킹 상한은 55/61 = +1.6pp**다. 원안의 "점수 앙상블"이 자연히 사는 모드가
+재랭킹인데, 게이트에 닿으려면 0점 태그를 threshold 위로 **승격**시켜야 하고 그건 오탐
+대량 유입이라는 다른 위험이다. 원안은 두 모드를 구분하지 않았다.
+
+**(다) 튜닝 셋이 포화됐다.** dev Phase A = 59/62, **미스 3건**. Week 3~4의 "가중치 보정"이
+관측할 수 있는 신호가 3항목이다. 게다가 dev 링크의 **73%가 3위와 4위 점수가 동일**해
+태그 이름 알파벳순으로 갈리는데, 가중치를 건드리면 그 덩어리가 통째로 재배열되고
+hit@3는 그걸 거의 못 본다. **조타 장치 없이 4주를 시작하는 상태였다.**
+
+#### 실측으로 깨진 원안의 전제
+
+| 원안이 적은 것 | 실측 |
+|---|---|
+| (a) multilingual-e5-small-ko — **ONNX 기제공**, 1순위 | `.onnx` **0개**(safetensors뿐). 기제공 int8을 가진 건 **(b) ko-sroberta**(`onnx/model_qint8_avx512_vnni.onnx`) — 1순위 근거가 뒤집힌다 |
+| (b)(c)만 "110M" | e5-small이 **117.65M으로 셋 중 가장 크다**(나머지 110.62M). int8 파일도 112.9 vs 106.2 MiB로 **크기 축이 세 후보를 못 가른다** |
+| 배포 (2) hugot 순수 Go "~8배 느리지만 3s 예산 내" | 토크나이저가 1순위 모델의 normalizer를 **조용히 무시** → golden 토큰 일치 **0/123**. 지연은 상수가 아니라 길이 함수(15토큰 24.5배 … 481토큰 43.6배 = **1.35초**), 512토큰 초과는 실패. **후보가 아니다** |
+| 배포 (1) cgo — 리스크가 iOS | iOS는 원래 cgo 링킹을 요구해 오히려 된다. 실제로 깨지는 건 **서버 `GOOS=linux` 크로스컴파일**이고, 그때 02 §2의 "GOOS/GOARCH만으로 크로스컴파일"이 무너진다 |
+| 진입 게이트 "베이스라인 대비 +15pp" (현재 +54.1pp) | 진짜 바닥은 0.344가 아니다. **내용을 안 보는 상수 예측기 `{article, tutorial, dev}`가 test 0.721**. Phase A의 대응표본 실제 우위는 **+16.4pp**(McNemar p=0.0063) — 마진 표기가 크게 부풀려져 있었다 |
+| "토큰 ID 100% 일치" 진입 게이트 | 어느 후보로도 도달 불가(최고 97.6%). 그리고 **"한글 NFC 포함"은 방향이 뒤집혀 있다** — NFD 입력에서 Go와 Python은 *똑같이 망가진 채* 100% 일치한다. 게이트는 초록이고 시스템은 깨진다 |
+| **확장(ppshare)에서도 Phase B** | 언급 자체가 없었다. int8 가중치만 106~113MiB인데 확장 여유는 ~106MB이고, 실측 로드 후 RSS는 **367MB(ORT) / 603MB(순수 Go)** — 예산의 3~5배. **물리적으로 불가능하다** |
+
+부수로, 원안과 무관한 **현재 결함**을 하나 찾았다: 유니코드 정규화가 백엔드에 없어 NFD
+입력에서 dev 0.952 → 0.710, test 0.885 → 0.689였다. 2026-07-26 수정 완료
+([nlu/golden/README.md](../../nlu/golden/README.md)).
+
+#### 재범위 — 세 단계, 각 단계에 폐기 기준
+
+**Phase 0 — 계측과 Phase A 부채 (약 1.5주). M5 착수 여부와 무관하게 순이득.**
+- 게이트 재정의(아래 "게이트" 절) — 지금 게이트로는 어떤 결과도 통과 못 한다
+- 동점 가시화: `just eval`이 3위/4위 동점 비율을 함께 낸다. 지금은 dev 73%가 알파벳순으로 갈리는데 지표가 그걸 못 본다
+- 미스 해부: 미스마다 "정답 태그 점수 0인가, 순위 밀림인가"를 낸다. 이게 없으면 어떤 개선도 조준할 수 없다
+- 실사용 축적분으로 golden 2차 셋 — **본문 없는 실제 링크 30건**을 우선한다(현재 golden은 body_text 빈 항목이 0건이라 Phase B가 겨냥하는 구간이 비어 있다)
+- **폐기 기준: 없음.** 전부 M5와 독립적으로 값을 한다.
+
+**Phase 1 — 오프라인 타당성 스파이크 (1주). 코드 통합 0, 폐기 전제.**
+- `nlu/models/`에서 Python으로만 돌린다. Go 통합·계약·마이그레이션 **전부 없음**
+- 후보 모델로 golden 123건의 문서 임베딩과 태그 임베딩을 만들어 **코사인 유사도만으로** Recall@3를 잰다
+- **폐기 기준(하나라도 걸리면 M5 중단, 컷 순서 3번 발동)**:
+  - 임베딩 단독 Recall@3가 상수 예측기(test 0.721)를 못 넘으면 — 앙상블할 신호가 아니다
+  - Phase A가 0점을 준 6건 중 **3건 이상을 살리지 못하면** — 재랭킹 상한 +1.6pp에 갇힌다
+  - 태그 42개에 임베딩할 문장이 없다는 문제가 안 풀리면(현재 `tags.json`은 `{name, facet, aliases}`뿐이고 name은 전부 한 단어 영어다)
+
+**Phase 2 — 서버 축 통합 (2주). Phase 1 통과 시에만.**
+- 배포는 **서버 축만**. 확장은 Phase A 유지가 확정이다(위 표)
+- 결합 규칙을 먼저 정한다 — 현재 score map은 **정수 격자**(가중치 1/2/3 × 정수 매칭 수)에 threshold 1.0이고, 거기에 [-1,1] 코사인을 더할 배율·정규화가 원안에 없다. 그 배율은 Phase 1의 코사인 분포에서 나오므로 **Week 3 항목이 아니라 Phase 1 산출물**이다
+- **폐기 기준**: 결합 후 동결 test가 재정의된 게이트를 못 넘거나, 서버 CGO-free 성질을 잃는 대가가 얻는 것보다 크다고 판단되면
+
+#### 명시적 비-범위
+
+- **확장(ppshare)의 Phase B** — 위 표의 실측으로 불가능. 대신 "같은 링크가 저장 경로에 따라 다른 태그를 받는다"를 검증하는 테스트가 필요하다(현재 0개)
+- **hugot 순수 Go 백엔드** — 토큰 일치 0/123, 481토큰 1.35초
+- **tag_feedback 재랭킹** — `tag_feedback`에 `removed`가 0건이다. 학습할 데이터가 없다. 백로그의 `feedback-golden`(실사용 오분류를 golden 후보로) 쪽이 먼저다
+
+#### 원안에서 살아남은 것 — 추출식 요약
+
+요약은 원안의 Week 3 항목이었지만 **M3 단계에서 이미 구현됐고 Phase B와 무관하다.**
+설계 기록이 여기밖에 없으므로 그대로 남긴다.
+
 - **추출식 요약 Phase A (구현 완료, LLM 없이)**: 본문에서 핵심 문장 2~3개를 고르는 extractive 요약 — 생성이 아니라 원문 문장 선택이라 환각 0, 순수 Go(`backend/internal/summarizer`). **TextRank**(어휘 겹침 유사도 기반 문장 그래프 PageRank) + **description-aware MMR**로 중심 문장을 뽑되 설명과 겹치는 문장을 눌러, 인스펙터에서 같은 말을 두 번 하지 않게 한다. M3의 `tagger.Tokenize`(조사 정규화)를 재사용하고, tag 잡이 이미 본문을 읽으므로 **한 번의 본문 처리로 태깅+요약**을 함께 한다(추가 I/O 0).
   - 저장·노출: `links.summary`(마이그레이션 0005) + 계약 **`LinkDetail.summary`만** — 목록(`Link`)·검색(`SearchResult`)에는 싣지 않는다. 웹은 **인스펙터의 「요약」 섹션**(설명 바로 위)에만 그리고 **카드는 바꾸지 않는다**: 요약은 원문 대체재가 아니라 "열까 말까"의 판단 보조이고, 목록 응답을 가볍게 유지한다. 계약이 좁은 덕에 목록·검색 store 경로(`linkCols`/`scanLink`/`sqlite_search.go`)를 한 글자도 건드리지 않는다. `links_fts` 미색인(가상 테이블 재생성 위험 — 재검토는 아래 stage 2).
   - 품질 가드 5겹: 본문 200룬 미만 / 산문 3문장 미만 / 문장별 산문 게이트(목차·코드·이메일 목록 제거) / 총 450룬 캡 / description과 0.8 이상 겹치면 통째로 폐기. 불통과면 빈 문자열이고 UI는 아무것도 그리지 않는다.
   - 측정(`just eval-summary`, golden dev/test 각 50건): **정답 요약이 없어 ROUGE는 불가**하므로 lead-3 베이스라인 대비 상대 게이트만 건다(desc 중복도 · 태그 신호 보존 · 결정성). 실측은 [nlu/golden/README.md](../../nlu/golden/README.md)에 기록한다.
   - **stage 2 후보**(이번 범위 밖): Phase B 임베딩으로 문장 유사도 교체(골격은 그대로 — `similarity()` 하나만 바뀐다), `links_fts`에 summary 색인(desc-aware MMR 덕에 요약 토큰의 대부분이 description 밖이라 진짜 새 검색 표면이다), 카드 본문 슬롯 백필(`description || summary`) — 재검토 트리거는 "description 빈 링크 25% 초과 또는 요약 커버리지 85% 초과".
 
-**Week 4**
-- tag_feedback 데이터로 재랭킹 가중치 보정
-- `just eval` (동결 test) → **앙상블이 Phase A 대비 +10pp 이상 통과** (절대 80%는 참고치)
-- 기술 글 메모 축적 시작 (베이크오프·토크나이저 실측 기록 — 이후 마일스톤마다 축적, M6 Week 4는 퇴고만)
+  - **stage 2 진행 상황(2026-07-26)**: `links_fts`에 summary 색인은 **완료**했다(백로그 B1,
+    게이트 87% 통과 — golden 123건 중 107건이 요약에만 있는 3-gram을 얻는다). Phase B로
+    문장 유사도를 교체하는 것은 위 재범위의 Phase 2 이후 문제다.
 
 ### M6 다듬기 (4주)
 
@@ -302,7 +358,7 @@ extension(`var title: String { value1.title }`)을 두어 문제를 그 자리�
 | M2 | `just test-crash` | 빌드→fixture 서버→저장→kill -9→재기동→전량 done 단언 |
 | M3 | `just eval` | 베이스라인 대비 리포트 기록 (게이트 판정은 M5 진입 시) |
 | M4 | 시뮬레이터 공유 절차 + `just save-timing` | 공유 탭→응답 2초 미만 (초과 시 exit 1), 서버 오프라인 시에도 저장 성공·유실 0 |
-| M5 | `just eval` (동결 test) | Phase A 베이스라인+15pp(진입), 앙상블 Phase A+10pp(종료) |
+| M5 | `just eval` (동결 test) | 진입: 상수 예측기(0.721) 대비 McNemar p<0.05 — **충족**. 종료: 회귀 0 + 개선 5건 이상 |
 | M6 | `scripts/streak.sh` (GET /api/v1/stats by_day) | 최근 28일 연속 count > 0 |
 
 `just save-timing`은 Share Extension이 App Group에 쌓는 `save-timing.jsonl`을 읽는다
@@ -320,9 +376,9 @@ bench-http / test-crash / seed 레시피는 justfile에 기존 가드 패턴("M1
 
 - 성능 게이트: `just bench-http` 저장 p99 < 50ms, `scripts/coldstart.sh` 콜드 스타트 < 1s, 검색(1만 링크) < 30ms, 10만 건 목록 < 50ms. 해당 마일스톤의 통과 조건이다
 - 태깅 게이트는 **상대 조건**이다. 절대 수치(60% / 80%)는 참고치일 뿐 판정 기준이 아니다:
-  - M5 진입 = Phase A가 "도메인 휴리스틱만" 베이스라인 대비 **+15pp 이상**
-  - M5 종료 = 앙상블이 Phase A 대비 **+10pp 이상**
-- dev/test 분리·동결: golden set은 dev 50 / test 50으로 분할한다. 규칙 튜닝은 dev만 사용하고, 게이트 판정은 동결된 test로만 한다
+  - M5 진입 = Phase A가 **상수 예측기**(내용 미참조, test 0.721) 대비 대응표본 유의 — **충족**
+  - M5 종료 = 앙상블이 Phase A 대비 **회귀 0 + 개선 5건 이상**(2026-07-26 재정의)
+- dev/test 분리·동결: golden set은 dev / test로 분할한다(실제: dev 62 / test 61). 규칙 튜닝은 dev만 사용하고, 게이트 판정은 동결된 test로만 한다
 - M3의 태깅 측정은 기록이며 M4 진입을 차단하지 않는다 — 판정 시점은 M5 진입이다
 
 ---
@@ -331,7 +387,7 @@ bench-http / test-crash / seed 레시피는 justfile에 기존 가드 패턴("M1
 
 | 위험 | 대응 |
 |---|---|
-| 한국어 태깅 품질 미달 (Phase A가 베이스라인+15pp 미달) | 태그 사전을 축소해 분류 난도를 낮추고, 수동 보정 데이터(tag_feedback)를 축적해 M5 재랭킹 재료로 쓴다 |
+| 한국어 태깅 품질 미달 (Phase A가 상수 예측기 대비 유의하지 않음) | 태그 사전을 축소해 분류 난도를 낮추고, 수동 보정 데이터(tag_feedback)를 축적해 M5 재랭킹 재료로 쓴다 |
 | Go 토크나이저 토큰 불일치 (Python HF와 ID 시퀀스 상이) | 토큰 ID 100% 일치 골든 테스트(한글 NFC 정규화 포함)를 M5 Week 2 진입 게이트로 둔다. 불일치가 해소되지 않으면 후보 토크나이저(sugarme/tokenizer ↔ hugot) 교체 |
 | ONNX 배포 복잡화 (dylib 동적 링크로 단일 정적 바이너리 붕괴) | M5 Week 2에 3택 결정: dylib embed 후 시작 시 추출(cgo 감수) / hugot 순수 Go 백엔드(~8배 느리지만 비동기 3s 예산 내) / Phase A 유지 |
 | ONNX Go 바인딩 난항 (onnxruntime_go 빌드·호환 문제) | Phase A(규칙 기반)로 버틴다. Phase A 품질로도 실사용은 가능하며 M5 전체가 컷 순서 3번이다 |
