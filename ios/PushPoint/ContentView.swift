@@ -354,7 +354,11 @@ struct ContentView: View {
                 index = 0
             } else if cal.isDateInYesterday(date) {
                 index = 1
-            } else if let days = cal.dateComponents([.day], from: date, to: now).day, days < 7 {
+            } else if let days = cal.dateComponents([.day], from: cal.startOfDay(for: date),
+                                                     to: cal.startOfDay(for: now)).day, days < 7 {
+                // **달력 하루 단위로 센다.** 앞의 두 분기가 isDateInToday/isDateInYesterday라
+                // 달력 기준인데 여기만 경과 시간으로 재면 축이 섞인다 — 6일 2시간 전 링크가
+                // 달력으로는 7일 차이라 "이번 주"와 "이전" 사이에서 경계가 어긋난다.
                 index = 2
             } else {
                 index = 3

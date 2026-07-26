@@ -48,7 +48,11 @@ func (s *sqliteStore) searchFTS(ctx context.Context, match, tag string, from, to
 		sb   strings.Builder
 		args []any
 	)
-	sb.WriteString(`SELECT id, url, domain, title, description, content_type, thumb_path, status, note, created_at, rank FROM (
+	// 바깥 프로젝션은 `*`다. 컬럼을 손으로 다시 적으면 linkCols에 컬럼이 추가돼도
+	// 여기만 옛 목록으로 남는데, **두 사본의 개수가 서로 맞아떨어져서 Scan이 통과한다** —
+	// 목록은 새 값을 내고 검색만 조용히 빈 값을 낸다. 실측으로 그 상태를 재현했고
+	// 이 한 줄이면 같은 실수가 기존 테스트 4개에서 arity 불일치로 시끄럽게 터진다.
+	sb.WriteString(`SELECT * FROM (
 		SELECT ` + linkCols + `, bm25(links_fts) AS rank
 		FROM links_fts JOIN links l ON l.id = links_fts.rowid`)
 	if tag != "" {

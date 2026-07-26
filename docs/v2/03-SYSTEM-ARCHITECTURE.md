@@ -58,7 +58,7 @@ push-point/
 │   │   ├── queue/             # Queue 인터페이스 + sqlite jobs 구현
 │   │   ├── scraper/           # fetch + goquery 파싱, singleflight
 │   │   ├── safedial/          # SSRF 가드 (사설 대역 다이얼 차단)
-│   │   ├── tagger/            # M3: Tagger 인터페이스 + rules / onnx 구현
+│   │   ├── tagger/            # M3: 규칙 태거 (Phase B는 신호 하나로 합류 — 아래 참조)
 │   │   ├── thumbs/            # 썸네일 생성·저장
 │   │   └── web/               # SPA 서빙 (embed_frontend 태그 전용)
 │   ├── migrations/            # SQLite 마이그레이션 (golang-migrate, embed)
@@ -103,7 +103,7 @@ URL fetch + goquery 파싱. `<title>`, og:title/description/image/site_name, met
 
 ### backend/internal/tagger
 
-`Tagger` 인터페이스 뒤에 rules(M3, Phase A)와 onnx(M5, Phase B) 구현이 놓인다. 자유 태그 생성이 아니라 통제된 태그 사전(30~50개)에 대한 분류로 문제를 좁혀 LLM 없이 품질을 확보한다. Phase A는 도메인 휴리스틱 + 조사 접미 정규화 기반 후보구 추출·TF-IDF 스코어링 + 사전 매칭, Phase B는 ONNX 임베딩 코사인 유사도와의 앙상블이다. 품질은 `nlu/golden/` golden set의 `just eval`로 측정하며, 게이트는 상대 조건이다 — M5 진입: Phase A가 "도메인 휴리스틱만" 베이스라인 대비 +15pp, M5 종료: 앙상블이 Phase A 대비 +10pp (절대 60%/80%는 참고치). 상세는 [02-TECH-SPEC.md](02-TECH-SPEC.md) 참고.
+**Tagger 인터페이스는 없다** — 앙상블 지점이 `classify.go`의 `score map[int64]float64`이기 때문이다. 도메인·제목·분류·설명·메모·본문 여섯 신호가 지금도 거기서 가법 합성되고 있고, Phase B(ONNX)는 **일곱 번째 신호**로 같은 맵에 들어간다. 인터페이스로 갈라 구현체를 교체하면 두 신호 중 하나만 고를 수 있게 되는데, 앙상블은 정의상 둘을 함께 쓰는 것이라 그 모양이 오히려 방해가 된다. 자유 태그 생성이 아니라 통제된 태그 사전(30~50개)에 대한 분류로 문제를 좁혀 LLM 없이 품질을 확보한다. Phase A는 도메인 휴리스틱 + 조사 접미 정규화 기반 후보구 추출·TF-IDF 스코어링 + 사전 매칭, Phase B는 ONNX 임베딩 코사인 유사도와의 앙상블이다. 품질은 `nlu/golden/` golden set의 `just eval`로 측정하며, 게이트는 상대 조건이다 — M5 진입: Phase A가 "도메인 휴리스틱만" 베이스라인 대비 +15pp, M5 종료: 앙상블이 Phase A 대비 +10pp (절대 60%/80%는 참고치). 상세는 [02-TECH-SPEC.md](02-TECH-SPEC.md) 참고.
 
 ### backend/internal/thumbs
 
@@ -184,7 +184,7 @@ main
 
 ## 6. 확장 경로 — deploy/k8s-future가 부활하는 시나리오
 
-v1의 k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`에 보존했다. 지금 접는 것이지 버리는 것이 아니다. 핵심 로직이 전부 `Store` / `Queue` / `Tagger` 인터페이스 뒤에 있으므로, 확장은 재작성이 아니라 구현체 교체다.
+v1의 k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`에 보존했다. 지금 접는 것이지 버리는 것이 아니다. 핵심 저장·큐 로직이 `Store` / `Queue` 인터페이스 뒤에 있으므로, 확장은 재작성이 아니라 구현체 교체다. 태거는 인터페이스가 아니라 **신호 합성 맵**으로 확장한다(위 §Tagger).
 
 | 트리거 | 바뀌는 것 | 바뀌지 않는 것 |
 |---|---|---|

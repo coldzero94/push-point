@@ -142,11 +142,9 @@ struct LinkCard: View {
         sortedTags.first.map { facetOf($0.name) } ?? .neutral
     }
 
+    /// 상대 시각. 규칙은 Shared/RelativeTime.swift에 있다 — 웹과 값이 맞아야 하고
+    /// 갈라져도 양쪽 다 정상으로 보이므로 기준값을 테스트로 박아 둔 자리다.
     private var relativeTime: String {
-        let date = Date(timeIntervalSince1970: TimeInterval(link.created_at))
-        let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "ko_KR")
-        f.unitsStyle = .short
-        return f.localizedString(for: date, relativeTo: Date())
+        RelativeTime.label(link.created_at)
     }
 }

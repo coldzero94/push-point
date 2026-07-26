@@ -157,7 +157,14 @@ M3 단위 테스트 예:
 3. 문서 임베딩(title+description) vs 태그 사전 임베딩(`tag_embeddings` 캐시) 코사인 유사도 → 상위 k, threshold 컷
 4. Phase A와 점수 앙상블. `tag_feedback` 데이터(사용자의 태그 추가/제거 이력)로 재랭킹 가중치 보정
 
-**배포 형태 (3택, M5에서 결정)** — M1~M4는 CGO-free 단일 정적 바이너리이고, M5에서 ONNX 채택 시 다음 중 하나로 간다:
+**배포 형태 (3택, M5에서 결정)** — M1~M4는 CGO-free 단일 정적 바이너리이고, M5에서 ONNX 채택 시 다음 중 하나로 간다.
+
+**판정 축이 둘이다.** 서버 단일 바이너리뿐 아니라 **`mobile/ppshare` 확장 메모리 예산**
+(~120MB, 실측표는 [08-DEVELOPMENT-PLAN.md](08-DEVELOPMENT-PLAN.md) M4)도 함께 본다 —
+의존 사슬이 `ppshare → tagjob → tagger`라 태거에 들어오는 것은 확장에도 링크된다.
+확장이 링크하면 안 되는 선택지를 고른다면 **패키지 배치**로 갈라야 한다(ONNX를 자기
+패키지에 두고 `internal/app`만 import하면 `tagjob`을 고치지 않고도 확장이 깨끗하다).
+`ppshare_test.go`의 모듈 허용 목록이 그 경계를 지킨다.
 
 1. `libonnxruntime.dylib`을 바이너리에 embed하고 시작 시 `data/`로 추출 (cgo 빌드 감수)
 2. hugot 순수 Go 백엔드 — 추론이 약 8배 느리지만 태깅은 비동기 3s 예산 내라 허용 가능
