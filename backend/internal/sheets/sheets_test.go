@@ -315,8 +315,8 @@ func TestRead_missingTabIsNotAnError(t *testing.T) {
 	}
 }
 
-// 진짜 400(범위 파싱 문제가 아닌 것)은 삼키면 안 된다 — 삼키면 "시트가 비었다"로
-// 보이고, 그 상태로 Replace를 돌리면 멀쩡한 시트를 지운다.
+// 진짜 400(범위 파싱 문제가 아닌 것)은 삼키면 안 된다 — 삼키면 잘못된 시트 ID가
+// "빈 시트"로 보여서, 호출자가 없는 것을 있는 것으로 오해한다.
 func TestRead_otherBadRequestStillErrors(t *testing.T) {
 	keyJSON, _ := testKey(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -6,12 +6,13 @@ package sheets
 // 프로젝트를 만들고, API 두 개를 켜고, 서비스 계정을 만들고, JSON 키를 내려받아 파일로
 // 둔다. 단일 사용자가 자기 시트에 자기 데이터를 넣으려고 치르기에는 과하다.
 //
-// 대신 사용자가 자기 시트에 **20여 줄짜리 스크립트를 붙여넣고 배포**한다. 그러면 URL이
+// 대신 사용자가 자기 시트에 **한 화면짜리 스크립트를 붙여넣고 배포**한다. 그러면 URL이
 // 하나 나오고, 그 URL로 POST하면 끝이다. 우리 쪽에는 OAuth도 토큰 갱신도 없다.
 //
 // 뒤집힌 신뢰 관계가 이 방식의 진짜 장점이다. 서비스 계정은 **우리가 사용자 드라이브에
 // 들어가는** 구조인데, 이쪽은 스크립트가 **사용자 계정 안에서 자기 시트만** 만진다.
-// 사용자가 읽을 수 있는 20줄이 권한의 전부이고, 배포를 지우면 접근이 끊긴다.
+// 스크립트가 열 수 있는 것은 `getActiveSpreadsheet()` 하나뿐이고(DriveApp 참조 0,
+// doGet 없음) 배포를 지우면 접근이 끊긴다 — 신뢰의 근거는 줄 수가 아니라 그 스코프다.
 //
 // 대가: "링크를 아는 사람은 누구나" 배포이므로 URL 자체가 비밀이다. 그래서 스크립트에
 // 토큰을 박고 요청마다 확인한다 — URL이 로그나 히스토리에 남더라도 토큰 없이는 쓸 수 없다.
@@ -48,8 +49,9 @@ func NewWebhook(deployURL, token string) (*Webhook, error) {
 		return nil, fmt.Errorf("sheets: 토큰이 비어 있습니다")
 	}
 	return &Webhook{
-		// Apps Script는 302로 googleusercontent.com에 넘긴다. 기본 클라이언트가
-		// 따라가지만, POST 리다이렉트에서 본문이 유실되지 않도록 명시적으로 둔다.
+		// Apps Script는 302로 googleusercontent.com에 넘기고 기본 클라이언트가 따라간다.
+		// 리다이렉트에서 POST 본문이 유실되는 것은 문제가 되지 않는다 — 스크립트가
+		// **첫 홉에서 이미 doPost를 실행**하고, 뒤따르는 GET은 그 결과를 가져올 뿐이다.
 		http:  &http.Client{Timeout: webhookTimeout},
 		url:   deployURL,
 		token: token,

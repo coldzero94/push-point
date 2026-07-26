@@ -39,15 +39,14 @@ var Header = []any{
 	"id", "저장일", "URL", "도메인", "제목", "설명", "태그", "메모", "상태",
 }
 
-// transport는 시트에 읽고 쓰는 방법. 두 구현이 있다 — Apps Script 웹훅(기본)과
+// Transport는 시트에 읽고 쓰는 방법. 두 구현이 있다 — Apps Script 웹훅(기본)과
 // 서비스 계정. 화면과 동기화 로직은 어느 쪽인지 몰라도 된다.
-// Transport는 시트에 읽고 쓰는 방법.
 type Transport interface {
 	Read(ctx context.Context, tab string) ([][]string, error)
 	Replace(ctx context.Context, tab string, rows [][]any) error
 }
 
-// saTransport는 서비스 계정 클라이언트를 transport에 맞춘다(시트 ID를 고정해 둔다).
+// saTransport는 서비스 계정 클라이언트를 Transport에 맞춘다(시트 ID를 고정해 둔다).
 type saTransport struct {
 	c  *sheets.Client
 	id string

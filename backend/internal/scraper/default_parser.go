@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -217,7 +218,13 @@ func parseKeywords(doc *goquery.Document) string {
 		if json.Unmarshal([]byte(s.Text()), &v) != nil {
 			return // 깨진 JSON-LD는 흔하다 — 조용히 넘긴다. 이건 보조 신호다.
 		}
-		for _, kw := range collectJSONLDKeywords(v, 0) {
+		// 정렬한다. collectJSONLDKeywords가 맵을 순회해 순서가 실행마다 달라지는데,
+		// 512바이트에서 잘릴 때 **어느 분류가 살아남는지**가 그 순서에 좌우된다.
+		// 지금 golden에서는 최대 315바이트라 초과가 없지만, 같은 페이지가 실행마다
+		// 다른 태그를 얻는 상태를 남겨 둘 이유가 없다.
+		kws := collectJSONLDKeywords(v, 0)
+		slices.Sort(kws)
+		for _, kw := range kws {
 			add(kw)
 		}
 	})

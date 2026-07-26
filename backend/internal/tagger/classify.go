@@ -44,7 +44,7 @@ const (
 )
 
 // Classify는 콘텐츠를 사전에 대해 분류해 상위 태그(≤topK, threshold 이상)를 돌려준다.
-// 신호 = 도메인맵 + title/description/note 필드별 사전 매칭의 가법 스코어. 필드마다 따로
+// 신호 = 도메인맵 + title/keywords/description/note/body 필드별 사전 매칭의 가법 스코어. 필드마다 따로
 // 토큰화해 구문이 필드 경계를 넘지 못하게 한다. 출력은 결정적(score desc, 동점 name asc).
 func Classify(c Content, d *Dictionary) []ScoredTag {
 	score := map[int64]float64{}

@@ -107,11 +107,6 @@ func evalContent(e goldenEntry, body, keywords bool) tagger.Content {
 	return c
 }
 
-// evalSet은 한 세트(dev/test)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
-//
-// 변형은 **full에서 신호를 하나씩 뺀 것**이다 — 그래야 Δ가 그 신호만의 기여가 된다.
-// full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
-// baseline=도메인만(규칙 전체의 기여를 보는 기준선).
 // goldenCorpus는 golden 세트 자체를 코퍼스로 삼아 DF를 센다.
 //
 // 런타임에서 corpus_df가 하는 일과 **같은 계산**이다 — 런타임은 저장된 링크가 코퍼스이고
@@ -155,6 +150,11 @@ func goldenCorpus(entries []goldenEntry, dict *tagger.Dictionary) tagger.CorpusS
 	return tagger.CorpusStats{Docs: int64(withTerms), DF: df}
 }
 
+// evalSet은 한 세트(dev/test)의 지표를 계산·출력한다: Recall@3와 full 기준 태그별 P/R.
+//
+// 변형은 **full에서 신호를 하나씩 뺀 것**이다 — 그래야 Δ가 그 신호만의 기여가 된다.
+// full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
+// baseline=도메인만(규칙 전체의 기여를 보는 기준선).
 func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2name map[int64]string) {
 	fmt.Printf("\n=== %s (%d건) ===\n", name, len(entries))
 	if len(entries) == 0 {

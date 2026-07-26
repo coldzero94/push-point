@@ -28,10 +28,11 @@ func runSheetsSync(_ []string) error {
 	if err != nil {
 		return err
 	}
-	tab := os.Getenv("PUSHPOINT_SHEETS_TAB")
-	if tab == "" {
-		tab = sheetsync.DefaultTab
-	}
+	// 탭 이름은 고정이다. 예전에 PUSHPOINT_SHEETS_TAB 노브가 있었지만 문서·justfile·
+	// 테스트 어디에도 없이 이 한 줄에만 존재했고, API 경로(POST /api/v1/sheets/sync)는
+	// 읽지 않았다 — 즉 그 노브를 쓰는 순간 CLI와 웹 버튼이 **다른 탭에 쓰는** 상태가
+	// 됐다. 아무도 안 쓰는 설정을 위해 두 경로를 갈라 둘 이유가 없다.
+	tab := sheetsync.DefaultTab
 
 	n, syncErr := sheetsync.Run(context.Background(), tr, dataDir(), tab)
 	// 결과는 성공이든 실패든 남긴다 — 웹 화면이 "마지막에 어떻게 됐는지"를 보여줘야
