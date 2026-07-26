@@ -122,6 +122,17 @@ if mem:
 elif any("mem_avail_mb" in r for r in rows):
     print("  확장 잔여 메모리: 미측정 (시뮬레이터는 0을 준다 — 실기기에서만 값이 나온다)")
 
+# 실패한 저장은 **빠르다** — 예외가 나면 그 자리에서 바로 기록되므로, 실패가 늘수록
+# p50/p95가 좋아진다. 시간만 보면 "전부 2초 이내 PASS"가 되는데 정작 저장은 한 건도
+# 안 됐을 수 있다. M4 통과 조건은 "2초 미만 **그리고** 저장 성공"이다.
+#
+# "실패 1건이라도 FAIL"로 만들지는 않는다 — 기록이 append-only라 과거의 실패 한 번이
+# 영구 red를 만든다. 성공이 0건일 때만 막는다.
+if not saved:
+    print()
+    print(f"FAIL — 성공한 저장이 0건입니다 (실패 {len(failed)}건).")
+    sys.exit(1)
+
 over = [r for r in rows if r["ms"] > budget]
 if over:
     print()

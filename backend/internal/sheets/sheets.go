@@ -292,7 +292,12 @@ func (c *Client) Replace(ctx context.Context, spreadsheetID, tab, lastCol string
 	payload := map[string]any{"values": rows}
 	// A1부터. 범위를 행 수로 지정하지 않는 이유는 values.update가 넘겨준 배열 크기대로
 	// 쓰기 때문이고, 범위와 배열이 어긋날 때 조용히 잘리는 것을 피하기 위해서다.
-	target := fmt.Sprintf("%s/%s/values/%s!A1?valueInputOption=RAW",
+	// USER_ENTERED다. RAW로 넣으면 날짜가 **텍스트 셀**이 되어 시트의 날짜 필터가
+	// 안 걸리는데, 시트에서 거르려고 내보내는 것이므로 그러면 목적을 절반 잃는다.
+	// 웹훅의 setValues도 파싱하므로 전송 방식에 따라 셀 타입이 달라지지도 않는다.
+	//
+	// 파싱을 켜는 이상 수식 주입이 열리므로 **EscapeRows가 선행 조건이다**(escape.go).
+	target := fmt.Sprintf("%s/%s/values/%s!A1?valueInputOption=USER_ENTERED",
 		c.base, url.PathEscape(spreadsheetID), url.PathEscape(tab))
 	return c.do(ctx, http.MethodPut, target, payload)
 }
@@ -352,12 +357,8 @@ func (c *Client) do(ctx context.Context, method, target string, payload any) err
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// 403은 거의 항상 "시트를 서비스 계정에 공유하지 않음"이다. 그 진단을 여기서
 		// 붙여 주지 않으면 사용자가 API 콘솔을 헤매게 된다.
-		hint := ""
-		if resp.StatusCode == http.StatusForbidden {
-			hint = fmt.Sprintf(" — 시트를 %s 에 편집자로 공유했는지 확인하세요", c.acct.ClientEmail)
-		}
 		return fmt.Errorf("sheets: %s 거부 (%d)%s: %s",
-			method, resp.StatusCode, hint, strings.TrimSpace(string(respBody)))
+			method, resp.StatusCode, c.sharingHint(resp.StatusCode), strings.TrimSpace(string(respBody)))
 	}
 	return nil
 }
@@ -437,8 +438,20 @@ func (c *Client) doJSON(ctx context.Context, method, target string, payload any)
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("sheets: %s 거부 (%d): %s",
-			method, resp.StatusCode, strings.TrimSpace(string(respBody)))
+		// do()와 같은 안내를 붙인다. Replace가 ensureTab(→ doJSON)을 먼저 부르므로,
+		// 공유를 빼먹은 흔한 실수는 do()가 아니라 **여기서** 403으로 먼저 터진다 —
+		// 안내가 do()에만 있으면 정작 사용자가 보는 오류에는 없다.
+		return nil, fmt.Errorf("sheets: %s 거부 (%d)%s: %s",
+			method, resp.StatusCode, c.sharingHint(resp.StatusCode), strings.TrimSpace(string(respBody)))
 	}
 	return respBody, nil
+}
+
+// sharingHint는 403에 "어느 계정에 공유하라"를 붙인다. 403은 거의 항상 그 실수이고,
+// 안내가 없으면 사용자가 API 콘솔을 헤맨다.
+func (c *Client) sharingHint(status int) string {
+	if status != http.StatusForbidden {
+		return ""
+	}
+	return fmt.Sprintf(" — 시트를 %s 에 편집자로 공유했는지 확인하세요", c.acct.ClientEmail)
 }

@@ -52,7 +52,7 @@ func (s *Server) SyncSheets(ctx context.Context, _ gen.SyncSheetsRequestObject) 
 
 func statusOf(st sheetsync.State) gen.SheetsStatus {
 	out := gen.SheetsStatus{
-		Connected: st.Mode == "webhook" && st.DeployURL != "",
+		Connected: sheetsync.Connected(st),
 		LastRows:  &st.LastRows,
 	}
 	if st.SheetURL != "" {

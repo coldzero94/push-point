@@ -376,6 +376,10 @@ PUSHPOINT_SHEETS_SHARE=you@example.com just sheets-sync   # 첫 실행에만
 
 주기 실행은 launchd/cron에 `just sheets-sync`를 걸면 된다.
 
+**스크립트를 고치면 다시 붙여넣어야 한다.** 스크립트는 사용자 시트 안에 사본으로 살아
+있으므로 리포의 수정이 자동으로 반영되지 않는다. `just sheets-setup`을 다시 돌리면
+같은 절차로 갱신된다(토큰도 새로 만들어진다).
+
 ### 알아 둘 것
 
 - **A~I열은 우리 것이고 매 동기화에 재생성된다. J열부터는 당신 것이고 우리는 영원히

@@ -63,6 +63,22 @@ func (t saTransport) Replace(ctx context.Context, tab string, rows [][]any) erro
 
 // 웹훅이 먼저다 — 준비가 훨씬 싸서 기본 경로이고, 서비스 계정은 그쪽을 이미 쓰던
 // 사람을 위해 남긴다.
+// Connected는 지금 동기화가 가능한 상태인지 본다.
+//
+// **Open과 같은 규칙을 써야 한다.** 화면의 "연결됨" 판정과 실제 동작이 갈라지면,
+// 서비스 계정으로 멀쩡히 동기화되는 서버가 웹에서는 "연결 안 됨"으로 보이고 안내가
+// `sheets-setup`을 가리킨다 — 그걸 따르면 State가 통째로 교체돼 서비스 계정 경로가
+// 다시는 선택되지 않는다. 실제로 그런 상태였다.
+func Connected(st State) bool {
+	if st.Mode == "webhook" && st.DeployURL != "" {
+		return true
+	}
+	if os.Getenv("PUSHPOINT_SHEETS_KEY") == "" {
+		return false
+	}
+	return os.Getenv("PUSHPOINT_SHEETS_ID") != "" || st.SpreadsheetID != ""
+}
+
 // Open은 저장된 연결 정보로 전송을 만든다.
 func Open(dataDir string) (Transport, State, error) {
 	st := Load(dataDir)
@@ -129,7 +145,9 @@ func Run(ctx context.Context, tr Transport, dataDir, tab string) (int, error) {
 		}
 		cursor = next
 	}
-	if err := tr.Replace(ctx, tab, rows); err != nil {
+	// 시트에 넣기 직전에 무해화한다. 긁어 온 제목이 수식으로 실행되면 아카이브가
+	// 통째로 유출된다(sheets/escape.go). 여기 한 자리에 두면 전송이 늘어도 빠지지 않는다.
+	if err := tr.Replace(ctx, tab, sheets.EscapeRows(rows)); err != nil {
 		return 0, err
 	}
 	return len(rows) - 1, nil

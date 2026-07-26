@@ -341,6 +341,9 @@ ios-api-gen:
     cd ios/tools/openapi-gen && swift run swift-openapi-generator generate \
         ../../../api/openapi.yaml --mode types --mode client \
         --output-directory ../../PushPoint/Generated
+    # 어떤 계약으로 생성했는지 스탬프를 남긴다. CI는 macOS·Swift 없이 이 해시만
+    # 비교해 "스펙을 고치고 iOS 재생성을 잊은" 상태를 잡는다.
+    @shasum -a 256 api/openapi.yaml | awk '{print $1}' > ios/PushPoint/Generated/.openapi.sha256
     @echo "ios-api-gen: ios/PushPoint/Generated/{Types,Client}.swift 갱신"
 
 # M4 DoD 판정 — 공유 저장이 2초를 지켰는지 (확장이 남긴 계측 기록을 읽는다)
@@ -404,11 +407,17 @@ ios-teams:
 # 갈라지는 것을 잡으려고 기준값을 박아 둔 것인데, 갈라져도 양쪽 다 정상 동작하는 것처럼
 # 보이므로 안 돌면 존재하지 않는 것과 같다.
 ios-test device="iPhone 17": ios-gen
+    #!/usr/bin/env bash
+    # set -o pipefail이 없으면 파이프라인 종료 코드가 grep 것이 되고, `|| true`가 그마저
+    # 0으로 덮는다 — 실측으로 xcodebuild exit 65가 레시피 exit 0이 됐다. 즉 **게이트가
+    # 실패를 보고할 수 없었다.** `|| true`를 grep 단계 안으로 옮기면 xcodebuild의 상태가
+    # 파이프라인 상태로 남고, grep의 no-match만 무력화된다.
+    set -uo pipefail
     cd ios && xcodebuild test -project PushPoint.xcodeproj -scheme PushPoint \
         -destination 'platform=iOS Simulator,name={{device}}' \
         -only-testing:PushPointTests \
         -derivedDataPath .build CODE_SIGN_IDENTITY="-" | \
-        grep -E "Test Case|error:|\*\* TEST" || true
+        { grep -E "Test Case|error:|\*\* TEST" || true; }
 
 # iOS 생성물 드리프트 검사 — Go(gen-check)·웹(web-gen-check)과 같은 자리
 #
@@ -416,6 +425,27 @@ ios-test device="iPhone 17": ios-gen
 # 잡는 쪽이 없으면, 스펙을 고치고 iOS만 재생성을 잊어도 아무것도 실패하지 않는다.
 ios-api-gen-check:
     @just ios-api-gen >/dev/null && git diff --exit-code ios/PushPoint/Generated
+
+# 계약 스탬프만 검사 — Swift 툴체인 없이 돌아서 리눅스 CI에서도 쓸 수 있다.
+#
+# 완전한 검사(ios-api-gen-check)는 macOS + Swift가 필요해 CI에 넣기 비싸다. 스탬프는
+# "이 생성물이 어느 openapi.yaml에서 나왔는가"만 보므로 **스펙을 고치고 iOS 재생성을
+# 잊은** 경우를 잡는다 — 그게 실제로 일어나는 드리프트다.
+ios-stamp-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    f=ios/PushPoint/Generated/.openapi.sha256
+    if [ ! -f "$f" ]; then echo "스탬프가 없습니다 — just ios-api-gen 실행 후 커밋하세요"; exit 1; fi
+    want=$(shasum -a 256 api/openapi.yaml | awk '{print $1}')
+    got=$(cat "$f")
+    if [ "$want" != "$got" ]; then
+      echo "iOS 생성물이 지금 계약에서 나오지 않았습니다."
+      echo "  api/openapi.yaml : $want"
+      echo "  스탬프           : $got"
+      echo "just ios-api-gen 을 돌리고 생성물과 스탬프를 함께 커밋하세요."
+      exit 1
+    fi
+    echo "ios-stamp-check OK"
 
 # 화면을 실제로 조작하는 UI 테스트 (XCUITest, 시뮬레이터)
 #
@@ -425,11 +455,14 @@ ios-api-gen-check:
 # 이게 있어야 목록·검색·태그 편집을 사람 눈 없이 검증할 수 있다. 지금까지 이 영역의
 # 실패는 전부 "타입은 맞고 화면만 틀린" 종류였고, 컴파일러도 단위 테스트도 못 잡았다.
 ios-uitest device="iPhone 17": ios-gen
+    #!/usr/bin/env bash
+    # 종료 코드 처리는 ios-test와 같은 이유다 — 그쪽 주석 참조.
+    set -uo pipefail
     cd ios && xcodebuild test -project PushPoint.xcodeproj -scheme PushPoint \
         -destination 'platform=iOS Simulator,name={{device}}' \
         -only-testing:PushPointUITests \
         -derivedDataPath .build CODE_SIGN_IDENTITY="-" | \
-        grep -E "Test Case|error:|\*\* TEST" || true
+        { grep -E "Test Case|error:|\*\* TEST" || true; }
 
 # ios/project.yml → ios/PushPoint.xcodeproj (XcodeGen)
 ios-gen:

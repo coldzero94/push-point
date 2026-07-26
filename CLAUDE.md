@@ -25,7 +25,7 @@ Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker
 - `just web-build` — build frontend/dist/ (dist/ is not committed)
 - `just release` — web build + single binary with the SPA embedded (`backend/bin/pushpoint`, `-tags embed_frontend`)
 - `just web-gen` — api/openapi.yaml → frontend/src/lib/api/schema.d.ts (openapi-typescript pinned, generated output committed)
-- `just ios-api-gen` — api/openapi.yaml → ios/PushPoint/Generated/ (swift-openapi-generator CLI, generated output committed — the contract's third consumer)
+- `just ios-api-gen` — api/openapi.yaml → ios/PushPoint/Generated/ (swift-openapi-generator CLI, generated output committed — the contract's third consumer). `just ios-stamp-check` is the CI-side gate: it compares a committed hash of the spec instead of regenerating, so it runs without macOS or Swift
 - `just flow [file]` — Maestro flow against the booted simulator's real data (default `maestro/smoke.yaml`)
 - `just ios-uitest` — XCUITest on the simulator with its own seeded fixtures
 - `just ios-test` — iOS unit tests (`PushPointTests` — the cover-hash goldens shared with web)

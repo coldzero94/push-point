@@ -52,6 +52,12 @@ function doPost(e) {
       if (!sheet) sheet = ss.insertSheet(tab);
       const values = body.values || [];
       const width = body.width || (values[0] ? values[0].length : 0);
+      // 행이 모자라면 먼저 늘립니다. 새 시트는 1000행이라 링크가 그만큼 쌓이면
+      // 쓰기가 실패하는데, 비우기가 먼저 실행되므로 그때부터는 매 동기화가
+      // 시트를 비우고 죽어 저절로 낫지 않습니다. 그래서 **늘리기가 먼저**입니다.
+      if (values.length > sheet.getMaxRows()) {
+        sheet.insertRowsAfter(sheet.getMaxRows(), values.length - sheet.getMaxRows());
+      }
       // 우리 열(A..width)만 비웁니다. 그 오른쪽에 적어 두신 것은 건드리지 않습니다.
       if (width > 0 && sheet.getLastRow() > 0) {
         sheet.getRange(1, 1, sheet.getMaxRows(), width).clearContent();

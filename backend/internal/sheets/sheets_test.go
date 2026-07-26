@@ -116,7 +116,7 @@ func TestReplace_clearsBeforeWriting(t *testing.T) {
 			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
 			return
 		}
-		calls = append(calls, r.Method+" "+r.URL.Path)
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
 		if r.Method == http.MethodPut {
 			_ = json.NewDecoder(r.Body).Decode(&wrote)
 		}
@@ -169,7 +169,7 @@ func TestReplace_emptyStillClears(t *testing.T) {
 			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
 			return
 		}
-		calls = append(calls, r.Method+" "+r.URL.Path)
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
 		fmt.Fprint(w, `{}`)
 	}))
 	defer srv.Close()
@@ -511,5 +511,42 @@ func TestEnsureTab_existingIsNotAnError(t *testing.T) {
 	if err := c.Replace(context.Background(), "SHEET", "links", "I",
 		[][]any{{"id"}}); err != nil {
 		t.Fatalf("이미 있는 탭에서 실패했다 — 두 번째 동기화부터 전부 죽는다: %v", err)
+	}
+}
+
+// 날짜가 시트에서 **날짜로** 저장돼야 필터가 걸린다. RAW로 넣으면 텍스트 셀이 되어
+// "지난 7일" 같은 조건이 안 걸리는데, 시트에서 거르려고 내보내는 것이므로 그러면
+// 목적을 절반 잃는다. 쿼리 파라미터라 눈으로는 안 보이는 종류의 회귀다.
+func TestReplace_usesUserEnteredSoDatesParse(t *testing.T) {
+	keyJSON, _ := testKey(t)
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			fmt.Fprint(w, `{"access_token":"t","expires_in":3600}`)
+			return
+		}
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(keyJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.acct.TokenURI = srv.URL + "/token"
+	c.base = srv.URL
+
+	if err := c.Replace(context.Background(), "SHEET", "links", "I", [][]any{{"id"}}); err != nil {
+		t.Fatal(err)
+	}
+	var put string
+	for _, c := range calls {
+		if strings.HasPrefix(c, "PUT") {
+			put = c
+		}
+	}
+	if !strings.Contains(put, "valueInputOption=USER_ENTERED") {
+		t.Errorf("RAW로 쓰고 있다 — 날짜가 텍스트가 되어 시트 날짜 필터가 안 걸린다: %q", put)
 	}
 }

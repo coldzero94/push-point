@@ -108,3 +108,34 @@ func TestLastCol_matchesHeaderWidth(t *testing.T) {
 			want, LastCol, got)
 	}
 }
+
+// 화면의 "연결됨" 판정이 실제 동작과 같아야 한다.
+//
+// 서비스 계정으로 멀쩡히 동기화되는 서버가 웹에서 "연결 안 됨"으로 보이면, 화면은
+// `sheets-setup`을 안내하고 그걸 따르면 State가 통째로 교체돼 서비스 계정 경로가
+// 다시는 선택되지 않는다. 실제로 그런 상태였다.
+func TestConnected_matchesWhatOpenAccepts(t *testing.T) {
+	cases := []struct {
+		name  string
+		state State
+		key   string
+		id    string
+		want  bool
+	}{
+		{"아무것도 없음", State{}, "", "", false},
+		{"웹훅", State{Mode: "webhook", DeployURL: "https://x"}, "", "", true},
+		{"서비스 계정 + 환경변수 ID", State{}, "/k.json", "SHEET", true},
+		{"서비스 계정 + 기억해 둔 ID", State{SpreadsheetID: "SHEET"}, "/k.json", "", true},
+		{"키만 있고 시트를 모름", State{}, "/k.json", "", false},
+		{"시트만 있고 키가 없음", State{SpreadsheetID: "SHEET"}, "", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PUSHPOINT_SHEETS_KEY", tc.key)
+			t.Setenv("PUSHPOINT_SHEETS_ID", tc.id)
+			if got := Connected(tc.state); got != tc.want {
+				t.Errorf("Connected=%v, want %v", got, tc.want)
+			}
+		})
+	}
+}
