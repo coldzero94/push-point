@@ -47,7 +47,15 @@ final class Backend: ObservableObject {
         }
         state = .starting
 
-        guard let dir = AppGroup.dataDirectory() else {
+        // UI 테스트는 App Group이 아니라 임시 디렉터리를 쓴다 — 테스트가 사용자의 실제
+        // 아카이브를 건드리는 일이 구조적으로 불가능해야 한다(UITestMode 주석).
+        let container: URL?
+        if UITestMode.isActive {
+            container = UITestMode.dataDirectory()
+        } else {
+            container = AppGroup.dataDirectory()
+        }
+        guard let dir = container else {
             state = .failed("App Group 컨테이너를 열 수 없습니다 (entitlement 확인 필요)")
             return
         }
@@ -85,6 +93,14 @@ final class Backend: ObservableObject {
                     // 생성기가 securityScheme 코드를 만들지 않으므로 Bearer는 미들웨어로 붙인다.
                     middlewares: [AuthMiddleware(apiKey: key)]
                 )
+                // 시딩은 **.running으로 넘어가기 전에** 끝내야 한다. 화면은
+                // `.task(id: backend.state)`로 목록을 읽는데, 상태를 먼저 바꾸면
+                // 빈 DB를 읽고 다시 읽을 계기가 없다 — 실제로 그렇게 실패했다.
+                // 시딩도 실제 저장 경로(POST /links)로 한다: SQLite에 직접 쓰면
+                // 저장 계약이 깨져도 테스트는 멀쩡히 통과한다.
+                if UITestMode.isActive, let client {
+                    await UITestMode.seed(using: client)
+                }
                 state = .running(baseURL: url)
             }
         }

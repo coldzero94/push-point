@@ -43,6 +43,23 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.pushpoint.app.tests
         GENERATE_INFOPLIST_FILE: YES
 
+  # 화면을 **실제로 조작해** 검증한다. 단위 테스트(PushPointTests)가 규칙을 고정한다면
+  # 여기는 "탭하면 무슨 일이 일어나는가"를 고정한다 — 목록·검색·태그 편집처럼 코드를
+  # 읽어서는 알 수 없고 지금까지 사람 눈으로만 확인하던 자리다.
+  #
+  # 앱은 `-uitest` 인자로 뜬다: App Group이 아니라 임시 디렉터리를 쓰고 픽스처를 스스로
+  # 넣으므로, 시뮬레이터에 무엇이 들어 있든 결과가 같고 사용자 데이터는 건드리지 않는다.
+  PushPointUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [PushPointUITests]
+    dependencies:
+      - target: PushPoint
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pushpoint.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+
   PushPoint:
     type: application
     platform: iOS

@@ -15,11 +15,19 @@ import SwiftUI
 struct LinkDetailView: View {
     let linkID: Int
     let facetOf: (String) -> PP.Facet
+    /// 사전 전체 (이름 → facet). 태그 편집이 고를 후보다 — 목록·통계와 같은 출처를 쓴다.
+    let dictionary: [String: PP.Facet]
 
     @EnvironmentObject private var backend: Backend
     @State private var detail: Components.Schemas.LinkDetail?
     @State private var loadError: String?
     @State private var confirmingDelete = false
+    @State private var editingTags = false
+    /// 편집 중인 메모. detail의 값과 분리해 둔다 — 타이핑 도중 서버 응답이 들어와
+    /// 커서가 튀거나 입력이 되돌려지면 안 된다.
+    @State private var noteDraft = ""
+    /// 저장 실패를 화면 전체 오류로 바꾸지 않는다 — 상세는 멀쩡히 보이는 상태여야 한다.
+    @State private var saveError: String?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -50,6 +58,12 @@ struct LinkDetailView: View {
             Button("삭제", role: .destructive) { Task { await delete() } }
             Button("취소", role: .cancel) {}
         }
+        .sheet(isPresented: $editingTags) {
+            TagEditor(dictionary: dictionary,
+                      current: detail?.value1.tags.map(\.name) ?? []) { names in
+                Task { await save(tags: names) }
+            }
+        }
         .task { await load() }
     }
 
@@ -61,7 +75,13 @@ struct LinkDetailView: View {
             if !d.value2.summary.isEmpty || !d.value1.description.isEmpty {
                 Divider().overlay(PP.Palette.line1)
             }
+            noteEditor()
             meta(d)
+            if let saveError {
+                Text(saveError)
+                    .font(PP.Typo.meta)
+                    .foregroundStyle(PP.Palette.danger)
+            }
             openButton(d)
         }
         .padding(.horizontal, 16)
@@ -76,13 +96,20 @@ struct LinkDetailView: View {
                 .foregroundStyle(PP.Palette.fg1)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !d.value1.tags.isEmpty {
-                HStack(spacing: 5) {
-                    ForEach(d.value1.tags, id: \.id) { tag in
-                        Chip(name: tag.name, facet: facetOf(tag.name),
-                             fill: .init(source: tag.source.rawValue, isActive: false))
-                    }
+            // 태그가 없을 때도 이 줄을 그린다. 기계가 못 붙인 링크야말로 손으로 붙일
+            // 자리가 필요한데, 비었다고 줄을 숨기면 붙일 방법이 화면에서 사라진다.
+            HStack(spacing: 5) {
+                ForEach(d.value1.tags, id: \.id) { tag in
+                    Chip(name: tag.name, facet: facetOf(tag.name),
+                         fill: .init(source: tag.source.rawValue, isActive: false))
                 }
+                Button { editingTags = true } label: {
+                    Label(d.value1.tags.isEmpty ? "태그 붙이기" : "고치기",
+                          systemImage: "tag")
+                        .font(PP.Typo.label)
+                        .foregroundStyle(PP.Palette.fg3)
+                }
+                .buttonStyle(.plain)
             }
 
             Text(d.value1.domain)
@@ -135,6 +162,41 @@ struct LinkDetailView: View {
                             .strokeBorder(PP.Palette.line1, lineWidth: 1)
                     )
                 }
+            }
+        }
+    }
+
+    /// 메모.
+    ///
+    /// 태그가 "무엇에 관한 글인가"라면 메모는 "내가 왜 담았나"다. 후자는 기계가 절대
+    /// 만들어 줄 수 없어서, 자동 태깅이 아무리 좋아져도 이 칸은 사람 몫으로 남는다.
+    ///
+    /// 저장은 편집이 끝날 때 한 번. 글자마다 PATCH하면 폰 안의 서버라 더 잘 보이고,
+    /// 그때마다 `updated_at`이 움직여 목록 정렬까지 흔들린다.
+    @ViewBuilder
+    private func noteEditor() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("메모")
+                .font(PP.Typo.label)
+                .foregroundStyle(PP.Palette.fg3)
+            TextField("왜 담았는지 한 줄", text: $noteDraft, axis: .vertical)
+                .font(PP.Typo.body)
+                .foregroundStyle(PP.Palette.fg1)
+                .lineLimit(1 ... 6)
+                .padding(12)
+                .background(PP.Palette.surface)
+                .clipShape(RoundedRectangle(cornerRadius: PP.Radius.control, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: PP.Radius.control, style: .continuous)
+                        .strokeBorder(PP.Palette.line1, lineWidth: 1)
+                )
+                .onSubmit { Task { await saveNoteIfChanged() } }
+            if noteDraft != (detail?.value1.note ?? "") {
+                // 아직 안 보냈다는 사실을 숨기지 않는다. 저장 버튼을 따로 두지 않는 대신
+                // "언제 저장되는지"는 말해 줘야 한다.
+                Button("메모 저장") { Task { await saveNoteIfChanged() } }
+                    .font(PP.Typo.label)
+                    .foregroundStyle(PP.Palette.accent)
             }
         }
     }
@@ -193,11 +255,40 @@ struct LinkDetailView: View {
         }
     }
 
+    /// 태그 전체 교체. 계약에 부분 추가/삭제가 없어서 항상 최종 배열을 보낸다.
+    ///
+    /// 서버는 추가분을 `source='manual'`로 넣고 `tag_feedback`에 added/removed를 남긴다 —
+    /// **M5 재랭킹의 학습 데이터가 여기서 만들어진다.** 저장이 iOS에서 일어나는데
+    /// 고치기가 웹에만 있으면 그 데이터가 정작 저장이 일어나는 기기에서 안 모인다.
+    private func save(tags: [String]) async {
+        await patch(.init(tags: tags))
+    }
+
+    private func saveNoteIfChanged() async {
+        guard noteDraft != (detail?.value1.note ?? "") else { return }
+        await patch(.init(note: noteDraft))
+    }
+
+    private func patch(_ body: Components.Schemas.LinkUpdateInput) async {
+        guard let client = backend.client else { return }
+        do {
+            let out = try await client.updateLink(.init(path: .init(id: linkID), body: .json(body)))
+            // 응답이 수정 반영된 상세다 — 다시 GET하지 않는다(계약이 그러라고 준 값이다).
+            detail = try out.ok.body.json
+            noteDraft = detail?.value1.note ?? ""
+            saveError = nil
+        } catch {
+            saveError = "저장하지 못했습니다: \(error.localizedDescription)"
+        }
+    }
+
     private func load() async {
         guard let client = backend.client else { return }
         do {
             let out = try await client.getLink(.init(path: .init(id: linkID)))
             detail = try out.ok.body.json
+            // 서버 값이 초안의 출처다. 단, 사용자가 이미 고치고 있었다면 덮지 않는다.
+            if noteDraft.isEmpty { noteDraft = detail?.value1.note ?? "" }
             loadError = nil
         } catch {
             loadError = error.localizedDescription

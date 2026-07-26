@@ -21,6 +21,13 @@ struct ContentView: View {
     @State private var undoTask: Task<Void, Never>?
     /// 열어 볼 링크. NavigationLink 대신 이 값으로 이동한다 — 아래 row 주석 참조.
     @State private var opening: OpeningLink?
+    /// 검색어. 비어 있으면 평소의 보드, 있으면 검색 결과가 그 자리를 대신한다.
+    @State private var query = ""
+    @State private var results: [Components.Schemas.Link] = []
+    /// 서버가 어느 경로로 찾았는지(fts | like). 두 글자 이하로 친 사용자가 결과가
+    /// 적은 이유를 알 수 있게 화면에 남긴다 — 계약이 이걸 알려주는 이유가 그것이다.
+    @State private var searchMode: String?
+    @State private var searching = false
 
     var body: some View {
         NavigationStack {
@@ -28,11 +35,20 @@ struct ContentView: View {
                 .background(PP.Palette.canvas)
                 .navigationTitle("Push-Point")
             .navigationDestination(item: $opening) { target in
-                LinkDetailView(linkID: target.id, facetOf: { facets[$0] ?? .neutral })
+                LinkDetailView(linkID: target.id,
+                               facetOf: { facets[$0] ?? .neutral },
+                               dictionary: facets)
             }
         }
+        // 검색은 목록 안에 있다 — 별도 탭으로 빼지 않았다. 찾는 대상이 바로 이 목록이고,
+        // 탭을 나누면 "필터가 걸린 목록"과 "검색 결과"라는 거의 같은 두 화면을 사용자가
+        // 구분해 가며 써야 한다. `.searchable`은 iOS가 이미 가르쳐 둔 자리이기도 하다.
+        .searchable(text: $query, prompt: "제목 · 메모 · 태그")
         .task(id: backend.state) { await load() }
         .task(id: filter) { await load() }
+        // 타이핑마다 요청을 보내지 않는다. 한 글자마다 FTS를 때리면 폰 안에서 도는
+        // 서버라 더 잘 보인다 — 입력이 멎은 뒤에 한 번만 간다.
+        .task(id: query) { await runSearch() }
         // 확인창 대신 되돌리기. 확인창은 **모든** 삭제를 느리게 만들어 흔한 경우에
         // 세금을 매기고, 서버가 소프트 삭제라 되살릴 수단이 실제로 있다.
         .overlay(alignment: .bottom) {
@@ -53,7 +69,9 @@ struct ContentView: View {
                                    systemImage: "exclamationmark.triangle",
                                    description: Text(message))
         case .running:
-            if let loadError {
+            if !query.isEmpty {
+                searchContent
+            } else if let loadError {
                 // 빈/오류 상태도 스크롤 뷰에 담는다. ContentUnavailableView는 스크롤이
                 // 아니라서 그대로 두면 **바로 그때** — 다시 시도하고 싶은 순간 — 당겨서
                 // 새로고침이 안 된다.
@@ -70,6 +88,43 @@ struct ContentView: View {
             } else {
                 board
             }
+        }
+    }
+
+    /// 검색 결과.
+    ///
+    /// 결과도 **같은 카드**로 그린다. 검색이 따로 생긴 화면이 아니라 같은 보드를 좁혀 본
+    /// 것이라는 감각이 유지돼야 하고, 카드가 이미 제목·설명·태그·커버를 다 보여주므로
+    /// 검색 전용 행을 새로 만들 이유가 없다.
+    ///
+    /// 다만 날짜 척추는 없앤다. 검색 결과의 정렬은 bm25 관련도이지 시간이 아니라서,
+    /// 시간으로 끊으면 있지도 않은 시간 순서를 주장하게 된다.
+    @ViewBuilder
+    private var searchContent: some View {
+        if searching && results.isEmpty {
+            refreshableState { ProgressView().padding(.top, 60) }
+        } else if results.isEmpty {
+            refreshableState {
+                ContentUnavailableView("결과가 없습니다", systemImage: "magnifyingglass",
+                                       description: Text("\u{201C}\(query)\u{201D}와 맞는 링크를 찾지 못했습니다."))
+            }
+        } else {
+            List {
+                if let mode = searchMode, mode == "like" {
+                    // 세 글자 미만은 FTS가 아니라 LIKE로 간다(계약). 결과가 적을 때
+                    // 사용자가 "없구나"가 아니라 "더 치면 되는구나"로 읽어야 한다.
+                    Text("두 글자 이하는 제목·메모만 훑습니다. 세 글자부터 전문 검색으로 바뀝니다.")
+                        .font(PP.Typo.meta)
+                        .foregroundStyle(PP.Palette.fg3)
+                        .plainRow(top: 10, bottom: 2)
+                }
+                ForEach(results, id: \.id) { link in
+                    row(link).plainRow(top: 5, bottom: 5)
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .refreshable { await runSearch() }
         }
     }
 
@@ -306,6 +361,47 @@ struct ContentView: View {
             await load()
         } catch {
             loadError = error.localizedDescription
+        }
+    }
+
+    // MARK: - 검색
+
+    /// 입력이 멎은 뒤에 한 번만 요청한다.
+    ///
+    /// `.task(id:)`는 id가 바뀌면 이전 작업을 **취소**하므로, 앞에 슬립을 두면 그것만으로
+    /// 디바운스가 된다 — 타이머도 상태도 필요 없다. 취소된 작업은 슬립에서 죽고 요청까지
+    /// 가지 않는다.
+    private func runSearch() async {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else {
+            results = []
+            searchMode = nil
+            return
+        }
+        do {
+            try await Task.sleep(for: .milliseconds(250))
+        } catch {
+            return // 취소됨 — 다음 글자가 들어왔다
+        }
+        guard case .running = backend.state, let client = backend.client else { return }
+        searching = true
+        defer { searching = false }
+        do {
+            var q2 = Operations.search.Input.Query(q: q, limit: 50)
+            // 태그 필터가 걸려 있으면 검색에도 그대로 적용한다 — 화면에 필터 칩이 떠
+            // 있는데 검색만 그걸 무시하면 사용자가 본 것과 다른 결과가 나온다.
+            if case let .tag(name) = filter { q2.tag = name }
+            let page = try await client.search(.init(query: q2)).ok.body.json
+            // SearchResult는 allOf(Link + rank)라 생성기가 value1/value2로 감싼다.
+            // 카드가 필요한 것은 Link 쪽이다.
+            results = page.links.map(\.value1)
+            searchMode = page.mode.rawValue
+            loadError = nil
+        } catch {
+            // 검색 실패를 목록 오류 자리에 쓰지 않는다 — 목록은 멀쩡한데 화면 전체가
+            // 오류로 바뀌면 사용자는 저장한 것이 사라졌다고 읽는다.
+            results = []
+            searchMode = nil
         }
     }
 

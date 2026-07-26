@@ -1,0 +1,159 @@
+import XCTest
+
+/// 화면을 실제로 조작해 검증한다.
+///
+/// 단위 테스트가 잡지 못하는 것을 잡는 것이 목적이다. 지금까지 목록·검색·태그 편집은
+/// 컴파일이 통과하면 "된 것"으로 보고 눈으로 확인했는데, 컴파일러가 통과시키는 실패가
+/// 실제로 여러 번 있었다: 썸네일 URL이 상대 경로라 이미지가 통째로 비었고(`thumb_url`은
+/// `/thumbs/…`라 host 없는 URL이 됐다), 카드의 3:1 비율이 이미지에 걸려 있어 무시됐고,
+/// `listTags` 응답이 래퍼가 아니라 배열이라 `.tags` 접근이 어긋났다. 셋 다 **타입은 맞고
+/// 화면만 틀린** 종류다.
+///
+/// 앱은 `-uitest`로 띄운다 — 임시 디렉터리 + 자체 픽스처라 시뮬레이터 상태에 무관하다.
+final class BoardUITests: XCTestCase {
+    private var app: XCUIApplication!
+
+    override func setUp() {
+        continueAfterFailure = false
+        app = XCUIApplication()
+        app.launchArguments = ["-uitest"]
+        app.launch()
+    }
+
+    /// 실패하면 그 순간의 화면을 남긴다. UI 테스트의 실패 메시지는 "없다"밖에 말해 주지
+    /// 못해서, 화면이 없는지·다르게 그려졌는지·아직 로딩 중인지를 구분할 수 없다.
+    override func tearDown() {
+        if let failureCount = testRun?.failureCount, failureCount > 0 {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.lifetime = .keepAlways
+            shot.name = "실패 시점 화면"
+            add(shot)
+            // 접근성 트리도 함께 — 무엇이 실제로 잡히는 이름인지 여기서만 알 수 있다.
+            let tree = XCTAttachment(string: app.debugDescription)
+            tree.lifetime = .keepAlways
+            tree.name = "접근성 트리"
+            add(tree)
+        }
+    }
+
+    /// 픽스처가 실제로 화면에 도착하는지. 이게 깨지면 아래 모든 테스트의 전제가 무너지므로
+    /// 가장 먼저, 가장 단순하게 확인한다.
+    func testBoardShowsSavedLinks() {
+        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"),
+                      "저장한 링크가 목록에 나타나지 않는다")
+        XCTAssertTrue(app.staticTexts["Swift Concurrency 정리"].exists)
+    }
+
+    /// 검색 — 세 글자 이상이면 FTS 경로다.
+    ///
+    /// **좁혀지는 것까지** 확인한다. 검색창에 치기만 하고 결과가 그대로면 "검색이 된다"고
+    /// 말할 수 없는데, 목록이 원래 짧으면 눈으로는 구분이 안 간다.
+    func testSearchNarrowsTheBoard() {
+        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"))
+
+        search(for: "쿠버네티스")
+
+        XCTAssertTrue(app.staticTexts["쿠버네티스 프로덕션 운영 가이드"]
+            .waitForExistence(timeout: 5), "검색 결과에 맞는 링크가 없다")
+        XCTAssertFalse(app.staticTexts["Swift Concurrency 정리"].exists,
+                       "검색이 목록을 좁히지 못했다 — 안 맞는 링크가 남아 있다")
+    }
+
+    /// 결과가 없을 때 빈 화면이 아니라 설명이 나와야 한다 — 빈칸을 만들지 않는다(R4).
+    func testSearchWithNoMatchExplainsItself() {
+        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"))
+        search(for: "존재하지않는검색어입니다")
+        XCTAssertTrue(app.staticTexts["결과가 없습니다"].waitForExistence(timeout: 5))
+    }
+
+    /// 두 글자 이하는 400이 아니라 LIKE 폴백이고(계약), 화면은 그 사실을 말해야 한다.
+    /// 결과가 적은 이유를 모르면 사용자는 "없구나"로 읽고 검색을 그만둔다.
+    func testShortQueryExplainsTheFallback() {
+        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"))
+        search(for: "쿠버")
+        XCTAssertTrue(app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "세 글자부터")).firstMatch
+            .waitForExistence(timeout: 5), "LIKE 폴백 안내가 없다")
+    }
+
+    /// 태그 편집 — 기계가 붙인 태그를 사람이 고칠 수 있어야 한다.
+    ///
+    /// 이 경로가 `tag_feedback`을 만드는 유일한 통로다(M5 재랭킹 학습 데이터). 화면이
+    /// 조용히 망가지면 데이터가 안 쌓이는데, 그 사실은 몇 달 뒤에나 드러난다.
+    func testEditingTagsPersists() {
+        XCTAssertTrue(waitForCard("Notes on a quiet afternoon"))
+        app.staticTexts["Notes on a quiet afternoon"].tap()
+
+        let editButton = app.buttons["태그 붙이기"].firstMatch
+        XCTAssertTrue(editButton.waitForExistence(timeout: 5),
+                      "태그가 없는 링크에 붙이는 자리가 없다")
+        editButton.tap()
+
+        let sheetTitle = app.navigationBars["태그"]
+        XCTAssertTrue(sheetTitle.waitForExistence(timeout: 5), "태그 편집 시트가 열리지 않는다")
+
+        // 사전에서 하나 고른다. 자유 입력이 아니라 목록이라는 것 자체가 계약이다.
+        // 사전이 40개가 넘어 화면 밖에 있을 수 있으므로 찾을 때까지 스크롤한다.
+        let candidate = app.buttons["tag-book"]
+        XCTAssertTrue(scrollToFind(candidate), "사전 태그가 목록에 없다")
+        candidate.tap()
+
+        let confirm = app.buttons["확인"]
+        XCTAssertTrue(confirm.isEnabled, "선택이 바뀌었는데 확인이 잠겨 있다")
+        confirm.tap()
+
+        // 상세로 돌아와 칩이 실제로 붙었는지. 시트가 닫히는 것만으로는 저장을 증명하지 못한다.
+        XCTAssertTrue(app.staticTexts["book"].waitForExistence(timeout: 5),
+                      "고른 태그가 상세에 반영되지 않았다")
+    }
+
+    /// 메모 — 기계가 절대 만들어 줄 수 없는 유일한 필드라, 저장되지 않으면 대체재가 없다.
+    func testEditingNotePersists() {
+        XCTAssertTrue(waitForCard("Swift Concurrency 정리"))
+        app.staticTexts["Swift Concurrency 정리"].tap()
+
+        let field = app.textFields["왜 담았는지 한 줄"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "메모 입력 칸이 없다")
+        field.tap()
+        field.typeText("나중에 다시 읽기")
+
+        let save = app.buttons["메모 저장"]
+        XCTAssertTrue(save.waitForExistence(timeout: 3), "저장 버튼이 나타나지 않는다")
+        save.tap()
+
+        // 저장되면 버튼이 사라진다(초안 == 서버 값). 이게 화면이 서버 응답을 실제로
+        // 받아 반영했다는 증거다 — 텍스트만 확인하면 입력한 글자가 그대로 보일 뿐이다.
+        XCTAssertTrue(waitForDisappearance(save), "메모가 저장되지 않았다 — 저장 버튼이 남아 있다")
+    }
+
+    // MARK: - 헬퍼
+
+    /// 서버가 프로세스 안에서 뜨고 픽스처가 들어가기까지 시간이 걸린다.
+    private func waitForCard(_ title: String, timeout: TimeInterval = 20) -> Bool {
+        app.staticTexts[title].waitForExistence(timeout: timeout)
+    }
+
+    private func search(for text: String) {
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "검색창이 없다")
+        field.tap()
+        field.typeText(text)
+    }
+
+    /// 목록이 길어 화면 밖에 있는 요소를 찾을 때까지 스크롤한다.
+    /// 못 찾으면 false — 무한히 밀면 실패가 타임아웃으로 위장된다.
+    private func scrollToFind(_ element: XCUIElement, maxSwipes: Int = 8) -> Bool {
+        if element.waitForExistence(timeout: 3), element.isHittable { return true }
+        for _ in 0 ..< maxSwipes {
+            app.swipeUp()
+            if element.exists, element.isHittable { return true }
+        }
+        return false
+    }
+
+    private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 8) -> Bool {
+        let gone = expectation(for: NSPredicate(format: "exists == false"),
+                               evaluatedWith: element)
+        return XCTWaiter().wait(for: [gone], timeout: timeout) == .completed
+    }
+}

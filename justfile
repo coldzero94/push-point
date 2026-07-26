@@ -326,6 +326,20 @@ ios-api-gen:
         --output-directory ../../PushPoint/Generated
     @echo "ios-api-gen: ios/PushPoint/Generated/{Types,Client}.swift 갱신"
 
+# 화면을 실제로 조작하는 UI 테스트 (XCUITest, 시뮬레이터)
+#
+# 앱을 `-uitest`로 띄운다 — 임시 디렉터리 + 자체 픽스처라 시뮬레이터에 무엇이 들어
+# 있든 결과가 같고, **사용자의 실제 아카이브는 건드리지 않는다**(ios/PushPoint/UITestMode.swift).
+#
+# 이게 있어야 목록·검색·태그 편집을 사람 눈 없이 검증할 수 있다. 지금까지 이 영역의
+# 실패는 전부 "타입은 맞고 화면만 틀린" 종류였고, 컴파일러도 단위 테스트도 못 잡았다.
+ios-uitest device="iPhone 17": ios-gen
+    cd ios && xcodebuild test -project PushPoint.xcodeproj -scheme PushPoint \
+        -destination 'platform=iOS Simulator,name={{device}}' \
+        -only-testing:PushPointUITests \
+        -derivedDataPath .build CODE_SIGN_IDENTITY="-" | \
+        grep -E "Test Case|error:|\*\* TEST" || true
+
 # ios/project.yml → ios/PushPoint.xcodeproj (XcodeGen)
 ios-gen:
     @command -v xcodegen >/dev/null 2>&1 || { echo "xcodegen이 없습니다. 설치: brew install xcodegen"; exit 1; }
