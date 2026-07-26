@@ -25,6 +25,9 @@ Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker
 - `just web-build` — build frontend/dist/ (dist/ is not committed)
 - `just release` — web build + single binary with the SPA embedded (`backend/bin/pushpoint`, `-tags embed_frontend`)
 - `just web-gen` — api/openapi.yaml → frontend/src/lib/api/schema.d.ts (openapi-typescript pinned, generated output committed)
+- `just ios-api-gen` — api/openapi.yaml → ios/PushPoint/Generated/ (swift-openapi-generator CLI, generated output committed — the contract's third consumer)
+- `just flow [file]` — Maestro flow against the booted simulator's real data (default `maestro/smoke.yaml`)
+- `just ios-uitest` — XCUITest on the simulator with its own seeded fixtures
 - For the remaining recipes (build/gen-check/web-gen-check/test-crash/seed/lint/fmt), run `just` to list them
 
 ## Core rules
@@ -35,10 +38,11 @@ Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker
 - Design sources of truth: schema = `docs/v2/05-DATA-SCHEMA.md`, API = `api/openapi.yaml` (`docs/v2/06-API-SPECIFICATION.md` is commentary), plan = `docs/v2/08-DEVELOPMENT-PLAN.md`. To change a design, edit the source first and let the rest follow (for the API, regenerate with `just gen`).
 - No unmeasured "seems to work" — back performance and quality claims with numbers from `just bench-http` (p99 gate), `just bench`, or `just eval`.
 - **Definition of done**: declare implementation work complete only after `just fmt`, `just lint`, `just test`, and `just gen-check` all pass (plus `just web-gen-check` and `just web-build` for frontend changes), and present the commands you ran and their output as evidence (no success claims without output).
+- **UI changes need a screen, not a build.** A successful build is not evidence that a screen is right — every UI failure this project shipped compiled cleanly. Look at the screen (`maestro hierarchy`, `just flow`) or lock it down (`just ios-uitest`) before calling UI work done. Details in `.claude/rules/ui-verification.md`.
 - **Sweep rule**: for edits spanning many files, do not assign targets from memory — first build the target list with `grep -l`/glob, save it to a file, and work it off as a checklist. When done, re-run the same search and confirm zero remaining.
 - Mention the v1 stack (PostgreSQL/Redis/MinIO/OpenAI/k8s/Gin/Ent) only in "v1 vs v2" context. It must not appear in descriptions of the current architecture.
 - The 8 recommendations from the plan review (2026-07-20) are already applied — see `docs/v2/09-PLAN-REVIEW.md` for background and rationale.
 - The web frontend is officially in scope as of 2026-07-21 — the non-goal is retired and it is promoted to a full-feature client on par with iOS. Background in `docs/v2/09-PLAN-REVIEW.md`, detailed rules in `.claude/rules/frontend.md`.
 - **Code review gate**: when a unit of implementation work (milestone or feature) is finished, run `/pr-review-toolkit:review-pr` before committing. Fix high/medium findings before commit and push, and record the reason for anything deliberately deferred.
 - **Merge rule**: never push directly to main (enforced by the GitHub ruleset `main-protection` — PR required, `ci` check required, force-push and deletion blocked). Flow: branch → commit and push → PR → green CI + code review gate → merge. If CI breaks on main, fix it before anything else.
-- Per-area detailed rules are split into `.claude/rules/` by path scope (backend, nlu, ios, frontend, docs, api).
+- Per-area detailed rules are split into `.claude/rules/` by path scope (backend, nlu, ios, frontend, docs, api) plus `ui-verification.md` (how to check a screen without asking a human — Maestro / AXe / XCUITest, and which to reach for).

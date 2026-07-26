@@ -326,6 +326,14 @@ ios-api-gen:
         --output-directory ../../PushPoint/Generated
     @echo "ios-api-gen: ios/PushPoint/Generated/{Types,Client}.swift 갱신"
 
+# Maestro 플로우 — 부팅된 시뮬레이터의 **실제 데이터**에 대고 화면이 멀쩡한지 본다
+#
+# XCUITest(just ios-uitest)와 역할이 다르다. 저쪽은 픽스처를 심는 CI 게이트이고,
+# 이쪽은 내 진짜 아카이브가 든 앱을 그대로 훑는다 — 그래서 내용은 단언하지 않는다.
+flow file="maestro/smoke.yaml":
+    @command -v maestro >/dev/null 2>&1 || { echo "maestro 미설치 — brew install mobile-dev-inc/tap/maestro"; exit 1; }
+    maestro test {{file}}
+
 # 화면을 실제로 조작하는 UI 테스트 (XCUITest, 시뮬레이터)
 #
 # 앱을 `-uitest`로 띄운다 — 임시 디렉터리 + 자체 픽스처라 시뮬레이터에 무엇이 들어
