@@ -556,8 +556,9 @@ func TestTags_CRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTags 실패: %v", err)
 	}
-	if len(tags) != 30 {
-		t.Fatalf("seed 태그 수 = %d, want 30", len(tags))
+	// 사전은 늘어나므로 정확한 수를 박지 않는다(드리프트는 just dict-lint 담당).
+	if len(tags) < 30 {
+		t.Fatalf("seed 태그가 모자란다: %d개", len(tags))
 	}
 
 	// NOCASE 중복 — seed의 dev와 대소문자만 다름
@@ -616,14 +617,15 @@ func TestTags_Facet(t *testing.T) {
 		byFacet[tg.Facet]++
 		byName[tg.Name] = tg.Facet
 	}
-	want := map[string]int{FacetCraft: 18, FacetMedia: 5, FacetLife: 7}
-	for f, n := range want {
-		if byFacet[f] != n {
-			t.Errorf("시드 facet %s = %d개, want %d개", f, byFacet[f], n)
+	// facet은 셋 다 실제로 쓰여야 한다 — 하나가 0이면 배정이 빠진 것이다.
+	// 정확한 분포는 사전이 자라면서 바뀌므로 박지 않는다.
+	for _, f := range []string{FacetCraft, FacetMedia, FacetLife} {
+		if byFacet[f] == 0 {
+			t.Errorf("시드 facet %s가 하나도 없다", f)
 		}
 	}
 	if byFacet[FacetNeutral] != 0 {
-		t.Errorf("시드 neutral = %d개, want 0개 (30개 전부 배정)", byFacet[FacetNeutral])
+		t.Errorf("시드 neutral = %d개, want 0개 (시드는 전부 facet이 배정돼야 한다)", byFacet[FacetNeutral])
 	}
 	for name, f := range map[string]string{
 		"golang": FacetCraft, "design": FacetCraft,

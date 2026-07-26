@@ -11,8 +11,32 @@
 // 그래서 플랫폼을 더하거나 빼도 "무엇을 본문으로 보는가"는 한 곳에서만 바뀐다.
 // 서버는 어느 플랫폼이 보냈는지 알 필요가 없다 — body_text가 왔다는 사실만 본다.
 
-/** 본문 후보에서 걷어낼 요소 — 내비게이션·광고·폼은 본문이 아니다. */
-const DROP_SELECTOR = 'script, style, noscript, iframe, nav, header, footer, aside, form, svg, template';
+/**
+ * 본문 후보에서 걷어낼 요소 — 내비게이션·광고·폼은 본문이 아니다.
+ *
+ * 태그 이름만으로는 부족하다. 요즘 광고·추천 위젯(Taboola·Outbrain류)은 평범한
+ * `div`라서 태그로는 안 걸리는데, 뉴스 사이트에서는 그 덩어리가 본문보다 길 때도 있다 —
+ * 실제로 nbcnews.com 기사의 요약이 통째로 협찬 문구로 채워졌다. 그래서 클래스·id·
+ * data 속성에 흔히 박히는 표식도 함께 본다.
+ */
+const DROP_SELECTOR = [
+  'script, style, noscript, iframe, nav, header, footer, aside, form, svg, template',
+  '[class*="taboola" i], [class*="outbrain" i], [class*="sponsor" i], [class*="advert" i]',
+  '[class*="promo" i], [class*="newsletter" i], [class*="related" i], [class*="recirc" i]',
+  '[id*="taboola" i], [id*="outbrain" i], [data-testid*="ad" i]',
+  'figure figcaption, [role="complementary"], [aria-hidden="true"]',
+].join(', ');
+
+/**
+ * 블록 경계를 만드는 요소 — 이들 뒤에 개행을 넣어 문장 경계를 살린다.
+ *
+ * 왜 필요한가: 아래 capture는 원본을 건드리지 않으려고 **복제본**에서 텍스트를 읽는데,
+ * 문서에 붙어 있지 않은 노드의 `innerText`는 렌더 정보를 쓸 수 없어 `textContent`처럼
+ * 동작한다(명세: 렌더되지 않는 요소는 textContent를 반환). 즉 지금까지 블록 경계가
+ * 살아남은 것은 **원본 HTML에 줄바꿈이 있던 사이트에서 우연히** 그랬을 뿐이고,
+ * 압축된 HTML(nbcnews.com)에서는 5KB 본문이 두 줄이 되어 요약기가 문장을 나눌 수 없었다.
+ */
+const BLOCK_SELECTOR = 'p, div, section, article, h1, h2, h3, h4, h5, h6, li, blockquote, pre, tr, figcaption';
 
 /** 본문 컨테이너 후보를 우선순위대로 — 없으면 body 전체. */
 const ROOT_SELECTORS = ['article', '[role="main"]', 'main', '#content', '.post-content'];
@@ -34,14 +58,47 @@ function metaContent(doc, ...keys) {
   return '';
 }
 
-/** 본문 컨테이너를 고른다 — 가장 앞선 후보 중 텍스트가 충분한 것. */
+/**
+ * 본문 컨테이너를 고른다.
+ *
+ * 1순위는 시맨틱 후보(article, main 등)다. 맞으면 가장 정확하다.
+ *
+ * 2순위는 **문단 밀도**다. 시맨틱 태그를 안 쓰는 사이트에서 곧바로 body로 폴백하면
+ * 페이지 크롬이 통째로 본문이 된다 — marketwatch.com에서 실제로 그랬고, 캡처된 본문이
+ * 사이트 검색 UI와 시세 티커("DJIA51947.250.46%S&P 500...")로 시작했다. 그 상태로는
+ * 광고 셀렉터를 아무리 늘려도 못 막는다. 크롬에는 `<p>`가 거의 없다는 성질을 쓰면
+ * 목록·티커·내비게이션을 한 번에 걸러낼 수 있다.
+ */
 function pickRoot(doc) {
   for (const sel of ROOT_SELECTORS) {
     const el = doc.querySelector(sel);
     // 후보가 껍데기뿐인 사이트가 있어 최소 길이로 거른다.
     if (el && (el.innerText || '').trim().length > 200) return el;
   }
-  return doc.body;
+  return pickByParagraphDensity(doc) || doc.body;
+}
+
+/**
+ * 문단 텍스트가 가장 많은 컨테이너를 고른다.
+ *
+ * 후보의 **직계 자식** `<p>`만 센다. 조상까지 세면 body가 항상 이기므로 의미가 없다.
+ * 동점이면 더 깊은(= 더 좁은) 쪽이 낫다 — 얕은 컨테이너일수록 크롬을 더 안고 있다.
+ */
+function pickByParagraphDensity(doc) {
+  let best = null;
+  let bestLen = 0;
+  for (const el of doc.querySelectorAll('article, main, section, div')) {
+    let len = 0;
+    for (const child of el.children) {
+      if (child.tagName === 'P') len += (child.textContent || '').trim().length;
+    }
+    // 문단 몇 줄로는 본문이라 하기 어렵다. 요약 가드(200룬)와 같은 자릿수로 둔다.
+    if (len > bestLen && len > 200) {
+      best = el;
+      bestLen = len;
+    }
+  }
+  return best;
 }
 
 /**
@@ -58,8 +115,12 @@ function capture(doc, url) {
   if (root) {
     const clone = root.cloneNode(true);
     clone.querySelectorAll(DROP_SELECTOR).forEach((el) => el.remove());
-    // innerText는 렌더된 텍스트(줄바꿈·숨김 요소 반영)라 textContent보다 사람이 읽는 것에 가깝다.
-    text = (clone.innerText || clone.textContent || '').replace(/[ \t ]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    // 블록 경계를 우리가 만든다. 복제본은 문서에 붙어 있지 않아 innerText가 렌더 정보를
+    // 쓸 수 없고 textContent와 같아지므로(BLOCK_SELECTOR 주석), 경계를 넣지 않으면
+    // 문단들이 한 줄로 이어붙는다 — 그러면 요약기가 문장을 나누지 못한다.
+    clone.querySelectorAll('br').forEach((el) => el.replaceWith(doc.createTextNode('\n')));
+    clone.querySelectorAll(BLOCK_SELECTOR).forEach((el) => el.append(doc.createTextNode('\n')));
+    text = (clone.textContent || '').replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   }
   return {
     url,

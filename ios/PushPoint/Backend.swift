@@ -113,6 +113,15 @@ final class Backend: ObservableObject {
         }
     }
 
+    /// 계약의 `thumb_url`은 `/thumbs/{dir}/{file}` **상대 경로**다(인증 면제 —
+    /// AsyncImage가 커스텀 헤더를 못 실기 때문이다). 그대로 `URL(string:)`에 넣으면
+    /// host 없는 URL이 되어 **조용히 아무것도 안 그린다** — 실제로 그렇게 썸네일이
+    /// 전부 비어 보였다. 서버 주소를 아는 곳은 여기뿐이므로 해석도 여기서 한다.
+    func absoluteURL(_ path: String) -> URL? {
+        guard case let .running(baseURL) = state else { return nil }
+        return URL(string: path, relativeTo: baseURL)
+    }
+
     private static func randomKey() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         // 실패하면 예측 가능한 키를 쓰느니 크래시가 낫다 — 이 값이 유일한 접근 통제다.

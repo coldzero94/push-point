@@ -1,32 +1,452 @@
 [
-  { "name": "dev",          "facet": "craft", "aliases": ["개발", "programming", "coding", "코딩", "개발자"] },
-  { "name": "golang",       "facet": "craft", "aliases": ["go", "고랭", "고언어"] },
-  { "name": "kubernetes",   "facet": "craft", "aliases": ["k8s", "쿠버네티스", "쿠버"] },
-  { "name": "ios",          "facet": "craft", "aliases": ["아이오에스", "swiftui", "애플", "apple"] },
-  { "name": "swift",        "facet": "craft", "aliases": ["스위프트"] },
-  { "name": "python",       "facet": "craft", "aliases": ["파이썬"] },
-  { "name": "rust",         "facet": "craft", "aliases": ["러스트"] },
-  { "name": "javascript",   "facet": "craft", "aliases": ["js", "자바스크립트", "typescript", "ts", "타입스크립트"] },
-  { "name": "frontend",     "facet": "craft", "aliases": ["프론트엔드", "프론트", "react", "리액트", "css"] },
-  { "name": "backend",      "facet": "craft", "aliases": ["백엔드", "서버", "server", "api"] },
-  { "name": "database",     "facet": "craft", "aliases": ["db", "데이터베이스", "sql", "sqlite", "postgres"] },
-  { "name": "devops",       "facet": "craft", "aliases": ["데브옵스", "ci/cd", "docker", "도커", "인프라", "infra"] },
-  { "name": "security",     "facet": "craft", "aliases": ["보안", "시큐리티", "해킹", "hacking"] },
-  { "name": "opensource",   "facet": "craft", "aliases": ["오픈소스", "open source", "github", "깃허브"] },
-  { "name": "ai",           "facet": "craft", "aliases": ["인공지능", "머신러닝", "machine learning", "ml", "딥러닝", "deep learning"] },
-  { "name": "llm",          "facet": "craft", "aliases": ["대규모 언어 모델", "gpt", "claude", "챗지피티", "chatgpt", "프롬프트"] },
-  { "name": "data",         "facet": "craft", "aliases": ["데이터", "데이터 분석", "analytics", "통계"] },
-  { "name": "design",       "facet": "craft", "aliases": ["디자인", "ui", "ux", "피그마", "figma"] },
-  { "name": "article",      "facet": "media", "aliases": ["아티클", "글", "블로그", "blog", "포스트"] },
-  { "name": "video",        "facet": "media", "aliases": ["영상", "동영상", "유튜브", "youtube"] },
-  { "name": "tutorial",     "facet": "media", "aliases": ["튜토리얼", "강의", "가이드", "how-to", "입문"] },
-  { "name": "news",         "facet": "life",  "aliases": ["뉴스", "소식", "속보"] },
-  { "name": "science",      "facet": "life",  "aliases": ["과학", "연구", "paper", "논문"] },
-  { "name": "finance",      "facet": "life",  "aliases": ["금융", "투자", "경제", "재테크", "주식"] },
-  { "name": "career",       "facet": "life",  "aliases": ["커리어", "이직", "취업", "면접", "이력서"] },
-  { "name": "productivity", "facet": "life",  "aliases": ["생산성", "워크플로우", "workflow", "도구", "tools"] },
-  { "name": "book",         "facet": "media", "aliases": ["책", "독서", "서평", "reading"] },
-  { "name": "podcast",      "facet": "media", "aliases": ["팟캐스트", "오디오"] },
-  { "name": "travel",       "facet": "life",  "aliases": ["여행", "여행지"] },
-  { "name": "life",         "facet": "life",  "aliases": ["라이프", "일상", "생활"] }
+  {
+    "name": "dev",
+    "facet": "craft",
+    "aliases": [
+      "개발",
+      "programming",
+      "coding",
+      "코딩",
+      "개발자"
+    ]
+  },
+  {
+    "name": "golang",
+    "facet": "craft",
+    "aliases": [
+      "go",
+      "고랭",
+      "고언어"
+    ]
+  },
+  {
+    "name": "kubernetes",
+    "facet": "craft",
+    "aliases": [
+      "k8s",
+      "쿠버네티스",
+      "쿠버"
+    ]
+  },
+  {
+    "name": "ios",
+    "facet": "craft",
+    "aliases": [
+      "아이오에스",
+      "swiftui",
+      "애플",
+      "apple"
+    ]
+  },
+  {
+    "name": "swift",
+    "facet": "craft",
+    "aliases": [
+      "스위프트"
+    ]
+  },
+  {
+    "name": "python",
+    "facet": "craft",
+    "aliases": [
+      "파이썬"
+    ]
+  },
+  {
+    "name": "rust",
+    "facet": "craft",
+    "aliases": [
+      "러스트"
+    ]
+  },
+  {
+    "name": "javascript",
+    "facet": "craft",
+    "aliases": [
+      "js",
+      "자바스크립트",
+      "typescript",
+      "ts",
+      "타입스크립트"
+    ]
+  },
+  {
+    "name": "frontend",
+    "facet": "craft",
+    "aliases": [
+      "프론트엔드",
+      "프론트",
+      "react",
+      "리액트",
+      "css"
+    ]
+  },
+  {
+    "name": "backend",
+    "facet": "craft",
+    "aliases": [
+      "백엔드",
+      "서버",
+      "server",
+      "api"
+    ]
+  },
+  {
+    "name": "database",
+    "facet": "craft",
+    "aliases": [
+      "db",
+      "데이터베이스",
+      "sql",
+      "sqlite",
+      "postgres"
+    ]
+  },
+  {
+    "name": "devops",
+    "facet": "craft",
+    "aliases": [
+      "데브옵스",
+      "ci/cd",
+      "docker",
+      "도커",
+      "인프라",
+      "infra"
+    ]
+  },
+  {
+    "name": "security",
+    "facet": "craft",
+    "aliases": [
+      "보안",
+      "시큐리티",
+      "해킹",
+      "hacking"
+    ]
+  },
+  {
+    "name": "opensource",
+    "facet": "craft",
+    "aliases": [
+      "오픈소스",
+      "open source",
+      "github",
+      "깃허브"
+    ]
+  },
+  {
+    "name": "ai",
+    "facet": "craft",
+    "aliases": [
+      "인공지능",
+      "머신러닝",
+      "machine learning",
+      "ml",
+      "딥러닝",
+      "deep learning"
+    ]
+  },
+  {
+    "name": "llm",
+    "facet": "craft",
+    "aliases": [
+      "대규모 언어 모델",
+      "gpt",
+      "claude",
+      "챗지피티",
+      "chatgpt",
+      "프롬프트"
+    ]
+  },
+  {
+    "name": "data",
+    "facet": "craft",
+    "aliases": [
+      "데이터",
+      "데이터 분석",
+      "analytics",
+      "통계"
+    ]
+  },
+  {
+    "name": "design",
+    "facet": "craft",
+    "aliases": [
+      "디자인",
+      "ui",
+      "ux",
+      "피그마",
+      "figma"
+    ]
+  },
+  {
+    "name": "article",
+    "facet": "media",
+    "aliases": [
+      "아티클",
+      "글",
+      "블로그",
+      "blog",
+      "포스트"
+    ]
+  },
+  {
+    "name": "video",
+    "facet": "media",
+    "aliases": [
+      "영상",
+      "동영상",
+      "유튜브",
+      "youtube"
+    ]
+  },
+  {
+    "name": "tutorial",
+    "facet": "media",
+    "aliases": [
+      "튜토리얼",
+      "강의",
+      "가이드",
+      "how-to",
+      "입문"
+    ]
+  },
+  {
+    "name": "news",
+    "facet": "life",
+    "aliases": [
+      "뉴스",
+      "소식",
+      "속보"
+    ]
+  },
+  {
+    "name": "science",
+    "facet": "life",
+    "aliases": [
+      "과학",
+      "연구",
+      "paper",
+      "논문"
+    ]
+  },
+  {
+    "name": "finance",
+    "facet": "life",
+    "aliases": [
+      "금융",
+      "투자",
+      "경제",
+      "재테크",
+      "주식"
+    ]
+  },
+  {
+    "name": "career",
+    "facet": "life",
+    "aliases": [
+      "커리어",
+      "이직",
+      "취업",
+      "면접",
+      "이력서"
+    ]
+  },
+  {
+    "name": "productivity",
+    "facet": "life",
+    "aliases": [
+      "생산성",
+      "워크플로우",
+      "workflow",
+      "도구",
+      "tools"
+    ]
+  },
+  {
+    "name": "book",
+    "facet": "media",
+    "aliases": [
+      "책",
+      "독서",
+      "서평",
+      "reading"
+    ]
+  },
+  {
+    "name": "podcast",
+    "facet": "media",
+    "aliases": [
+      "팟캐스트",
+      "오디오"
+    ]
+  },
+  {
+    "name": "travel",
+    "facet": "life",
+    "aliases": [
+      "여행",
+      "여행지"
+    ]
+  },
+  {
+    "name": "life",
+    "facet": "life",
+    "aliases": [
+      "라이프",
+      "일상",
+      "생활"
+    ]
+  },
+  {
+    "name": "sports",
+    "facet": "life",
+    "aliases": [
+      "스포츠",
+      "축구",
+      "야구",
+      "농구",
+      "경기",
+      "리그",
+      "선수"
+    ]
+  },
+  {
+    "name": "football",
+    "facet": "life",
+    "aliases": [
+      "풋볼",
+      "프리미어리그",
+      "챔피언스리그",
+      "월드컵",
+      "이적",
+      "구단",
+      "리그앙"
+    ]
+  },
+  {
+    "name": "politics",
+    "facet": "life",
+    "aliases": [
+      "정치",
+      "정부",
+      "대통령",
+      "국회",
+      "선거",
+      "의회",
+      "외교"
+    ]
+  },
+  {
+    "name": "economy",
+    "facet": "life",
+    "aliases": [
+      "경제",
+      "증시",
+      "주가",
+      "금리",
+      "환율",
+      "물가",
+      "인플레이션"
+    ]
+  },
+  {
+    "name": "realestate",
+    "facet": "life",
+    "aliases": [
+      "부동산",
+      "아파트",
+      "전세",
+      "월세",
+      "매매",
+      "분양",
+      "집값"
+    ]
+  },
+  {
+    "name": "health",
+    "facet": "life",
+    "aliases": [
+      "건강",
+      "질병",
+      "의학",
+      "병원",
+      "운동",
+      "다이어트",
+      "수면"
+    ]
+  },
+  {
+    "name": "food",
+    "facet": "life",
+    "aliases": [
+      "음식",
+      "요리",
+      "맛집",
+      "레시피",
+      "식당",
+      "카페"
+    ]
+  },
+  {
+    "name": "culture",
+    "facet": "life",
+    "aliases": [
+      "문화",
+      "영화",
+      "드라마",
+      "음악",
+      "공연",
+      "전시",
+      "예술"
+    ]
+  },
+  {
+    "name": "game",
+    "facet": "life",
+    "aliases": [
+      "게임",
+      "롤",
+      "스팀",
+      "콘솔",
+      "플레이스테이션",
+      "닌텐도"
+    ]
+  },
+  {
+    "name": "education",
+    "facet": "life",
+    "aliases": [
+      "교육",
+      "학습",
+      "공부",
+      "강의",
+      "학교",
+      "대학"
+    ]
+  },
+  {
+    "name": "startup",
+    "facet": "craft",
+    "aliases": [
+      "스타트업",
+      "창업",
+      "투자",
+      "벤처",
+      "시리즈",
+      "펀딩"
+    ]
+  },
+  {
+    "name": "law",
+    "facet": "life",
+    "aliases": [
+      "법",
+      "법률",
+      "소송",
+      "판결",
+      "규제",
+      "계약"
+    ]
+  }
 ]

@@ -60,8 +60,10 @@ func TestLoadTagDict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadTagDict: %v", err)
 	}
-	if len(entries) != 30 {
-		t.Fatalf("시드 태그 30개여야, got %d", len(entries))
+	// 개수 자체보다 "시드가 실제로 들어왔나"가 요점이다. 사전은 늘어난다 —
+	// tags.json과의 정확한 일치는 just dict-lint이 지키므로 여기서는 하한만 본다.
+	if len(entries) < 30 {
+		t.Fatalf("시드 태그가 비었거나 모자란다: %d개", len(entries))
 	}
 	// aliases가 디코드돼야 (kubernetes → 쿠버네티스 포함).
 	for _, e := range entries {

@@ -7,7 +7,7 @@ struct PushPointApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .environmentObject(backend)
         }
         // 서버 수명을 앱의 포그라운드 수명에 묶는다. iOS는 백그라운드 앱의 CPU·네트워크를
