@@ -1,7 +1,6 @@
 package scraper
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -98,7 +97,7 @@ func (p *DefaultParser) fetchHTML(ctx context.Context, u *url.URL) (*goquery.Doc
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("scraper: 본문 읽기 실패 %s: %w", u, err)
 	}
-	doc, err := ParseHTML(bytes.NewReader(body))
+	doc, err := ParseHTMLCharset(body, resp.Header.Get("Content-Type"))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("scraper: HTML 파싱 실패 %s: %w", u, err)
 	}
