@@ -17,6 +17,28 @@ func (s *sqliteStore) Search(ctx context.Context, q, tag string, from, to *int64
 	if utf8.RuneCountInString(q) >= 3 {
 		if match := ftsMatchQuery(q); match != "" {
 			items, next, err := s.searchFTS(ctx, match, tag, from, to, cursor, limit)
+			if err != nil {
+				return nil, "", SearchModeFTS, err
+			}
+			// **모든 낱말을 요구했다가 하나도 못 찾으면 일부라도 맞는 것을 보여준다.**
+			//
+			// FTS5에서 공백은 암묵적 AND라, 색인에 없는 낱말이 **하나만** 섞여도 결과가
+			// 통째로 0이 된다. 실측(2026-07-27, `just eval-search` 25질의): 미발견 12건의
+			// 대부분이 이것이었다 — `웹 취약점 top 10`은 `top`·`10`이 OWASP 제목에 있는데
+			// `취약점`이 없어서 전멸했고, `판다스 10분 입문`은 제목이 `10 minutes to pandas`라
+			// `판다스` 하나에 막혔다.
+			//
+			// **AND를 OR로 바꾸지 않고, AND가 빈손일 때만 OR로 다시 묻는다.** 전면 OR은
+			// 지금 잘 찾는 질의의 순위까지 흔들지만, 이 방식은 결과가 0인 경우에만 개입하므로
+			// **되던 것이 나빠질 수가 없다.** 0건이 1건 이상이 되는 방향으로만 움직인다.
+			//
+			// 재시도 판정은 질의만 보고 결정되므로 페이지를 넘어가도 같은 모드가 유지된다.
+			if len(items) == 0 && cursor == "" {
+				if orMatch := ftsMatchQueryAny(q); orMatch != match {
+					items, next, err = s.searchFTS(ctx, orMatch, tag, from, to, cursor, limit)
+					return items, next, SearchModeFTS, err
+				}
+			}
 			return items, next, SearchModeFTS, err
 		}
 	}
@@ -36,6 +58,21 @@ func ftsMatchQuery(q string) string {
 		quoted = append(quoted, `"`+strings.ReplaceAll(tok, `"`, `""`)+`"`)
 	}
 	return strings.Join(quoted, " ") // 공백 = 암묵적 AND
+}
+
+// ftsMatchQueryAny는 같은 토큰을 **OR**로 잇는다 — `ftsMatchQuery`가 빈손일 때의 재시도용.
+//
+// 토큰이 하나뿐이면 AND와 글자까지 같은 문자열이 나오고, 호출부는 그걸 보고 재시도를
+// 건너뛴다(같은 질의를 두 번 돌릴 이유가 없다).
+func ftsMatchQueryAny(q string) string {
+	var quoted []string
+	for _, tok := range strings.Fields(q) {
+		if utf8.RuneCountInString(tok) < 3 {
+			continue
+		}
+		quoted = append(quoted, `"`+strings.ReplaceAll(tok, `"`, `""`)+`"`)
+	}
+	return strings.Join(quoted, " OR ")
 }
 
 // searchFTS는 links_fts MATCH + bm25 랭킹 검색.
