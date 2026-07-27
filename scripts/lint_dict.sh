@@ -36,10 +36,31 @@ mig_text = ""
 for p in sorted(glob.glob(os.path.join(mig_dir, "*.up.sql"))):
     mig_text += open(p, encoding="utf-8").read() + "\n"
 
-# 0002: INSERT INTO tags ... VALUES ('name', '["a","b"]'), ...
+# 마이그레이션을 **순서대로** 재생해 최종 aliases를 구한다.
+#
+# 두 모양을 다 본다:
+#   INSERT INTO tags (name, aliases) VALUES ('name', '["a","b"]'), ...
+#   UPDATE tags SET aliases = '["a","b"]' WHERE name = 'x';
+#
+# **UPDATE를 안 보던 것이 결함이었다.** 마이그레이션은 불변이라 별칭을 고치려면 새 파일에
+# UPDATE를 쓸 수밖에 없는데, 그러면 이 검사가 0002의 옛 값만 보고 tags.json과 어긋났다고
+# 판정했다. 즉 **별칭을 고치는 유일한 방법이 lint를 깨는 방법**이었다.
+#
+# 파일명 정렬 순서로 이어 붙인 텍스트를 한 번에 훑되 **매치 순서대로** 적용한다(나중 것이 이김).
+# INSERT와 UPDATE를 따로 두 번 훑으면 나중 파일의 INSERT가 앞 파일의 UPDATE에 덮이는
+# 뒤바뀜이 생긴다 — 지금은 그런 조합이 없지만 규칙이 순서를 지키는 편이 옳다.
 seed_aliases = {}
-for name, aliases_json in re.findall(r"\(\s*'([^']+)'\s*,\s*'(\[[^']*\])'\s*\)", mig_text):
-    seed_aliases[name] = json.loads(aliases_json)
+_pat = re.compile(
+    r"\(\s*'([^']+)'\s*,\s*'(\[[^']*\])'\s*\)"                      # INSERT 튜플
+    r"|UPDATE\s+tags\s+SET\s+aliases\s*=\s*'(\[[^']*\])'\s*"        # UPDATE
+    r"WHERE\s+name\s*=\s*'([^']+)'",
+    re.I | re.S,
+)
+for m in _pat.finditer(mig_text):
+    if m.group(1) is not None:
+        seed_aliases[m.group(1)] = json.loads(m.group(2))
+    else:
+        seed_aliases[m.group(4)] = json.loads(m.group(3))
 
 # 0003: UPDATE tags SET facet='X' WHERE name IN ('a','b',...);  (+ ALTER … DEFAULT 'neutral')
 seed_facet = {}

@@ -121,7 +121,14 @@
       "보안",
       "시큐리티",
       "해킹",
-      "hacking"
+      "hacking",
+      "ddos",
+      "firewall",
+      "방화벽",
+      "vulnerability",
+      "취약점",
+      "encryption",
+      "암호화"
     ]
   },
   {
@@ -260,7 +267,10 @@
       "워크플로우",
       "workflow",
       "도구",
-      "tools"
+      "tools",
+      "습관",
+      "habit",
+      "시간관리"
     ]
   },
   {
