@@ -125,13 +125,14 @@ bookmark import; export to a Google Sheet.
 
 What is being worked on, and honestly:
 
-**Tagging has run out of ranking headroom.** Every remaining miss across all three
-evaluation sets scores *zero* on the correct tag — not "ranked too low", but no
-signal at all. Reordering cannot recover any of them, which was verified by dropping
-the score threshold to near zero and confirming the correct tags still never appear.
-The next lever is a local embedding model as a second opinion, and it is being run
-first as a throwaway offline experiment with kill criteria written down in advance,
-because the honest outcome may be that it does not help either.
+**Tagging has run out of ranking headroom, and the next lever was tried and dropped.**
+Every remaining miss across all three evaluation sets scores *zero* on the correct
+tag — not "ranked too low", but no signal at all — verified by dropping the score
+threshold to near zero and confirming the correct tags still never appear. A local
+embedding model was the obvious next move, so it was run as a throwaway offline
+experiment with kill criteria written down first. It cleared the bar on a 1 GB model
+and failed at a size that could actually ship, so it was cut. The rule engine is what
+ships, and the reasoning is written down rather than quietly abandoned.
 
 **Pages behind a login are only half-solved.** The browser extension captures them,
 and the server accepts and stores what it sends — but no such page has made it into
