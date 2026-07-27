@@ -133,7 +133,10 @@ func (q *SQLite) Fail(ctx context.Context, id int64, jobErr error) error {
 		return fmt.Errorf("queue: fail(job=%d) 조회 실패: %w", id, err)
 	}
 
-	if attempts < maxAttempts {
+	// **영구 실패는 남은 시도를 소진하지 않는다.** 봇 차단 페이지는 30초 뒤에도 봇 차단
+	// 페이지다 — 재시도는 시간만 버리는 게 아니라 이미 우리를 막은 사이트를 두 번 더
+	// 두드리는 것이고, 그동안 링크는 pending으로 남아 "처리 중"으로 보인다.
+	if attempts < maxAttempts && !isPermanent(jobErr) {
 		// 재시도 여지 — pending 복귀 + 선형 백오프.
 		_, err = tx.ExecContext(ctx,
 			`UPDATE jobs SET status='pending', run_after=unixepoch()+30*attempts, error=? WHERE id=?`,

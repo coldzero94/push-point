@@ -430,3 +430,80 @@ func TestFailKeepsClientCapturedLinkDone(t *testing.T) {
 		t.Errorf("실패 사유는 그대로 기록돼야: %q", errMsg)
 	}
 }
+
+// permErr는 재시도해도 결과가 같은 실패를 흉내낸다 (실물은 scraper.ErrBlockedPage).
+type permErr struct{}
+
+func (permErr) Error() string   { return "봇 차단 벽" }
+func (permErr) Permanent() bool { return true }
+
+// **영구 실패는 남은 시도를 소진하지 않는다.**
+//
+// 백오프 재시도는 일시적 실패를 전제로 하는데 봇 차단 페이지는 결정적이다. 세 번 두드리면
+// 시간만 버리는 게 아니라 이미 우리를 막은 사이트를 두 번 더 두드리게 되고, 그동안 링크는
+// pending으로 남아 사용자에게 "처리 중"으로 보인다.
+func TestFailPermanentSkipsRetries(t *testing.T) {
+	db := newTestDB(t)
+	q := NewSQLite(db)
+	ctx := context.Background()
+	linkID := insertLink(t, db, "https://blocked.example/x")
+	enqueue(t, db, q, KindScrape, linkID)
+
+	job, err := q.Claim(ctx)
+	if err != nil || job == nil {
+		t.Fatalf("claim 실패: (%v, %v)", job, err)
+	}
+	// **첫 시도**에 영구 실패로 끝난다 — 보통이면 attempts(1) < max(3)라 pending 복귀다.
+	if err := q.Fail(ctx, job.ID, permErr{}); err != nil {
+		t.Fatalf("Fail: %v", err)
+	}
+
+	r := readJob(t, db, job.ID)
+	if r.status != "failed" {
+		t.Errorf("영구 실패는 첫 시도에 확정돼야 한다: status=%q attempts=%d", r.status, r.attempts)
+	}
+	if r.attempts != 1 {
+		t.Errorf("재시도가 일어났다: attempts=%d, want 1", r.attempts)
+	}
+	if !r.finishedAt.Valid {
+		t.Error("finished_at이 기록되지 않았다")
+	}
+
+	// 링크에도 사유가 남아야 화면에서 무엇을 해야 할지 알 수 있다.
+	var linkStatus, linkErr string
+	if err := db.QueryRow(`SELECT status, error FROM links WHERE id=?`, linkID).
+		Scan(&linkStatus, &linkErr); err != nil {
+		t.Fatal(err)
+	}
+	if linkStatus != "failed" || linkErr != "봇 차단 벽" {
+		t.Errorf("링크에 사유가 안 남았다: status=%q error=%q", linkStatus, linkErr)
+	}
+
+	// 그리고 다시 claim되지 않아야 한다.
+	if _, err := db.Exec(`UPDATE jobs SET run_after=unixepoch()-1`); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := q.Claim(ctx); err != nil || got != nil {
+		t.Errorf("확정 실패한 잡이 다시 claim됐다: (%v, %v)", got, err)
+	}
+}
+
+// 일시적 실패는 예전처럼 재시도돼야 한다 — 영구 판정이 모든 실패를 삼키면 안 된다.
+func TestFailNonPermanentStillRetries(t *testing.T) {
+	db := newTestDB(t)
+	q := NewSQLite(db)
+	ctx := context.Background()
+	linkID := insertLink(t, db, "https://flaky.example/x")
+	enqueue(t, db, q, KindScrape, linkID)
+
+	job, err := q.Claim(ctx)
+	if err != nil || job == nil {
+		t.Fatalf("claim 실패: (%v, %v)", job, err)
+	}
+	if err := q.Fail(ctx, job.ID, fmt.Errorf("일시적 타임아웃")); err != nil {
+		t.Fatalf("Fail: %v", err)
+	}
+	if r := readJob(t, db, job.ID); r.status != "pending" {
+		t.Errorf("일시적 실패는 재시도돼야 한다: status=%q", r.status)
+	}
+}

@@ -13,6 +13,7 @@ package queue
 import (
 	"context"
 	"database/sql"
+	"errors"
 )
 
 // Kind는 잡 종류. jobs.kind CHECK 제약과 일치.
@@ -63,6 +64,7 @@ type Queue interface {
 	Complete(ctx context.Context, id int64) error
 
 	// Fail은 잡 실패를 기록한다.
+	//   - jobErr가 Permanent()=true면 남은 시도와 무관하게 즉시 확정 실패.
 	//   - attempts < max_attempts: status='pending'으로 되돌리고
 	//     run_after = unixepoch() + 30*attempts (선형 백오프).
 	//   - attempts >= max_attempts: status='failed' + finished_at 기록,
@@ -80,4 +82,24 @@ type Queue interface {
 
 	// Notify는 dispatcher가 수신 대기하는 알림 채널을 반환한다 (버퍼 1 권장).
 	Notify() <-chan struct{}
+}
+
+// Permanent는 **재시도해도 결과가 같은 실패**를 표시한다.
+//
+// 백오프 재시도는 일시적 실패(타임아웃·5xx·429)를 전제로 한다. 그런데 결정적인 실패도 있다 —
+// 봇 차단 페이지는 30초 뒤에도 봇 차단 페이지다. 그걸 세 번 두드리는 것은 시간만 버리는 게
+// 아니라 **이미 우리를 막은 사이트를 두 번 더 두드리는 것**이고, 링크는 그동안 pending으로
+// 남아 사용자에게 "처리 중"으로 보인다.
+//
+// 인터페이스로 둔 이유는 큐가 scraper를 import하지 않게 하기 위해서다. 실패의 성질을 아는
+// 쪽은 그 실패를 만든 계층이지 큐가 아니다.
+type Permanent interface {
+	error
+	Permanent() bool
+}
+
+// isPermanent는 err 체인에 Permanent()=true인 것이 있는지 본다.
+func isPermanent(err error) bool {
+	var p Permanent
+	return errors.As(err, &p) && p.Permanent()
 }
