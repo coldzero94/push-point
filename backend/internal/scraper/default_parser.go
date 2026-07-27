@@ -139,7 +139,13 @@ func extractBodyText(doc *goquery.Document, u *url.URL) string {
 	}
 	// 정제까지 textutil에 위임한다 — 스크랩 결과에도 제어문자·불완전 UTF-8이 섞일 수 있고,
 	// 클라이언트 캡처와 같은 규칙을 적용해야 저장 형태가 출처에 따라 갈라지지 않는다.
-	return textutil.Clean(res.ContentText, maxBodyText, true)
+	body := textutil.Clean(res.ContentText, maxBodyText, true)
+	// 추출이 본문 대신 **사이트 하단 고지**를 물어온 경우가 있다 — 그러면 거기서 나온 태그는
+	// 링크가 아니라 회사의 법적 고지를 설명한다(boilerplate.go 주석 참조). 빈 본문이 낫다.
+	if isFooterOnly(body) {
+		return ""
+	}
+	return body
 }
 
 // capRunes는 textutil.CapRunes의 패키지 내 별칭 (어댑터들이 쓰는 짧은 이름 유지).
