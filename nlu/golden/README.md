@@ -7,7 +7,7 @@
 ## 스키마 (한 라인 = 한 링크)
 
 ```json
-{"url": "...", "snapshot": {"title": "...", "description": "...", "body_text": "...", "keywords": "..."}, "expected_tags": ["...", "..."]}
+{"url": "...", "snapshot": {"title": "...", "description": "...", "body_text": "...", "keywords": "...", "body_source": "server|client"}, "expected_tags": ["...", "..."]}
 ```
 
 - eval은 **네트워크 접근 0** — 태거 입력은 snapshot 필드만 사용한다. URL을 다시 fetch하지 않으므로 결과가 시점에 무관하게 재현된다.
@@ -412,6 +412,30 @@ lead-3의 커버리지가 구조적으로 높아, 가드를 가진 쪽이 가드
 
 - eval은 항상 "도메인 휴리스틱만" 베이스라인 구성을 동시 측정한다.
 - 게이트는 상대 조건이다: M5 진입 = Phase A가 상수 예측기 대비 대응표본 유의(McNemar p<0.05), M5 종료 = 앙상블이 Phase A 대비 회귀 0 + 개선 5건 이상. **1항목 = 1.64pp**이고 우연과 구분되는 최소 개선이 5항목이라, 게이트를 백분율이 아니라 항목 수로 쓴다.
+
+## 클라이언트 캡처 경로 — `pushpoint golden-from-db` (M5 Phase 0 ③)
+
+`golden-capture`는 프로덕션 **스크랩** 경로로 뜬다. 그 경로는 봇 차단·로그인 벽을 정당하게
+거부하므로(`ErrBlockedPage`), **서버가 못 가져오는 페이지는 구조적으로 golden에 못 들어간다.**
+그 부류(imdb·Reddit·threads 같은)의 본문은 사용자의 **로그인된 브라우저**만 가져올 수 있고,
+확장(`extension/`)이 이미 그렇게 보낸다(`body_source='client'`).
+
+- `pushpoint golden-from-db > candidates.jsonl` — 저장된 링크 중 `body_source='client'`인 것을
+  golden 후보로 뽑는다. `expected_tags`는 **비워서** 낸다(라벨은 콘텐츠를 보고 사람이 달아야
+  하고, 링크에 이미 붙은 태그는 태거 출력이라 베끼면 동결 규칙 위반이다). 참고용으로 현재
+  태그를 `_current_tags`에 함께 낸다.
+- 본문이 200자 미만인 항목은 건너뛴다(벽·빈 캡처가 클라이언트 경로로도 들어올 수 있다).
+- 사람이 `expected_tags`를 채운 뒤에야 golden에 넣는다. `dict-lint`가 빈 라벨을 막으므로
+  라벨 없이 커밋되지 않는다.
+
+**측정**: `body_source`가 있으면 `just eval`이 **클라이언트 경로를 따로** 낸다 —
+`클라이언트 캡처 N건 Recall@3=… · 서버 M건 …`. 항목이 0건이면
+`클라이언트 캡처 0건 — … 아직 미측정(Phase 0 ③)`으로 **명시**한다. 침묵이 "쟀는데 문제없다"로
+읽히지 않게 하려는 것이고, 이 경로가 한 번도 측정된 적 없다는 사실 자체가 Phase 0 ③의 발견이다.
+
+**아직 열려 있는 것**: 실제 클라이언트 캡처 항목이 golden에 아직 0건이다. 사용자가 확장으로
+봇 차단·로그인 벽 페이지를 저장 → `golden-from-db` → 라벨 → golden 2차, 이 순서로 닫힌다.
+서버 쪽 파이프라인(API 수신 · 큐가 `done` 유지 · from-db 추출)은 검증됐다.
 
 ## 수집 방법 — `pushpoint golden-capture`
 
