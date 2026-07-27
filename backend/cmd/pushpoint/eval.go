@@ -223,6 +223,11 @@ type setMetrics struct {
 	// full=도메인+제목+설명+본문+분류 / no-body=full−본문 / no-keywords=full−분류 /
 	// bare=본문도 분류도 없음 / base=도메인만.
 	fullHit, noBodyHit, noKWHit, bareHit, baseHit int
+	// noDomainHit: full에서 **도메인만** 뺀 변형. Δdomain = full - noDomain이 도메인맵의
+	// 한계 기여다. baseline(도메인만)은 도메인 **혼자** 얼마나 하는지이고, 이건 나머지 신호가
+	// 다 있을 때 도메인이 **더 얹는 몫**이라 서로 다른 질문에 답한다 — 도메인맵을 넓힐지
+	// 판단하려면 후자가 필요하다.
+	noDomainHit int
 	// tied: topK 경계에서 점수가 같아 **태그 이름 알파벳순으로** 갈린 링크 수.
 	// missZero/missRank: 미스를 둘로 가른다 — 정답 태그가 0점인가, 점수는 있는데 밀렸는가.
 	tied, missZero, missRank int
@@ -260,12 +265,18 @@ func measureSet(entries []goldenEntry, dict *tagger.Dictionary, id2name map[int6
 		full := classifyTop(evalContent(e, true, true), dict, id2name)
 		// bare = 본문도 분류도 없는 변형. 분류가 **본문의 대체재**인지 보려면 필요하다.
 		bare := classifyTop(evalContent(e, false, false), dict, id2name)
+		// noDomain = full에서 도메인만 뺀 것. Content.Domain이 도메인맵을 태우는 유일한 입력이라
+		// 그것만 비우면 정확히 도메인맵의 기여가 빠진다(classify.go:53).
+		noDomainContent := evalContent(e, true, true)
+		noDomainContent.Domain = ""
+		noDomain := classifyTop(noDomainContent, dict, id2name)
 
 		m.baseHit += hit(base, exp)
 		m.noBodyHit += hit(noBody, exp)
 		m.noKWHit += hit(noKW, exp)
 		m.fullHit += hit(full, exp)
 		m.bareHit += hit(bare, exp)
+		m.noDomainHit += hit(noDomain, exp)
 
 		// 동점과 미스 해부는 full 기준으로 센다 — 실제로 출하되는 구성이다.
 		full3 := classifyRanked(evalContent(e, true, true), dict, id2name)
@@ -320,12 +331,20 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 	tied, missZero, missRank := m.tied, m.missZero, m.missRank
 	thin, thinHit, withKW := m.thin, m.thinHit, m.withKW
 	client, clientHit := m.client, m.clientHit
+	noDomainHit := m.noDomainHit
 	tp, fp, fn, goldN := m.tp, m.fp, m.fn, m.goldN
 
 	n := float64(len(entries))
 	fmt.Printf("Recall@%d:  full=%.3f   no-body=%.3f (Δbody %+.3f)   baseline(도메인만)=%.3f (Δrules %+.3f)\n",
 		evalTopK, float64(fullHit)/n, float64(noBodyHit)/n, float64(fullHit-noBodyHit)/n,
 		float64(baseHit)/n, float64(fullHit-baseHit)/n)
+	// 도메인맵의 **한계 기여**. baseline(도메인만)과 다른 질문이다 — 저건 도메인 혼자
+	// 얼마나 하는지고, 이건 제목·설명·본문이 다 있을 때 도메인이 더 얹는 몫이다.
+	// 도메인맵을 넓힐 값어치가 있는지는 이 수로 판단해야 한다. 실측(2026-07-27):
+	// golden 호스트의 53~64%가 도메인맵에 없는데도 Δdomain은 작다 — 나머지 신호가 이미
+	// 같은 말을 하고 있다는 뜻이고, 그래서 도메인 추가는 우선순위가 낮다.
+	fmt.Printf("           도메인맵 기여: %+.3f (no-domain=%.3f) — 다른 신호가 다 있을 때 도메인이 더 얹는 몫\n",
+		float64(fullHit-noDomainHit)/n, float64(noDomainHit)/n)
 	// 발행자 분류의 기여는 **두 축으로** 잰다. 본문이 있을 때와 없을 때가 다르기 때문이다 —
 	// 분류는 본문이 이미 말해 주는 것을 반복하는 경우가 많아 본문이 있으면 Δ가 0에 가깝고,
 	// 본문이 없을 때(스크랩 실패·SPA·봇 차단, 즉 클라이언트 캡처가 필요한 바로 그 페이지)

@@ -371,3 +371,44 @@ func TestGoldenSnapshotIsClient(t *testing.T) {
 		t.Error("client는 클라이언트다")
 	}
 }
+
+// Δdomain은 **baseline(도메인만)과 다른 질문**에 답한다. baseline은 도메인 혼자 얼마나
+// 맞히는지고, Δdomain은 나머지 신호가 다 있을 때 도메인이 **더 얹는 몫**이다.
+// 도메인맵을 넓힐 값어치가 있는지는 후자로만 판단할 수 있는데, 그 변형이 없었다.
+func TestMeasureSetIsolatesDomain(t *testing.T) {
+	dict := tagger.BuildDictionary([]tagger.TagEntry{
+		{ID: 1, Name: "python", Aliases: []string{"파이썬"}},
+		{ID: 2, Name: "dev"},
+	})
+	id2name := map[int64]string{1: "python", 2: "dev"}
+	long := strings.Repeat("가", 300)
+
+	entries := []goldenEntry{
+		// 제목이 정답을 말한다 — 도메인이 없어도 맞힌다.
+		{URL: "https://example.com/a", Snapshot: goldenSnapshot{Title: "파이썬 " + long},
+			ExpectedTags: []string{"python"}},
+		// **도메인만이 정답을 아는 항목.** stackoverflow.com은 domains.json에서 dev로
+		// 매핑돼 있고(embed된 정본), 본문에는 dev 신호가 없다. 도메인을 빼면 이 항목이
+		// 떨어지므로 Δdomain이 실제로 도메인만 격리하는지 여기서 갈린다.
+		{URL: "https://stackoverflow.com/questions/1", Snapshot: goldenSnapshot{Title: "무관한 제목 " + long},
+			ExpectedTags: []string{"dev"}},
+		// **매핑된 호스트인데 정답은 제목에만 있는 항목.** 도메인은 `dev`를 주지만 정답은
+		// `python`이라 baseline은 놓치고, noDomain은 제목으로 맞힌다. 이 항목이 있어야
+		// baseline과 noDomain의 합이 갈려서 둘을 뒤바꾼 배선이 드러난다.
+		{URL: "https://stackoverflow.com/questions/2", Snapshot: goldenSnapshot{Title: "파이썬 " + long},
+			ExpectedTags: []string{"python"}},
+	}
+
+	m := measureSet(entries, dict, id2name)
+	if m.fullHit != 3 {
+		t.Fatalf("full hit 3이어야 한다: %d", m.fullHit)
+	}
+	// 도메인을 빼면 stackoverflow의 dev 항목만 떨어진다 — Δdomain = 1.
+	if m.noDomainHit != 2 {
+		t.Errorf("도메인을 빼면 2건이어야 한다(Δdomain=1): noDomain=%d", m.noDomainHit)
+	}
+	// baseline은 도메인 **혼자**라 dev 항목 1건만 맞힌다 — noDomain(2)과 갈린다.
+	if m.baseHit != 1 {
+		t.Errorf("도메인만으로는 1건: %d", m.baseHit)
+	}
+}
