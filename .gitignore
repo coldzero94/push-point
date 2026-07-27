@@ -79,3 +79,7 @@ DerivedData/
 
 # macOS
 .DS_Store
+
+# nlu/models/ 스파이크의 로컬 환경 — 폐기 전제 실험이라 커밋하지 않는다.
+nlu/models/.venv/
+nlu/models/__pycache__/

@@ -1,5 +1,5 @@
 {"query": "고랭 제네릭 언제 쓰나", "url": "https://go.dev/blog/when-generics", "why": "한국어로 기억을 더듬는데 대상은 영어 문서 — 개념은 같고 언어가 다르다"}
-{"query": "파이썬 데코레이터 설명", "url": "https://realpython.com/primer-on-python-decorators/", "why": "한국어 질의 → 영어 제목"}
+{"query": "파이썬 데코레이터 설명", "url": "https://www.daleseo.com/python-decorators/", "why": "한국어 질의에 한국어 문서가 맞다. 원래 realpython(영어)을 정답으로 뒀는데, 코퍼스에 '파이썬 데코레이터 기본 사용법'(daleseo)이 있고 그쪽이 명백히 더 맞는 답이다 — 라벨 오류였다"}
 {"query": "DDoS 방어 원리", "url": "https://blog.cloudflare.com/deep-dive-cloudflare-autonomous-edge-ddos-protection/", "why": "제목의 DDoS만 겹치고 나머지는 다른 말"}
 {"query": "습관 만드는 법", "url": "https://jamesclear.com/habit-guide", "why": "제목은 'How to Build a New Habit' — 뜻은 같고 글자는 안 겹친다"}
 {"query": "연금저축 세액공제 한도", "url": "https://blog.naver.com/jj161113/224313978064", "why": "제목에서 세 낱말을 부분 인용 — 가장 흔한 재검색 형태"}
