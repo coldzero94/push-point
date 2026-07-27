@@ -323,3 +323,51 @@ func TestFillPreservesExisting(t *testing.T) {
 		t.Errorf("비어 있는 필드는 채워야 한다: %q", empty)
 	}
 }
+
+// 클라이언트 캡처 항목은 서버 캡처와 **따로** 집계돼야 한다. 봇 차단·로그인 벽 뒤 페이지는
+// 서버가 못 가져오고 이 경로로만 들어오는데, 섞어서 평균 내면 그 부류의 품질이 안 보인다
+// (M5 Phase 0 ③). body_source 필드가 그걸 가른다.
+func TestMeasureSetSplitsBySource(t *testing.T) {
+	dict := tagger.BuildDictionary([]tagger.TagEntry{
+		{ID: 1, Name: "python", Aliases: []string{"파이썬"}},
+	})
+	id2name := map[int64]string{1: "python"}
+	long := strings.Repeat("가", 300)
+
+	entries := []goldenEntry{
+		// 서버 캡처(필드 없음) — 맞힘.
+		{URL: "https://a.com", Snapshot: goldenSnapshot{Title: "파이썬 " + long}, ExpectedTags: []string{"python"}},
+		// 클라이언트 캡처 — 맞힘.
+		{URL: "https://b.com", Snapshot: goldenSnapshot{Title: "파이썬 " + long, BodySource: "client"}, ExpectedTags: []string{"python"}},
+		// 클라이언트 캡처 — 놓침(정답 신호 없음).
+		{URL: "https://c.com", Snapshot: goldenSnapshot{Title: "무관한 내용 " + long, BodySource: "client"}, ExpectedTags: []string{"python"}},
+	}
+
+	m := measureSet(entries, dict, id2name)
+	if m.client != 2 {
+		t.Errorf("클라이언트 항목 2건이어야: %d", m.client)
+	}
+	if m.clientHit != 1 {
+		t.Errorf("클라이언트 hit 1이어야(b 맞고 c 놓침): %d", m.clientHit)
+	}
+	// 서버 몫은 전체 - 클라이언트로 유도된다.
+	if serverN := len(entries) - m.client; serverN != 1 {
+		t.Errorf("서버 항목 1건이어야: %d", serverN)
+	}
+	if serverHit := m.fullHit - m.clientHit; serverHit != 1 {
+		t.Errorf("서버 hit 1이어야: %d", serverHit)
+	}
+}
+
+// isClient는 필드가 없으면 서버로 본다 — 기존 golden 전부가 그 상태다.
+func TestGoldenSnapshotIsClient(t *testing.T) {
+	if (goldenSnapshot{}).isClient() {
+		t.Error("body_source 없으면 서버로 취급해야 한다")
+	}
+	if (goldenSnapshot{BodySource: "server"}).isClient() {
+		t.Error("server는 클라이언트가 아니다")
+	}
+	if !(goldenSnapshot{BodySource: "client"}).isClient() {
+		t.Error("client는 클라이언트다")
+	}
+}

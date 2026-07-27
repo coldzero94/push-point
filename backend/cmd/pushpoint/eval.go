@@ -14,6 +14,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/url"
 	"os"
@@ -37,7 +38,19 @@ type goldenSnapshot struct {
 	// Keywords는 발행자 분류(meta keywords·article:section 등). 나중에 더해진 필드라
 	// 없는 항목이 있을 수 있고, 그때는 "" — 그 항목은 Δkeywords에 기여하지 않는다.
 	Keywords string `json:"keywords,omitempty"`
+	// BodySource는 본문이 **어디서** 왔는지다: "server"(스크래퍼) 또는 "client"(브라우저
+	// 확장·공유 시트가 렌더된 DOM을 보냄). 없으면 "server"로 본다 — 기존 golden이 전부
+	// 서버 캡처라 필드를 안 붙인다.
+	//
+	// **이 필드가 M5 Phase 0 ③의 핵심이다.** 봇 차단·로그인 벽 페이지는 서버가 못 가져오고
+	// 사용자의 로그인된 브라우저만 가져올 수 있다. 그 경로는 이미 출시됐는데 **한 번도 측정된
+	// 적이 없다.** 서버 캡처와 섞어서 평균 내면 "실사용에서 자주 저장되는데 서버로는 안 되는"
+	// 그 부류의 태깅 품질이 다시 평균 뒤로 숨는다 — wild를 dev/test와 안 합친 것과 같은 이유다.
+	BodySource string `json:"body_source,omitempty"`
 }
+
+// isClient는 스냅샷이 클라이언트 캡처인지 본다. 필드가 없으면 서버로 취급한다.
+func (s goldenSnapshot) isClient() bool { return s.BodySource == "client" }
 
 // goldenEntry는 golden JSONL 한 줄.
 type goldenEntry struct {
@@ -215,6 +228,9 @@ type setMetrics struct {
 	tied, missZero, missRank int
 	// thin/thinHit: 스냅샷 자체가 빈약한 항목과, 그중 그래도 맞힌 항목.
 	thin, thinHit int
+	// client/clientHit: 클라이언트 캡처(확장·공유 시트) 항목과 그중 맞힌 것.
+	// 이 경로가 M5 Phase 0 ③이 재려던 대상이고, 서버 캡처와 섞으면 다시 안 보인다.
+	client, clientHit int
 	// withKW: 발행자 분류를 가진 항목 수 — Δkeywords를 몇 건 위에서 잰 것인지 없으면 해석 불가.
 	withKW int
 	// 태그별 집계 (full 기준).
@@ -267,6 +283,10 @@ func measureSet(entries []goldenEntry, dict *tagger.Dictionary, id2name map[int6
 			m.thin++
 			m.thinHit += hit(full, exp)
 		}
+		if e.Snapshot.isClient() {
+			m.client++
+			m.clientHit += hit(full, exp)
+		}
 
 		// 태그별 P/R은 full 예측 기준.
 		predicted := toSet(full)
@@ -299,6 +319,7 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 	baseHit, noBodyHit, noKWHit, fullHit, bareHit := m.baseHit, m.noBodyHit, m.noKWHit, m.fullHit, m.bareHit
 	tied, missZero, missRank := m.tied, m.missZero, m.missRank
 	thin, thinHit, withKW := m.thin, m.thinHit, m.withKW
+	client, clientHit := m.client, m.clientHit
 	tp, fp, fn, goldN := m.tp, m.fp, m.fn, m.goldN
 
 	n := float64(len(entries))
@@ -329,6 +350,17 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 	// 여기 걸린 항목은 봇 차단 페이지·로그인 벽·요청조차 안 한 어댑터의 결과물이라,
 	// 태거를 아무리 고쳐도 신호가 없다. 해법은 태거가 아니라 클라이언트 캡처다.
 	// 두 수를 같이 내지 않으면 캡처 결함이 태거 품질로 잘못 귀속된다.
+	// 클라이언트 캡처(확장·공유 시트) 항목을 **따로** 낸다. 서버가 못 가져오는 벽 뒤
+	// 페이지가 이 경로로 들어오는데, 서버 캡처와 합쳐 평균 내면 그 부류의 품질이 안 보인다
+	// (M5 Phase 0 ③). 항목이 하나도 없으면 "아직 한 번도 측정 안 됨"이라고 명시한다 —
+	// 침묵이 "쟀는데 문제없다"로 읽히지 않게.
+	if client > 0 {
+		fmt.Printf("           클라이언트 캡처 %d건 Recall@%d=%.3f · 서버 %d건 %.3f — 두 경로를 섞지 않는다\n",
+			client, evalTopK, float64(clientHit)/float64(client),
+			len(entries)-client, float64(fullHit-clientHit)/float64(len(entries)-client))
+	} else {
+		fmt.Printf("           클라이언트 캡처 0건 — 봇 차단·로그인 벽 뒤 페이지의 태깅 품질은 아직 미측정(Phase 0 ③)\n")
+	}
 	if thin > 0 && thin < len(entries) {
 		usable := len(entries) - thin
 		fmt.Printf("           신호 %d자 미만 %d건(맞힌 것 %d) — 캡처가 벽·빈 응답을 물어온 몫이라 태거로 못 고친다.\n",
@@ -703,4 +735,83 @@ func zeroScored(rs []ranked, expected map[string]bool) bool {
 		}
 	}
 	return true
+}
+
+// runGoldenFromDB는 **저장된 클라이언트 캡처 링크**를 golden 후보 JSONL로 뽑는다.
+//
+// `golden-capture`는 프로덕션 스크랩 경로로 뜨는데, 그 경로는 봇 차단·로그인 벽을 정당하게
+// 거부한다(ErrBlockedPage). 즉 M5 Phase 0 ③이 재려는 바로 그 부류를 구조적으로 못 넣는다.
+// 그 부류의 본문은 사용자의 로그인된 브라우저만 가져올 수 있고, 확장이 이미 그렇게 보낸다
+// (`body_source='client'`). 이 커맨드는 그렇게 쌓인 링크를 golden으로 끌어온다.
+//
+// **expected_tags는 비워서 낸다.** golden 라벨은 콘텐츠를 보고 사람이 다는 것이고, 링크에
+// 이미 붙은 태그는 태거 출력이라 그걸 베끼면 "golden을 태거에 맞추는" 금지된 방향이 된다.
+// 그래서 참고용으로 현재 태그를 주석 필드(`_current_tags`)에 함께 내되 expected_tags 자체는
+// 비운다 — dict-lint가 빈 라벨을 막으므로, 라벨을 채우기 전에는 실수로 커밋되지 않는다.
+func runGoldenFromDB(args []string) error {
+	fs := flag.NewFlagSet("golden-from-db", flag.ExitOnError)
+	minBody := fs.Int("min-body", 200, "이 글자 수 미만인 본문은 건너뛴다(벽·빈 캡처 배제)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	dataDir := os.Getenv("PUSHPOINT_DATA_DIR")
+	if dataDir == "" {
+		dataDir = "./data"
+	}
+	db, err := store.Open(dataDir)
+	if err != nil {
+		return fmt.Errorf("golden-from-db: DB 열기 실패(%s): %w", dataDir, err)
+	}
+	defer db.Close()
+
+	rows, err := db.Reader.Query(`
+		SELECT l.url, l.title, l.description, l.body_text, l.keywords,
+		       COALESCE(GROUP_CONCAT(t.name), '')
+		FROM links l
+		LEFT JOIN link_tags lt ON lt.link_id = l.id
+		LEFT JOIN tags t ON t.id = lt.tag_id
+		WHERE l.body_source = 'client' AND l.deleted_at IS NULL
+		GROUP BY l.id
+		ORDER BY l.id`)
+	if err != nil {
+		return fmt.Errorf("golden-from-db: 조회 실패: %w", err)
+	}
+	defer rows.Close()
+
+	enc := json.NewEncoder(os.Stdout)
+	var emitted, skipped int
+	for rows.Next() {
+		var url, title, desc, body, keywords, curTags string
+		if err := rows.Scan(&url, &title, &desc, &body, &keywords, &curTags); err != nil {
+			return fmt.Errorf("golden-from-db: 스캔 실패: %w", err)
+		}
+		// 벽·빈 캡처가 클라이언트 경로로도 들어올 수 있다(확장이 로그인 전에 실행되는 등).
+		// 본문이 빈약하면 golden 후보로 내지 않는다 — 서버 쪽 isThinSnapshot과 같은 취지다.
+		if len([]rune(body)) < *minBody {
+			skipped++
+			fmt.Fprintf(os.Stderr, "  건너뜀(본문 %d자): %s\n", len([]rune(body)), url)
+			continue
+		}
+		out := map[string]any{
+			"url": url,
+			"snapshot": goldenSnapshot{
+				Title: title, Description: desc, BodyText: body,
+				Keywords: keywords, BodySource: "client",
+			},
+			"expected_tags": []string{}, // 사람이 채운다
+			"_current_tags": curTags,    // 참고용 — 태거 출력이지 정답이 아니다
+		}
+		if err := enc.Encode(out); err != nil {
+			return fmt.Errorf("golden-from-db: 쓰기 실패: %w", err)
+		}
+		emitted++
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("golden-from-db: 순회 실패: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "golden-from-db: %d건 출력, %d건 건너뜀 — expected_tags를 채운 뒤 golden에 넣으세요\n", emitted, skipped)
+	if emitted == 0 {
+		fmt.Fprintln(os.Stderr, "  (클라이언트 캡처 링크가 아직 없습니다 — 브라우저 확장으로 봇 차단·로그인 벽 페이지를 저장하면 여기 잡힙니다)")
+	}
+	return nil
 }
