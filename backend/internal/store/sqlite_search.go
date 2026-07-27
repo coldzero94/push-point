@@ -42,7 +42,26 @@ func (s *sqliteStore) Search(ctx context.Context, q, tag string, from, to *int64
 			return items, next, SearchModeFTS, err
 		}
 	}
-	items, next, err := s.searchLike(ctx, q, tag, from, to, cursor, limit)
+	items, next, err := s.searchLike(ctx, q, tag, from, to, cursor, limit, false)
+	if err != nil {
+		return nil, "", SearchModeLike, err
+	}
+	// **FTS와 같은 규약**: 모든 낱말을 요구했다가 빈손이면 일부라도 맞는 것을 보여준다.
+	//
+	// 여기서도 같은 함정이 있었다. `직방 다방 차이`의 대상 제목은
+	// `직방, 다방, 네이버 부동산, 집토스 뭐가 다를까?`라 **`차이`가 아예 없다** —
+	// 사람은 뜻으로 기억하고 문서는 다른 낱말을 쓴다. 낱말 AND면 그 한 낱말이 전부를 죽인다.
+	//
+	// 개입은 결과 0인 경우로 한정되므로 되던 질의는 순위까지 그대로다.
+	if len(items) == 0 && cursor == "" && len(strings.Fields(q)) > 1 {
+		return s.searchLikeAnyRetry(ctx, q, tag, from, to, limit)
+	}
+	return items, next, SearchModeLike, err
+}
+
+// searchLikeAnyRetry는 낱말 OR로 다시 묻는다. 호출부를 짧게 유지하기 위한 얇은 껍데기다.
+func (s *sqliteStore) searchLikeAnyRetry(ctx context.Context, q, tag string, from, to *int64, limit int) ([]SearchResult, string, SearchMode, error) {
+	items, next, err := s.searchLike(ctx, q, tag, from, to, "", limit, true)
 	return items, next, SearchModeLike, err
 }
 
@@ -164,8 +183,19 @@ func escapeLike(s string) string {
 }
 
 // searchLike는 links 테이블 LIKE 폴백 — 표준 (created_at, id) keyset.
-func (s *sqliteStore) searchLike(ctx context.Context, q, tag string, from, to *int64, cursor string, limit int) ([]SearchResult, string, error) {
-	pattern := "%" + escapeLike(q) + "%"
+func (s *sqliteStore) searchLike(ctx context.Context, q, tag string, from, to *int64, cursor string, limit int, anyWord bool) ([]SearchResult, string, error) {
+	// **낱말별로 나눠 찾는다.** 예전에는 질의 전체가 한 덩어리 패턴이라
+	// `%직방 다방 차이%`처럼 **그 문자열이 통째로** 들어 있어야 했다. 사람은 기억나는
+	// 낱말을 순서대로 치지 문서의 어구를 그대로 치지 않으므로, 그 형태로는 거의 안 맞는다.
+	//
+	// 규칙: **낱말끼리는 AND, 낱말 하나는 세 필드 중 아무 데나.** 제목에 `직방`,
+	// 설명에 `차이`처럼 흩어져 있어도 잡힌다. 낱말끼리 OR로 하면 흔한 한 낱말이
+	// 전부를 끌어오므로 AND가 맞다 — FTS 쪽은 AND가 빈손일 때 OR로 재시도하지만,
+	// 여기는 애초에 3자 미만이라 FTS를 못 탄 짧은 질의라 후보가 적고 정밀도가 더 중요하다.
+	words := strings.Fields(q)
+	if len(words) == 0 {
+		words = []string{q}
+	}
 	var (
 		sb   strings.Builder
 		args []any
@@ -174,9 +204,23 @@ func (s *sqliteStore) searchLike(ctx context.Context, q, tag string, from, to *i
 	if tag != "" {
 		sb.WriteString(` JOIN link_tags lt ON lt.link_id = l.id JOIN tags t ON t.id = lt.tag_id`)
 	}
-	sb.WriteString(` WHERE l.deleted_at IS NULL
-		AND (l.title LIKE ? ESCAPE '\' OR l.note LIKE ? ESCAPE '\' OR l.description LIKE ? ESCAPE '\')`)
-	args = append(args, pattern, pattern, pattern)
+	sb.WriteString(` WHERE l.deleted_at IS NULL`)
+	// anyWord=false면 낱말끼리 AND, true면 OR. 호출부가 AND로 먼저 묻고 빈손이면 OR로
+	// 다시 묻는다 — FTS 쪽과 같은 규약이고 같은 이유다(searchLikeAnyRetry 주석).
+	joiner := " AND "
+	if anyWord {
+		joiner = " OR "
+	}
+	sb.WriteString(` AND (`)
+	for i, w := range words {
+		if i > 0 {
+			sb.WriteString(joiner)
+		}
+		pattern := "%" + escapeLike(w) + "%"
+		sb.WriteString(`(l.title LIKE ? ESCAPE '\' OR l.note LIKE ? ESCAPE '\' OR l.description LIKE ? ESCAPE '\')`)
+		args = append(args, pattern, pattern, pattern)
+	}
+	sb.WriteString(`)`)
 	if tag != "" {
 		sb.WriteString(` AND t.name = ?`)
 		args = append(args, tag)
