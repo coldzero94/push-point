@@ -228,7 +228,7 @@ type setMetrics struct {
 	// 다 있을 때 도메인이 **더 얹는 몫**이라 서로 다른 질문에 답한다 — 도메인맵을 넓힐지
 	// 판단하려면 후자가 필요하다.
 	noDomainHit int
-	// tied: topK 경계에서 점수가 같아 **태그 이름 알파벳순으로** 갈린 링크 수.
+	// tied: topK 경계에서 1차 점수가 같아 **2차 키(상한 없는 점수)로** 갈린 링크 수.
 	// missZero/missRank: 미스를 둘로 가른다 — 정답 태그가 0점인가, 점수는 있는데 밀렸는가.
 	tied, missZero, missRank int
 	// thin/thinHit: 스냅샷 자체가 빈약한 항목과, 그중 그래도 맞힌 항목.
@@ -353,9 +353,13 @@ func evalSet(name string, entries []goldenEntry, dict *tagger.Dictionary, id2nam
 		float64(fullHit-noKWHit)/n, float64(noKWHit)/n,
 		float64(noBodyHit-bareHit)/n, float64(bareHit)/n, withKW, len(entries))
 	// 동점 — 지표가 못 보는 자리다. hit@3는 3위 안에 정답이 있으면 통과이므로,
-	// 3위와 4위가 동점이라 알파벳순으로 갈린 경우를 구분하지 않는다. 가중치를 건드리면
-	// 이 덩어리가 통째로 재배열되는데 Recall@3는 거의 움직이지 않는다.
-	fmt.Printf("           경계 동점: %d/%d (%.0f%%) — 3위와 4위 점수가 같아 태그 이름 알파벳순으로 갈렸다\n",
+	// 3위와 4위가 동점인 경우를 구분하지 않는다. 가중치를 건드리면 이 덩어리가 통째로
+	// 재배열되는데 Recall@3는 거의 움직이지 않는다.
+	//
+	// **2026-07-27부터 이 동점은 알파벳이 아니라 상한 없는 점수로 갈린다**
+	// (`classify.go`의 sort 주석). 그래도 이 수를 계속 내는 이유는, 여전히 **1차 점수가
+	// 구분하지 못한 자리**이기 때문이다 — 2차 키까지 같으면 다시 알파벳으로 간다.
+	fmt.Printf("           경계 동점: %d/%d (%.0f%%) — 3위와 4위 점수가 같아 상한 없는 점수로 갈렸다\n",
 		tied, len(entries), 100*float64(tied)/n)
 
 	// 미스 해부 — 어떤 개선이 유효한지가 여기서 갈린다.
@@ -462,7 +466,7 @@ func classifyTop(c tagger.Content, dict *tagger.Dictionary, id2name map[int64]st
 // ranked는 이름과 confidence를 함께 들고 다닌다.
 //
 // `classifyTop`이 이름만 돌려주면서 점수가 버려지고 있었다. 그 결과 진단 두 가지가
-// 구조적으로 불가능했다: **3위와 4위가 동점인지**(그러면 순위가 태그 이름 알파벳순으로
+// 구조적으로 불가능했다: **3위와 4위가 동점인지**(그러면 순위가 2차 키로
 // 갈린다), 그리고 **미스가 0점인지 밀림인지**. 둘 다 아래에서 필요하다.
 type ranked struct {
 	name string
@@ -732,8 +736,8 @@ func fill(dst *string, v string) {
 
 // tiedAtCut은 topK 경계에서 점수가 같은지 본다.
 //
-// 같으면 순위가 **태그 이름 알파벳순**으로 갈린다(Classify의 동점 정렬 규약). 그건 품질이
-// 아니라 우연이고, hit@3는 그 우연을 못 본다 — 3위 안에만 있으면 통과이기 때문이다.
+// 같으면 순위가 **2차 키(상한 없는 점수)**로 갈린다(Classify의 동점 정렬 규약). 1차 점수가
+// 구분하지 못한 자리라는 뜻이고, hit@3는 그 사실을 못 본다 — 3위 안에만 있으면 통과이기 때문이다.
 // 가중치를 건드리면 이 덩어리가 재배열되면서 Recall@3는 거의 안 움직인다.
 func tiedAtCut(rs []ranked) bool {
 	if len(rs) <= evalTopK {

@@ -184,3 +184,51 @@ func TestStuffingDoesNotOutscore(t *testing.T) {
 			stuffed[0].Confidence, honest[0].Confidence)
 	}
 }
+
+// 동점이면 **상한 없는 점수**가 갈라야 한다.
+//
+// `capN`은 스터핑이 점수를 부풀리는 것을 막는 장치지, 상한에 걸린 태그들 사이의 순위를
+// 정하는 장치가 아니다. 실측(`ruliweb.com` 본문): `game`이 45회 매칭인데 `finance`(4회)와
+// 점수가 같아 알파벳순으로 밀렸다. 상한이 11배 차이를 지운 것이다.
+func TestTieBreakUsesUncappedScore(t *testing.T) {
+	dict := BuildDictionary([]TagEntry{
+		{ID: 1, Name: "zebra", Aliases: []string{"얼룩말"}},
+		{ID: 2, Name: "apple", Aliases: []string{"사과"}},
+	})
+	// 둘 다 matchCap(3)을 넘겨 **점수는 같고**, 원시 매칭 수만 다르게 만든다.
+	body := strings.Repeat("얼룩말 ", 30) + strings.Repeat("사과 ", 4) + strings.Repeat("가 ", 200)
+	got := Classify(Content{Body: body}, dict)
+	if len(got) < 2 {
+		t.Fatalf("둘 다 나와야 비교가 된다: %v", got)
+	}
+	if got[0].Confidence != got[1].Confidence {
+		t.Fatalf("점수가 같아야 동점 파괴를 시험한다: %v vs %v", got[0].Confidence, got[1].Confidence)
+	}
+	// 알파벳이면 apple이 앞선다. 상한 없는 점수면 zebra(30회)가 앞선다.
+	if got[0].TagID != 1 {
+		t.Errorf("동점일 때 매칭이 많은 쪽이 앞서야 한다 — 알파벳으로 갈리고 있다: %v", got)
+	}
+}
+
+// **동점이 아닌 쌍의 순서는 절대 바뀌면 안 된다.** 2차 키는 1차 점수가 갈리지 않을 때만
+// 개입해야 하고, 그렇지 않으면 스터핑 방지(capN)가 무력해진다.
+func TestTieBreakDoesNotOverrideScore(t *testing.T) {
+	dict := BuildDictionary([]TagEntry{
+		{ID: 1, Name: "apple", Aliases: []string{"사과"}},
+		{ID: 2, Name: "zebra", Aliases: []string{"얼룩말"}},
+	})
+	// apple은 **제목**에 있어 가중치가 높고, zebra는 본문에 훨씬 많지만 상한에 걸린다.
+	got := Classify(Content{
+		Title: "사과 사과 사과",
+		Body:  strings.Repeat("얼룩말 ", 50) + strings.Repeat("가 ", 200),
+	}, dict)
+	if len(got) < 2 {
+		t.Fatalf("둘 다 나와야 한다: %v", got)
+	}
+	if got[0].TagID != 1 {
+		t.Errorf("점수가 더 높은 apple이 1위여야 한다 — 2차 키가 1차를 덮었다: %v", got)
+	}
+	if got[0].Confidence <= got[1].Confidence {
+		t.Errorf("점수가 실제로 갈려 있어야 이 시험이 성립한다: %v", got)
+	}
+}

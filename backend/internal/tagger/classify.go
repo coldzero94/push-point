@@ -48,6 +48,8 @@ const (
 // 토큰화해 구문이 필드 경계를 넘지 못하게 한다. 출력은 결정적(score desc, 동점 name asc).
 func Classify(c Content, d *Dictionary) []ScoredTag {
 	score := map[int64]float64{}
+	// uncapped는 **상한(capN)만 뺀 같은 점수**다. 순위에는 쓰지 않고 **동점 파괴에만** 쓴다.
+	uncapped := map[int64]float64{}
 
 	// 도메인 신호 — 호스트에 매핑된 각 태그에 +wDomain.
 	for _, name := range DomainTags(c.Domain) {
@@ -55,17 +57,17 @@ func Classify(c Content, d *Dictionary) []ScoredTag {
 			score[id] += wDomain
 		}
 	}
-	addField(score, d, c.Title, wTitle)
-	addField(score, d, c.Keywords, wKeywords)
-	addField(score, d, c.Description, wDesc)
-	addField(score, d, c.Note, wNote)
+	addField(score, uncapped, d, c.Title, wTitle)
+	addField(score, uncapped, d, c.Keywords, wKeywords)
+	addField(score, uncapped, d, c.Description, wDesc)
+	addField(score, uncapped, d, c.Note, wNote)
 	// 본문 요구치는 길이에 비례하고, 뒷받침이 있으면 한 단계 낮춘다.
 	// 여기까지의 score에 있는 태그 = 도메인·제목·설명이 이미 가리킨 태그다.
 	corroborated := make(map[int64]bool, len(score))
 	for id := range score {
 		corroborated[id] = true
 	}
-	addBody(score, d, c.Body, corroborated)
+	addBody(score, uncapped, d, c.Body, corroborated)
 
 	out := make([]ScoredTag, 0, len(score))
 	for id, s := range score {
@@ -74,10 +76,29 @@ func Classify(c Content, d *Dictionary) []ScoredTag {
 			out = append(out, ScoredTag{TagID: id, Confidence: 1 - 1/(1+s)})
 		}
 	}
+	// 동점 파괴: 점수 → **상한 없는 점수** → 태그 이름.
+	//
+	// **왜 상한 없는 점수인가.** `capN`은 키워드 스터핑이 **점수를 부풀리는 것**을 막는
+	// 장치다. 그런데 상한에 걸린 태그가 여럿이면 그 태그들의 점수가 전부 같아져서,
+	// 상한이 **누가 위인지까지** 정해 버린다 — 정확히는 알파벳순이 정하게 된다.
+	// 그건 상한이 하려던 일이 아니다.
+	//
+	// 실측(2026-07-27, `ruliweb.com` 본문 8,946자): `game`이 **45회** 매칭인데
+	// `finance`(4회)와 점수가 같았다. 상한이 11배 차이를 지우고 정답을 알파벳순 5위로
+	// 보냈다. 상한 없는 점수는 이미 계산돼 있고 버려지던 값이라, 그걸 2차 키로만 쓴다.
+	//
+	// **점수 자체는 건드리지 않는다** — 스터핑 방지는 그대로다. 순위가 갈리지 않을 때만
+	// 개입하므로 동점이 아닌 쌍의 순서는 절대 바뀌지 않는다.
+	//
+	// 이름 비교는 마지막에 남긴다 — 상한 없는 점수까지 같으면 결정적 순서가 필요하다.
 	sort.Slice(out, func(i, j int) bool {
 		si, sj := score[out[i].TagID], score[out[j].TagID]
 		if si != sj {
 			return si > sj
+		}
+		ui, uj := uncapped[out[i].TagID], uncapped[out[j].TagID]
+		if ui != uj {
+			return ui > uj
 		}
 		return d.idToName[out[i].TagID] < d.idToName[out[j].TagID]
 	})
@@ -88,14 +109,15 @@ func Classify(c Content, d *Dictionary) []ScoredTag {
 }
 
 // addField는 한 필드를 토큰화·매칭해 태그별 (상한 적용) 매칭 수 × weight를 score에 더한다.
-func addField(score map[int64]float64, d *Dictionary, text string, weight float64) {
-	addFieldMin(score, d, text, weight, 1)
+// uncapped에는 **같은 계산을 상한 없이** 누적한다 — 동점 파괴에만 쓴다(sortScored 주석).
+func addField(score, uncapped map[int64]float64, d *Dictionary, text string, weight float64) {
+	addFieldMin(score, uncapped, d, text, weight, 1)
 }
 
 // addBody는 본문 매칭을 더한다. 뒷받침이 있는 태그와 없는 태그에 서로 다른 최소
 // 횟수를 적용한다 — 같은 두 번이라도 제목이 거드는 두 번과 본문에만 있는 두 번은
 // 증거로서 무게가 다르다.
-func addBody(score map[int64]float64, d *Dictionary, text string, corroborated map[int64]bool) {
+func addBody(score, uncapped map[int64]float64, d *Dictionary, text string, corroborated map[int64]bool) {
 	if text == "" {
 		return
 	}
@@ -117,6 +139,7 @@ func addBody(score map[int64]float64, d *Dictionary, text string, corroborated m
 		// 횟수 요구(min)는 IDF보다 **앞에** 있다. 흔한 낱말이라고 횟수를 면제해 주면
 		// 걸러야 할 약한 신호가 배율만 낮춘 채 그대로 들어온다.
 		score[id] += wBody * float64(capN(h.n)) * h.mul
+		uncapped[id] += wBody * float64(h.n) * h.mul
 	}
 }
 
@@ -129,7 +152,7 @@ func capN(n int) int {
 }
 
 // addFieldMin은 min회 미만 매칭은 무시한다 — 긴 필드에서 한 번 스친 언급을 걸러낸다.
-func addFieldMin(score map[int64]float64, d *Dictionary, text string, weight float64, min int) {
+func addFieldMin(score, uncapped map[int64]float64, d *Dictionary, text string, weight float64, min int) {
 	if text == "" {
 		return
 	}
@@ -138,5 +161,6 @@ func addFieldMin(score map[int64]float64, d *Dictionary, text string, weight flo
 			continue
 		}
 		score[id] += weight * float64(capN(h.n)) * h.mul
+		uncapped[id] += weight * float64(h.n) * h.mul
 	}
 }
