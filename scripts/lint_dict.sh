@@ -107,9 +107,17 @@ for host, tag_list in domains.items():
 #    eval에도 같은 검사가 있지만(validateExpectedTags) `just eval`은 CI에서 돌지 않는다.
 #    커밋을 막는 것은 여기다.
 golden_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), "golden")
+
+# **태깅 세트만 이 검사를 받는다.** golden 디렉터리에는 스키마가 다른 파일도 있다 —
+# search.jsonl은 {query,url,why}라 expected_tags가 없고, URL이 태깅 세트와 겹치는 것이
+# 정상이다(질의의 정답이 코퍼스 안에 있어야 하므로). 파일 이름으로 세트를 열거하지 않고
+# glob으로 훑던 것이 결함이었다 — 새 스키마 파일을 넣는 순간 검사가 거짓 실패를 낸다.
+TAGGING_SETS = ("dev", "test", "wild")
 seen_urls = {}
-for path in sorted(glob.glob(os.path.join(golden_dir, "*.jsonl"))):
-    setname = os.path.splitext(os.path.basename(path))[0]
+for setname in TAGGING_SETS:
+    path = os.path.join(golden_dir, setname + ".jsonl")
+    if not os.path.exists(path):
+        continue
     if os.path.getsize(path) == 0:
         errs.append(f"golden/{setname}.jsonl이 비어 있습니다 — 캡처 실패이거나 파일이 잘렸습니다")
         continue
@@ -137,11 +145,31 @@ for path in sorted(glob.glob(os.path.join(golden_dir, "*.jsonl"))):
             errs.append(f"golden URL이 {seen_urls[url]}와 {setname}에 모두 있습니다(누수): {url}")
         seen_urls[url] = setname
 
+# 5) search.jsonl은 자기 스키마로 검사한다 — query·url 필수, 정답 URL은 태깅 세트 안에 있어야 한다.
+#    URL이 코퍼스에 없으면 **구조적으로 못 찾는 정답**이 되어 검색 실패처럼 보인다.
+search_path = os.path.join(golden_dir, "search.jsonl")
+n_queries = 0
+if os.path.exists(search_path):
+    with open(search_path, encoding="utf-8") as fh:
+        for lineno, line in enumerate(fh.read().splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                errs.append(f"golden/search.jsonl:{lineno} JSON 파싱 실패: {exc}")
+                continue
+            n_queries += 1
+            if not row.get("query") or not row.get("url"):
+                errs.append(f"golden/search.jsonl:{lineno} query와 url이 모두 있어야 합니다")
+            elif row["url"] not in seen_urls:
+                errs.append(f"golden/search.jsonl:{lineno} 정답 URL이 태깅 세트에 없습니다: {row['url']}")
+
 if errs:
     print("dict-lint 실패:")
     for e in errs:
         print(f"  - {e}")
     sys.exit(1)
 
-print(f"dict-lint OK — 태그 {len(dict_tags)}개, 도메인 {sum(1 for h in domains if not h.startswith('_'))}개, golden {len(seen_urls)}건, 시드와 일치")
+print(f"dict-lint OK — 태그 {len(dict_tags)}개, 도메인 {sum(1 for h in domains if not h.startswith('_'))}개, golden {len(seen_urls)}건, 검색질의 {n_queries}개, 시드와 일치")
 PY

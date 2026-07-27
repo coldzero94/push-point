@@ -176,6 +176,10 @@ db-reset:
     echo "dev DB 초기화 완료 — 다음 just dev가 마이그레이션으로 재생성합니다."
 
 # 추출식 요약 회귀 측정 — Recall@3·중복도·커버리지를 lead-3 베이스라인과 병기 (M5+)
+# 검색 품질 측정 — hit@1 · MRR@10 (네트워크 0, 커밋된 golden 코퍼스)
+eval-search *ARGS:
+    @if [ -d nlu/golden ] && [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint eval-search {{ARGS}} ../nlu/golden; else echo "nlu/golden/ 또는 backend/cmd/pushpoint가 없습니다."; fi
+
 # -dump를 붙이면 사람이 읽을 스팟체크 텍스트를 낸다: just eval-summary -dump
 eval-summary *ARGS:
     @if [ -d nlu/golden ] && [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint summary-eval {{ARGS}} ../nlu/golden; else echo "nlu/golden/ 또는 backend/cmd/pushpoint가 없습니다."; fi

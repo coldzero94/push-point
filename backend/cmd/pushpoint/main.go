@@ -90,6 +90,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "eval-search":
+			if err := runSearchEval(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "eval-search 실패:", err)
+				os.Exit(1)
+			}
+			return
 		case "golden-from-db":
 			if err := runGoldenFromDB(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "golden-from-db 실패:", err)
@@ -97,7 +103,7 @@ func main() {
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval|summary-eval|golden-capture|golden-refill|golden-from-db|sheets-setup|sheets-sync])\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval|summary-eval|golden-capture|golden-refill|golden-from-db|eval-search|sheets-setup|sheets-sync])\n", os.Args[1])
 			os.Exit(2)
 		}
 	}

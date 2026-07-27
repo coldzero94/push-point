@@ -1,0 +1,25 @@
+{"query": "고랭 제네릭 언제 쓰나", "url": "https://go.dev/blog/when-generics", "why": "한국어로 기억을 더듬는데 대상은 영어 문서 — 개념은 같고 언어가 다르다"}
+{"query": "파이썬 데코레이터 설명", "url": "https://realpython.com/primer-on-python-decorators/", "why": "한국어 질의 → 영어 제목"}
+{"query": "DDoS 방어 원리", "url": "https://blog.cloudflare.com/deep-dive-cloudflare-autonomous-edge-ddos-protection/", "why": "제목의 DDoS만 겹치고 나머지는 다른 말"}
+{"query": "습관 만드는 법", "url": "https://jamesclear.com/habit-guide", "why": "제목은 'How to Build a New Habit' — 뜻은 같고 글자는 안 겹친다"}
+{"query": "연금저축 세액공제 한도", "url": "https://blog.naver.com/jj161113/224313978064", "why": "제목에서 세 낱말을 부분 인용 — 가장 흔한 재검색 형태"}
+{"query": "배당주 투자 후기", "url": "https://tomspic.tistory.com/624", "why": "제목 부분 인용"}
+{"query": "직방 다방 차이", "url": "https://datarian.io/blog/proptech", "why": "제목이 '직방, 다방, 네이버 부동산, 집토스 뭐가 다를까?' — 어순과 조사가 다르다"}
+{"query": "도호쿠 여행", "url": "https://brunch.co.kr/@df0ca9756efe400/151", "why": "제목 끝의 지명만 기억나는 경우"}
+{"query": "머신러닝 강의", "url": "https://www.coursera.org/learn/machine-learning", "why": "제목은 '지도 머신 러닝: 회귀 및 분류' — 띄어쓰기가 다르다(머신러닝 vs 머신 러닝)"}
+{"query": "백엔드 개발자 채용", "url": "https://www.wanted.co.kr/wd/236400", "why": "제목 부분 인용"}
+{"query": "판다스 10분 입문", "url": "https://pandas.pydata.org/docs/user_guide/10min.html", "why": "제목이 '10 minutes to pandas' — 한국어 표기와 영어 제목"}
+{"query": "허깅페이스 트랜스포머 입문", "url": "https://huggingface.co/blog/noob_intro_transformers", "why": "한국어 음차 표기 → 영어 제목"}
+{"query": "러스트 정리", "url": "https://velog.io/@andy3638/러스트Rust", "why": "제목 그대로 — 회귀 감지용 쉬운 질의"}
+{"query": "etcd 다른 키값 저장소와 비교", "url": "https://etcd.io/docs/v3.5/learning/why/", "why": "제목은 'etcd versus other key-value stores' — 개념 일치, 표기 불일치"}
+{"query": "웹 취약점 top 10", "url": "https://owasp.org/www-project-top-ten/", "why": "OWASP라는 이름은 잊고 내용만 기억나는 경우"}
+{"query": "토스 리액트 네이티브", "url": "https://toss.tech/article/react-native-2024", "why": "제목 부분 인용 + 음차"}
+{"query": "sync.Atomic 원자적 연산", "url": "https://blog.naver.com/luexr/223306793252", "why": "제목 부분 인용 — 점이 들어간 식별자가 토큰화를 통과하는지도 본다"}
+{"query": "점프 투 파이썬", "url": "https://wikidocs.net/book/1", "why": "제목 그대로 — 회귀 감지용"}
+{"query": "쿠버네티스 하드웨이", "url": "https://github.com/kelseyhightower/kubernetes-the-hard-way", "why": "제목의 the hard way를 한국어 음차로 기억"}
+{"query": "카카오페이 쿠버네티스 내부", "url": "https://tech.kakaopay.com/post/jack-k8s-internals-part-1/", "why": "제목에 k8s로 적혀 있고 질의는 쿠버네티스 — 같은 것의 다른 표기"}
+{"query": "브랜치 예측 실패 정렬 배열", "url": "https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array", "why": "**본문에만** 있는 구절로 찾기(branch prediction fail). 본문은 색인에 없으므로 실패가 예상되고, 그 사실을 재는 것이 이 질의의 목적이다"}
+{"query": "돼지고기 앞다리살 김치찌개", "url": "https://www.10000recipe.com/recipe/6900704", "why": "재료는 **본문에만** 있다. 위와 같은 이유로 넣었다"}
+{"query": "기후 변화 증거", "url": "https://arxiv.org/abs/2410.12412", "why": "한국어 질의 → 영어 논문 제목"}
+{"query": "멜론", "url": "https://www.melon.com/song/detail.htm?songId=36271131", "why": "2자 질의 — trigram 최소 길이 미만이라 LIKE 폴백 경로를 탄다. 제목이 아니라 설명에 있는 낱말이다"}
+{"query": "클리앙 인기글 모음", "url": "https://www.clien.net/service/board/park/12284677", "why": "제목 부분 인용 + 커뮤니티 도메인"}
