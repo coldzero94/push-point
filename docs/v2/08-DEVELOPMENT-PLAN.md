@@ -114,7 +114,7 @@ k8s 매니페스트는 삭제하지 않고 `deploy/k8s-future/`로 이동해 보
 - `PATCH /api/v1/links/{id}` 태그 전체 교체 + tag_feedback 기록
 
 **Week 4**
-- golden set 구축: M2 임포트+실사용 축적분에서 층화 샘플링(도메인·content_type 비율 유지)한 100건을 `nlu/golden/` JSONL로 — **dev / test 분할, test는 동결**(실제 결과: dev 62 / test 61). 스키마 `{url, snapshot: {title, description, body_text, keywords}, expected_tags: []}` (eval은 네트워크 접근 0, snapshot만 입력)
+- golden set 구축: M2 임포트+실사용 축적분에서 층화 샘플링(도메인·content_type 비율 유지)한 100건을 `nlu/golden/` JSONL로 — **dev / test 분할, test는 동결**(실제 결과: dev 62 / test 61 → 2026-07-27에 84로 증설, 여기에 실제 웹 세트 wild 28 추가). 스키마 `{url, snapshot: {title, description, body_text, keywords}, expected_tags: []}` (eval은 네트워크 접근 0, snapshot만 입력)
 - `just eval` 구현: top-3 Recall(hit = 예측 top-3 ∩ expected_tags ≥ 1) + 태그별 precision/recall·부착 빈도 표 출력. "도메인 휴리스틱만" 베이스라인을 항상 함께 측정
 - 규칙 튜닝(dev만 사용) → **베이스라인 대비 측정치 기록. 정확도 게이트는 M4 진입을 차단하지 않는다 — 판정은 M5 진입 조건으로 이동** (재정의된 M5 진입 게이트 — 02-TECH-SPEC.md)
 
