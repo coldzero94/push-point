@@ -84,7 +84,7 @@ curl -X POST http://localhost:8420/api/v1/links \
 
 A busy port never blocks a run: `just dev` scans upward from 8420 and prints the port it took, `just web-dev` proxies to the backend in the same checkout, and Vite moves off 8421 by itself. Several worktrees can run side by side.
 
-`just release` produces one binary at `backend/bin/pushpoint` with the web UI embedded. Always-on setup (launchd/systemd), iPhone access over Tailscale, bookmark import and backups are in [07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md).
+`just release` produces one binary at `backend/bin/pushpoint` with the web UI embedded. Always-on setup (launchd/systemd), iPhone access over Tailscale, bookmark import and backups are in [the deployment guide](docs/v2/07-DEPLOYMENT.md).
 
 ## Configuration
 
@@ -110,7 +110,7 @@ Three sets, reported separately and never averaged together:
 | Set | Links | Role |
 |---|---|---|
 | `dev` | 77 | Tuning. Rules, thresholds and dictionary changes are measured here first |
-| `test` | 84 | **Frozen.** The only set a milestone gate may read |
+| `test` | 84 | **Frozen.** The only set a release decision may read |
 | `wild` | 28 | The open web outside developer blogs. Graded like `dev`, never a gate |
 
 Snapshots are captured through the production scrape path, so evaluation input is byte-identical to runtime input — no train/serve skew — and `just eval` makes zero network calls, which keeps results reproducible years later.
@@ -119,24 +119,42 @@ The harness reports what a single recall number cannot: how many misses are reco
 
 ## Status
 
-**Working today:** save from iOS, web or browser extension; scraping with per-site adapters; rule-based tagging; full-text search; thumbnails; bookmark import; Google Sheets export.
+Daily use works. Save from the iOS share sheet, the web app or the browser
+extension; scraping with per-site adapters; tagging; full-text search; thumbnails;
+bookmark import; export to a Google Sheet.
 
-**In progress:** M5 — the ONNX embedding ensemble was rescoped after measurement showed the original exit gate was unreachable, and it now runs as a disposable offline spike with explicit kill criteria before any integration.
+What is being worked on, and honestly:
 
-**Not started:** M6 (widget, performance polish, write-up), search-quality evaluation.
+**Tagging has run out of ranking headroom.** Every remaining miss across all three
+evaluation sets scores *zero* on the correct tag — not "ranked too low", but no
+signal at all. Reordering cannot recover any of them, which was verified by dropping
+the score threshold to near zero and confirming the correct tags still never appear.
+The next lever is a local embedding model as a second opinion, and it is being run
+first as a throwaway offline experiment with kill criteria written down in advance,
+because the honest outcome may be that it does not help either.
 
-Milestones and definitions of done are in [08-DEVELOPMENT-PLAN.md](docs/v2/08-DEVELOPMENT-PLAN.md).
+**Pages behind a login are only half-solved.** The browser extension captures them,
+and the server accepts and stores what it sends — but no such page has made it into
+the evaluation sets yet, so the tagging quality on exactly the pages that need this
+path the most is still unmeasured. The harness says so out loud rather than staying
+quiet about it.
+
+Not started: a widget, performance polish, and an evaluation harness for search
+quality to match the one tagging has.
+
+The full plan, with completion criteria per stage, is in
+[the development plan](docs/v2/08-DEVELOPMENT-PLAN.md).
 
 ## Documentation
 
 Project docs are written in Korean and live in `docs/v2/`, the single source of truth. This README is the English entry point.
 
-- [00-README.md](docs/v2/00-README.md) — table of contents and project intro
-- [03-SYSTEM-ARCHITECTURE.md](docs/v2/03-SYSTEM-ARCHITECTURE.md) — single-process architecture, package roles
-- [06-API-SPECIFICATION.md](docs/v2/06-API-SPECIFICATION.md) — REST API, auth, cursor pagination
-- [07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md) — running, operating, measured benchmarks
-- [nlu/golden/README.md](nlu/golden/README.md) — tagging evaluation protocol and every measurement to date
-- [docs/README.md](docs/README.md) — v1 ↔ v2 comparison
+- [Project intro and table of contents](docs/v2/00-README.md)
+- [System architecture](docs/v2/03-SYSTEM-ARCHITECTURE.md) — single-process design, package roles
+- [API specification](docs/v2/06-API-SPECIFICATION.md) — REST endpoints, auth, cursor pagination
+- [Deployment guide](docs/v2/07-DEPLOYMENT.md) — running it, operating it, measured benchmarks
+- [Tagging evaluation](nlu/golden/README.md) — the protocol and every measurement to date
+- [Rewrite comparison](docs/README.md) — what changed from the first version and why
 
 > The v1 Kubernetes stack (PostgreSQL, Redis, MinIO on Minikube) is folded away in `deploy/k8s-future/` — at zero users that was infrastructure built ahead of the product.
 
