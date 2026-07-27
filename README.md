@@ -1,36 +1,76 @@
 # Push-Point
 
 [![ci](https://github.com/coldzero94/push-point/actions/workflows/ci.yml/badge.svg)](https://github.com/coldzero94/push-point/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![SQLite](https://img.shields.io/badge/SQLite-CGO--free-003B57?logo=sqlite&logoColor=white)](https://modernc.org/sqlite)
+[![no LLM API](https://img.shields.io/badge/tagging-no%20LLM%20API-2ea44f)](nlu/golden/README.md)
 
-A self-hosted personal link archive that auto-tags what you save — one Go binary, no external AI API.
+**Save a link in one tap. Find it again months later.** A self-hosted personal archive that reads what you save and tags it — one Go binary, one SQLite file, no external AI API and no per-item cost.
 
-[Docs](docs/v2/00-README.md) · [API contract](api/openapi.yaml) · [Roadmap](docs/v2/08-DEVELOPMENT-PLAN.md) · [Contributing](CONTRIBUTING.md)
+[Docs](docs/v2/00-README.md) · [API contract](api/openapi.yaml) · [Tagging evaluation](nlu/golden/README.md) · [Roadmap](docs/v2/08-DEVELOPMENT-PLAN.md) · [Contributing](CONTRIBUTING.md)
 
-## What it is
+---
 
-Share a YouTube video or an article and Push-Point saves it instantly, then fills in title, thumbnail and tags in the background so you can find it again by tag or full-text search. The server is a single Go process on SQLite: `just dev` starts everything, and a backup is a copy of `data/`. Tagging is solved by a local NLU pipeline (rules first, ONNX embeddings later) instead of an external LLM API — zero cost per item, and nothing you save leaves the machine. The v1 Kubernetes stack (PostgreSQL, Redis, MinIO on Minikube) is folded away in `deploy/k8s-future/`, because at zero users that was infrastructure built ahead of the product — see [docs/README.md](docs/README.md) for the v1 ↔ v2 comparison.
+## Why
+
+Read-it-later apps forget things for you. The link goes in, and finding it later means remembering it existed.
+
+Push-Point tags every save so the archive stays searchable — and it does that **without sending anything to an LLM**. Not because an API call is hard, but because a personal archive shouldn't have a per-item cost, a rate limit, an outage, or a third party reading it. Tagging is a rule engine over a controlled dictionary, and its quality is measured rather than asserted.
+
+Everything runs in one process on your own machine. A backup is `cp -r data/`.
+
+## What it does
+
+```
+┌── iOS Share Sheet ──┐
+│   Web URL bar       │──▶  POST /api/v1/links  ──▶  201 in under 1 ms
+└── Browser extension ┘                                    │
+                                                           ▼
+                                       SQLite job queue (survives kill -9)
+                                                           │
+                            ┌──────────────┬───────────────┴──────────────┐
+                            ▼              ▼                              ▼
+                        scrape          tag (rules, local)            thumbnail
+                     og / adapters      42-tag dictionary            640px JPEG
+                            │              │                              │
+                            └──────────────┴───────────────┬──────────────┘
+                                                           ▼
+                                            FTS5 trigram search · tag filter
+```
+
+## Measured, not asserted
+
+Every number below has a command that reproduces it. No figure enters this README without one.
+
+| | Target | Measured (2026-07-27) | Command |
+|---|---|---|---|
+| Save API p99 | < 50 ms | **1.22 ms** (p50 0.27 / p95 0.36, n=2000) | `just bench-http` |
+| Save p99, client-capture path | < 50 ms | **4.41 ms** (n=500) | `just bench-http` |
+| Cold start → serving | < 1 s | **405 ms** | `scripts/coldstart.sh` |
+| Tagging, frozen test set | — | **0.905** top-3 recall (84 links) | `just eval` |
+| Tagging, open-web set | — | **0.821** (28 links) | `just eval` |
+
+That last row is the one that matters. A tagger evaluated only on developer blogs scores well and tells you nothing, so there is a second set built deliberately from the rest of the web — commerce, communities, app stores, video, wikis. It scores lower, on purpose: **it is the number that is allowed to be disappointing.**
 
 ## Features
 
-- **Instant save** — `POST /api/v1/links` commits two INSERTs and returns 201; scraping, thumbnails and tagging run in a SQLite-backed job queue that survives `kill -9`. Measured save p99 is 0.98 ms against a 50 ms target.
-- **Auto-tagging without an LLM** *(planned, M3)* — a rule-based tagger classifies against a controlled tag dictionary with Korean normalization; ONNX embeddings join as an ensemble in M5. No API key, no per-item cost.
-- **Search** — FTS5 trigram full-text search with bm25 ranking, which matches Korean without a morphological analyzer; queries shorter than 3 characters fall back to LIKE instead of failing. Tag and status filters on top.
-- **Web and iOS clients** — the React SPA is a first-class client today; the SwiftUI Share Extension lands in M4. Both generate their types from the same `api/openapi.yaml`.
-- **Single binary** — Go with a CGO-free SQLite driver. Migrations are embedded, and `just release` bakes the web bundle in too. No container runtime, no external database.
-- **Private by default** — one static API key, all data on local disk, reachable from the phone over Tailscale instead of the public internet.
+- **Instant save** — `POST /api/v1/links` commits two INSERTs and returns 201. Scraping, tagging and thumbnails run in a SQLite-backed queue that recovers from `kill -9`; nothing slow ever sits on the request path.
+- **Auto-tagging without an LLM** — a rule engine over a 42-tag controlled dictionary. Korean is handled by NFC normalization, particle stripping, and word-boundary matching at *both* ends of a compound, because Korean compounds are head-final and `대박식당` has to reach `식당`. Ties break on evidence volume rather than alphabetical order.
+- **Search that works in Korean** — FTS5 trigram with bm25 ranking, no morphological analyzer required. Queries under 3 characters fall back to LIKE instead of returning nothing.
+- **Three clients, one contract** — a React SPA, a SwiftUI app with a Share Extension, and a browser extension. All three generate their types from `api/openapi.yaml`; CI blocks drift in every one.
+- **Pages a server can't fetch** — bot walls and login walls are captured from the browser that is already rendering them, not by pretending to be a browser. A blocked link fails honestly with an actionable message instead of storing the wall's text as content.
+- **Single binary** — Go with a CGO-free SQLite driver. Migrations are embedded; `just release` bakes the web bundle in too. No container runtime, no external database, no Redis.
+- **Private by default** — one static API key, all data on local disk, reachable from a phone over Tailscale rather than the public internet.
 
 ## Quick start
 
-Requirements: Go 1.25+ and [just](https://just.systems) (`brew install just`). Node 22+ only if you want the web UI. Optional: [air](https://github.com/air-verse/air) for backend hot-reload (`just dev` uses it when present, falls back to `go run`).
+Requirements: Go 1.25+ and [just](https://just.systems) (`brew install just`). Node 22+ only for the web UI. Optional: [air](https://github.com/air-verse/air) for hot reload.
 
 ```bash
-just dev          # API + worker, prints the URL it took (default http://127.0.0.1:8420)
-just web-install  # once — installs web dependencies
+just dev          # API + worker (default http://127.0.0.1:8420)
+just web-install  # once
 just web-dev      # web UI on :8421, proxied to the backend it finds
-just dev-all      # optional: both of the above in one split screen (needs mprocs)
 ```
-
-A busy port never blocks a run: `just dev` scans upward from 8420 for a free port and prints the one it picked, `just web-dev` proxies to the backend of the same checkout (falling back to a `/healthz` probe from 8420), and Vite moves off 8421 by itself if that port is taken. Several checkouts — git worktrees, one per agent — can therefore run side by side without colliding.
 
 Save a link:
 
@@ -39,47 +79,89 @@ curl -X POST http://localhost:8420/api/v1/links \
   -H "Authorization: Bearer dev-key" -H "Content-Type: application/json" \
   -d '{"url": "https://go.dev/blog/wal"}'
 # 201 {"id":1,"status":"pending","created_at":1784937600}
-# a worker fills in title and thumbnail within seconds: pending -> scraping -> done
+# pending → scraping → done, with title, tags and thumbnail filled in
 ```
 
-For a production build, `just release` produces one binary at `backend/bin/pushpoint` with the web UI embedded. Environment variables, always-on setup (launchd/systemd), iPhone access over Tailscale, bookmark/Takeout import and backups are all in [docs/v2/07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md).
+A busy port never blocks a run: `just dev` scans upward from 8420 and prints the port it took, `just web-dev` proxies to the backend in the same checkout, and Vite moves off 8421 by itself. Several worktrees can run side by side.
+
+`just release` produces one binary at `backend/bin/pushpoint` with the web UI embedded. Always-on setup (launchd/systemd), iPhone access over Tailscale, bookmark import and backups are in [the deployment guide](docs/v2/07-DEPLOYMENT.md).
 
 ## Configuration
 
-Everything is read from `PUSHPOINT_`-prefixed environment variables; there is no config file.
+Read from `PUSHPOINT_`-prefixed environment variables; there is no config file.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PUSHPOINT_API_KEY` | (required) | Bearer token for the API. `just dev` sets it to `dev-key` |
+| `PUSHPOINT_API_KEY` | (required) | Bearer token. `just dev` sets it to `dev-key` |
 | `PUSHPOINT_ADDR` | `:8420` | HTTP listen address |
 | `PUSHPOINT_DATA_DIR` | `./data` | SQLite database and thumbnails |
 | `PUSHPOINT_SCRAPE_CONCURRENCY` | `8` | Maximum concurrent scraper workers |
 | `PUSHPOINT_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
-| `PUSHPOINT_LOG_FORMAT` | `auto` | `text` (human, colored) / `json` (structured) / `auto` (text on a terminal, else json) |
+| `PUSHPOINT_LOG_FORMAT` | `auto` | `text` / `json` / `auto` |
 
-For real use, replace the API key with a long random string (`openssl rand -hex 32`). Full reference: [docs/v2/07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md).
+For real use, replace the key with `openssl rand -hex 32`.
+
+## How tagging is evaluated
+
+The evaluation is the interesting part, and it is documented in full at [nlu/golden/README.md](nlu/golden/README.md).
+
+Three sets, reported separately and never averaged together:
+
+| Set | Links | Role |
+|---|---|---|
+| `dev` | 77 | Tuning. Rules, thresholds and dictionary changes are measured here first |
+| `test` | 84 | **Frozen.** The only set a release decision may read |
+| `wild` | 28 | The open web outside developer blogs. Graded like `dev`, never a gate |
+
+Snapshots are captured through the production scrape path, so evaluation input is byte-identical to runtime input — no train/serve skew — and `just eval` makes zero network calls, which keeps results reproducible years later.
+
+The harness reports what a single recall number cannot: how many misses are recoverable by re-ranking versus structurally unreachable, how many links were decided by a tie at the cut, and how much of the loss belongs to the scraper rather than the tagger. A dictionary typo that would silently depress recall fails CI instead.
 
 ## Status
 
-M1 (schema, store/queue, full API, bench harness) and M2 (worker pool, site adapters, thumbnails, import, SSRF guard) are merged, and the web client shipped alongside them — daily use works today. Next up is M3, rule-based tagging plus search evaluation, then M4, the iOS Share Extension; M5 (ONNX ensemble) and M6 (widget, polish, write-up) follow.
+Daily use works. Save from the iOS share sheet, the web app or the browser
+extension; scraping with per-site adapters; tagging; full-text search; thumbnails;
+bookmark import; export to a Google Sheet.
 
-Milestones, definitions of done and the per-milestone verification matrix live in [docs/v2/08-DEVELOPMENT-PLAN.md](docs/v2/08-DEVELOPMENT-PLAN.md).
+What is being worked on, and honestly:
+
+**Tagging has run out of ranking headroom.** Every remaining miss across all three
+evaluation sets scores *zero* on the correct tag — not "ranked too low", but no
+signal at all. Reordering cannot recover any of them, which was verified by dropping
+the score threshold to near zero and confirming the correct tags still never appear.
+The next lever is a local embedding model as a second opinion, and it is being run
+first as a throwaway offline experiment with kill criteria written down in advance,
+because the honest outcome may be that it does not help either.
+
+**Pages behind a login are only half-solved.** The browser extension captures them,
+and the server accepts and stores what it sends — but no such page has made it into
+the evaluation sets yet, so the tagging quality on exactly the pages that need this
+path the most is still unmeasured. The harness says so out loud rather than staying
+quiet about it.
+
+Not started: a widget, performance polish, and an evaluation harness for search
+quality to match the one tagging has.
+
+The full plan, with completion criteria per stage, is in
+[the development plan](docs/v2/08-DEVELOPMENT-PLAN.md).
 
 ## Documentation
 
 Project docs are written in Korean and live in `docs/v2/`, the single source of truth. This README is the English entry point.
 
-- [docs/v2/00-README.md](docs/v2/00-README.md) — table of contents and project intro
-- [docs/v2/03-SYSTEM-ARCHITECTURE.md](docs/v2/03-SYSTEM-ARCHITECTURE.md) — single-process architecture, repository layout, package roles
-- [docs/v2/06-API-SPECIFICATION.md](docs/v2/06-API-SPECIFICATION.md) — REST API, auth, cursor pagination (machine source: [api/openapi.yaml](api/openapi.yaml))
-- [docs/v2/07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md) — running and operating the server, configuration, measured benchmarks
-- [docs/v2/08-DEVELOPMENT-PLAN.md](docs/v2/08-DEVELOPMENT-PLAN.md) — milestones M1–M6 and completion criteria
-- [docs/README.md](docs/README.md) — v1 ↔ v2 document index and comparison
+- [Project intro and table of contents](docs/v2/00-README.md)
+- [System architecture](docs/v2/03-SYSTEM-ARCHITECTURE.md) — single-process design, package roles
+- [API specification](docs/v2/06-API-SPECIFICATION.md) — REST endpoints, auth, cursor pagination
+- [Deployment guide](docs/v2/07-DEPLOYMENT.md) — running it, operating it, measured benchmarks
+- [Tagging evaluation](nlu/golden/README.md) — the protocol and every measurement to date
+- [Rewrite comparison](docs/README.md) — what changed from the first version and why
+
+> The v1 Kubernetes stack (PostgreSQL, Redis, MinIO on Minikube) is folded away in `deploy/k8s-future/` — at zero users that was infrastructure built ahead of the product.
 
 ## Contributing
 
-`main` is protected: work on a branch, open a PR, and let CI pass. Run `just --list` to see the task runner recipes; the workflow, the merge gate and the definition of done are in [CONTRIBUTING.md](CONTRIBUTING.md).
+`main` is protected: branch, open a PR, let CI pass. `just --list` shows the recipes; the workflow, merge gate and definition of done are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Not licensed yet — this is a single-user personal project. Open an issue if you need terms for reuse.
+Not licensed yet — a single-user personal project. Open an issue if you need terms for reuse.
