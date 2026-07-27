@@ -66,6 +66,12 @@ func (p *DefaultParser) Fetch(ctx context.Context, u *url.URL) (Metadata, error)
 	m := parseMetadata(doc, finalURL)
 	m.ContentType = contentTypeFor(u.Host)
 	m.BodyText = extractBodyText(doc, finalURL)
+	// 200을 받았어도 내용이 벽이면 성공이 아니다 — 벽의 문구를 저장하면 그게 태그가 된다
+	// (blocked.go의 ErrBlockedPage 주석 참조). 메타데이터는 버린다: 벽의 제목을 남기면
+	// 목록에 `Reddit - Please wait for verification`이 뜬다.
+	if isBlockedPage(m.Title, m.Description, m.BodyText) {
+		return Metadata{}, ErrBlockedPage
+	}
 	return m, nil
 }
 
