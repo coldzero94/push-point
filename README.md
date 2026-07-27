@@ -82,4 +82,4 @@ Project docs are written in Korean and live in `docs/v2/`, the single source of 
 
 ## License
 
-Not licensed yet — this is a single-user personal project. Open an issue if you need terms for reuse.
+[Apache-2.0](LICENSE).
