@@ -319,6 +319,14 @@ web-embed-test: web-build
 streak-selftest:
     bash scripts/streak.sh --self-test
 
+# 아이덴티티 마크 → 네 표면의 아이콘 (소스: design/icon/mark.svg)
+#
+# 생성물은 커밋한다 — CI가 macOS·Chrome 없이 돌기 때문에 재생성으로 검사할 수 없다.
+# 계약 생성물(gen-check)과 달리 드리프트 게이트가 없으므로, 마크를 고쳤으면
+# 이 레시피를 직접 돌리고 결과를 같은 커밋에 넣는다.
+icons:
+    bash scripts/gen_icons.sh
+
 # 정적 분석 (golangci-lint — govet 포함)
 lint:
     @if command -v golangci-lint >/dev/null 2>&1; then cd backend && golangci-lint run; else echo "golangci-lint가 설치되어 있지 않습니다. 설치: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest (M1에서 backend/go.mod tool 지시자로 버전 핀 예정)"; fi

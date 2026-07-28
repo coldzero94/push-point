@@ -7,7 +7,19 @@
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "background": { "service_worker": "src/service-worker.js" },
   "options_page": "src/options.html",
-  "action": { "default_title": "Push-Point에 저장" },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Push-Point에 저장",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
   "commands": {
     "save-page": {
       "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },

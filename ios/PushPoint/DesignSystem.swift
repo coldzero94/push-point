@@ -118,41 +118,60 @@ extension PP {
     /// 8단 고정 스케일. 굵기는 400/500/600 셋뿐이다 — 700 이상·300 이하·가변 폰트
     /// 실수 weight는 플랫폼별 스냅이 일어나 예측 불가라 금지다.
     ///
-    /// 트래킹은 Apple SF의 광학 곡선을 따른다. `display`(32px)의 **양수** 트래킹은
-    /// 오타가 아니라 그 곡선이다 — SF는 21px부터 Display 패밀리로 넘어가며 양수에서
-    /// 시작해 40px에서 0을 통과한다.
+    /// **웹과 같은 폰트 파일을 쓴다**(§2.2.1) — Wanted Sans / Geist Mono, 둘 다 OFL.
+    /// `relativeTo:`가 붙어 있으므로 커스텀 폰트여도 Dynamic Type에 맞춰 스케일한다.
+    /// (문서가 오래 "커스텀 폰트를 쓰면 Dynamic Type을 잃는다"고 적어 뒀는데 사실이
+    /// 아니었다. iOS 14부터 이 이니셜라이저가 그 일을 한다.)
+    ///
+    /// 등록은 `project.yml`의 `UIAppFonts`가 한다. 빠뜨리면 `Font.custom`이 **조용히
+    /// 시스템 폰트로 떨어진다** — 빌드는 통과하고 화면만 달라진다.
     enum Typo {
+        // **가변 폰트의 named instance PostScript 이름을 직접 부른다.**
+        // `Font.custom(...).weight(.semibold)`는 가변 폰트에서 축을 움직여 주지 않아
+        // 400 그대로 그려질 수 있다 — 빌드도 통과하고 굵기만 틀리는 종류다.
+        // 파일명이 아니라 이 이름이어야 한다(파일명을 주면 시스템 폰트로 조용히 떨어진다).
+        private static let sans400 = "WantedSansVariable-Regular"
+        private static let sans500 = "WantedSansVariable-Medium"
+        private static let sans600 = "WantedSansVariable-SemiBold"
+        private static let mono400 = "GeistMono-Regular"
+
         /// 태그 칩, 상태 텍스트, 카운트.
-        static let label = Font.system(size: 12, weight: .medium)
+        static let label = Font.custom(sans500, size: 12, relativeTo: .caption)
         /// 도메인, 저장 시각, 보조 설명.
-        static let meta = Font.system(size: 13, weight: .regular)
+        static let meta = Font.custom(sans400, size: 13, relativeTo: .footnote)
         /// 기계 데이터는 고정폭(R2) — 도메인·시각·카운트·신뢰도.
-        static let metaMono = Font.system(size: 13, weight: .regular, design: .monospaced)
+        static let metaMono = Font.custom(mono400, size: 13, relativeTo: .footnote)
         /// 카드의 description 2줄. body를 쓰면 카드가 8px 높아지고 meta를 쓰면
         /// 한글 두 줄이 붙는다 — 그 사이.
-        static let card = Font.system(size: 13, weight: .regular)
+        static let card = Font.custom(sans400, size: 13, relativeTo: .footnote)
         /// 설명, 메모, 입력 필드.
-        static let body = Font.system(size: 15, weight: .regular)
+        static let body = Font.custom(sans400, size: 15, relativeTo: .subheadline)
         /// 링크 제목(카드 2줄 클램프).
-        static let title = Font.system(size: 15, weight: .semibold)
+        static let title = Font.custom(sans600, size: 15, relativeTo: .subheadline)
         /// 화면 제목, 인스펙터 제목.
-        static let head = Font.system(size: 20, weight: .semibold)
+        static let head = Font.custom(sans600, size: 20, relativeTo: .title3)
         /// 시간 척추 머리글 — serif의 유일한 용처(§2.2.5).
         static let spine = Font.system(size: 21, weight: .semibold, design: .serif)
         /// 통계 숫자, 상세 화면 제목.
-        static let display = Font.system(size: 32, weight: .semibold)
+        static let display = Font.custom(sans600, size: 32, relativeTo: .largeTitle)
     }
 
     /// 자간. SwiftUI는 em이 아니라 pt로 받으므로 크기를 곱해 둔다.
+    ///
+    /// **기본값이 0이다**(§2.2.2, 2026-07-28). 예전 값들은 SF의 광학 곡선을 옮긴 것이었는데,
+    /// Wanted Sans는 광학 크기 패밀리가 아니라 단일 마스터라 자체 스페이싱 위에 남의
+    /// 보정을 얹으면 두 번 보정된다. 예외는 display 하나뿐이다.
     enum Tracking {
-        static let label: CGFloat = 12 * -0.006
-        static let meta: CGFloat = 13 * -0.012
-        static let card: CGFloat = 13 * -0.010
-        static let body: CGFloat = 15 * -0.010
-        static let title: CGFloat = 15 * -0.016
-        static let head: CGFloat = 20 * -0.002
-        static let spine: CGFloat = 0 // SF 광학 곡선은 SF에만 해당 — serif는 0
-        static let display: CGFloat = 32 * 0.004
+        static let label: CGFloat = 0
+        static let meta: CGFloat = 0
+        static let card: CGFloat = 0
+        static let body: CGFloat = 0
+        static let title: CGFloat = 0
+        static let head: CGFloat = 0
+        static let spine: CGFloat = 0
+        /// 32px 통계 숫자에서만. 단일 마스터는 큰 크기에서 자간이 느슨해 보이고
+        /// 이 자리는 고정폭 숫자라 그게 특히 드러난다 — 띄워서 보고 정했다.
+        static let display: CGFloat = 32 * -0.012
     }
 }
 
