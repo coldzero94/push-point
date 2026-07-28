@@ -238,7 +238,10 @@ struct ContentView: View {
             LinkCard(link: link,
                      facetOf: { facets[$0] ?? .neutral },
                      activeTag: activeTagName,
-                     resolveThumb: backend.absoluteURL)
+                     resolveThumb: backend.absoluteURL,
+                     // 실패 복구를 스와이프에만 두지 않는다 — 발견되지 않는 동작이라
+                     // 그 링크가 영원히 실패로 남는다(§4.7).
+                     onRetry: { Task { await retry(link) } })
         }
         .buttonStyle(.plain)
         // 스와이프와 길게 누르기 둘 다 둔다(§8.4). 스와이프는 빠르지만 발견되지 않고,
