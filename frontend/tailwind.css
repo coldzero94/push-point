@@ -3,6 +3,30 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ── self-host 폰트 (§10 2.2.1) ───────────────────────────────────
+   OFL 1.1. 라이선스 원문은 design/fonts/ 에 있다.
+
+   **`font-display: block`을 쓴다.** swap이 아니다 — 폰트가 로컬(동일 출처, 임베드
+   또는 Vite 프록시)에서 오므로 대기가 프레임 수준이고, swap을 쓰면 그 한 프레임에
+   시스템 폰트로 그렸다가 교체되면서 **글자폭이 바뀌어 레이아웃이 튄다**. CLS 0이
+   이 프로젝트의 성능 규칙이다(§6.3).
+
+   가변 폰트 하나로 400/500/600을 모두 낸다 — 굵기별 파일을 싣지 않는다(§10 2.2.3). */
+@font-face {
+  font-family: "Wanted Sans Variable";
+  src: url("/fonts/WantedSans-Variable.woff2") format("woff2-variations");
+  font-weight: 400 1000;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Geist Mono Variable";
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
 /* ── 0. 리셋 — 반드시 모든 정의 블록(@theme inline 포함)보다 먼저 ──────
    v4는 @theme 을 소스 순서대로 병합하고 `--네임스페이스-*: initial` 은
    그 시점까지 등록된 키를 전부 지운다. 이 블록이 아래로 내려가면
@@ -140,47 +164,50 @@
 /* static: v4는 참조되지 않은 theme 변수를 :root에서 제거한다. 레이아웃 상수와
    duration·z 토큰은 lint와 JS가 읽어야 하므로 항상 방출시킨다. */
 @theme static {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo",
-               "Pretendard Variable", Pretendard, system-ui, "Segoe UI",
-               "Malgun Gothic", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  /* self-host (§10 2.2.1). 폴백은 폰트가 아직 안 왔을 때의 한 프레임용이지
+     비-Apple 환경 대책이 아니다 — 파일이 항상 같이 나간다. */
+  --font-sans: "Wanted Sans Variable", -apple-system, BlinkMacSystemFont,
+               "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", SFMono-Regular,
+               Menlo, monospace;
   /* serif 는 시간 척추 머리글 전용이다(§10 2.2.5). Latin은 Charter/Iowan,
      한글은 AppleMyungjo로 떨어지도록 순서를 잡는다 — 본문·라벨·컨트롤에는 쓰지 않는다. */
   --font-serif: Charter, "Iowan Old Style", Georgia, AppleMyungjo, "Nanum Myeongjo",
                 "Apple SD Gothic Neo", serif;
 
-  /* type scale (8단). 이 개정이 추가한 것은 `card`와 `spine` 둘뿐이고 기존 6단의
-     크기·굵기·트래킹은 한 값도 바꾸지 않았다 — 트래킹은 SF의 광학 곡선을 따르고
-     (§10 2.2.2), 굵기는 400/500/600 세 개뿐이다(§10 2.2.3). */
+  /* type scale (8단). **자간 기본값은 0이다**(§10 2.2.2, 2026-07-28).
+     예전 값들은 SF의 광학 곡선(Text ≤19px / Display ≥20px)을 옮긴 것이었는데,
+     Wanted Sans는 광학 크기 패밀리가 아니라 단일 마스터라 자체 스페이싱 위에
+     남의 보정을 얹으면 두 번 보정된다. 예외는 display 하나뿐이고 근거는 그 자리에.
+     굵기는 400/500/600 세 개뿐이다(§10 2.2.3). */
   --text-label: 12px;
   --text-label--line-height: 16px;
   --text-label--font-weight: 500;
-  --text-label--letter-spacing: -0.006em;
+  --text-label--letter-spacing: 0em;
 
   --text-meta: 13px;
   --text-meta--line-height: 18px;
   --text-meta--font-weight: 400;
-  --text-meta--letter-spacing: -0.012em;
+  --text-meta--letter-spacing: 0em;
 
   /* 카드 본문 — description 2줄 클램프 전용. body(15/24)를 쓰면 카드가 8px 높아지고
      meta(13/18)를 쓰면 한글 두 줄이 붙는다. 그 사이의 한 단계다. */
   --text-card: 13px;
   --text-card--line-height: 20px;
   --text-card--font-weight: 400;
-  --text-card--letter-spacing: -0.010em;
+  --text-card--letter-spacing: 0em;
 
   --text-body: 15px;
   --text-body--line-height: 24px;
   --text-body--font-weight: 400;
-  --text-body--letter-spacing: -0.010em;
+  --text-body--letter-spacing: 0em;
 
   --text-title: 15px;
   --text-title--line-height: 20px;
   --text-title--font-weight: 600;
-  --text-title--letter-spacing: -0.016em;
+  --text-title--letter-spacing: 0em;
 
-  /* 시간 척추 머리글 — serif 를 쓰는 유일한 슬롯. SF 광학 트래킹 곡선은 SF에만
-     해당하므로 여기서는 0이다(serif는 그 곡선을 따르지 않는다). */
+  /* 시간 척추 머리글 — serif 를 쓰는 유일한 슬롯(§10 2.2.5). */
   --text-spine: 21px;
   --text-spine--line-height: 28px;
   --text-spine--font-weight: 600;
@@ -189,12 +216,15 @@
   --text-head: 20px;
   --text-head--line-height: 26px;
   --text-head--font-weight: 600;
-  --text-head--letter-spacing: -0.002em;
+  --text-head--letter-spacing: 0em;
 
   --text-display: 32px;
   --text-display--line-height: 36px;
   --text-display--font-weight: 600;
-  --text-display--letter-spacing: 0.004em;
+  /* 스케일에서 유일하게 0이 아닌 자간. 단일 마스터 폰트는 큰 크기에서 자간이
+     느슨해 보이고, 여기는 tabular-nums 고정폭 숫자라 그게 특히 드러난다.
+     **띄워서 보고 정한 값이지 표에서 유도한 값이 아니다.** */
+  --text-display--letter-spacing: -0.012em;
 
   /* spacing — 12스텝. 유틸리티 숫자 == px (p-16 = 16px) */
   --spacing-2:2px;   --spacing-4:4px;   --spacing-6:6px;   --spacing-8:8px;

@@ -58,7 +58,17 @@ targets:
   PushPointTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [PushPointTests, Shared]
+    # 폰트 파일 자체를 테스트가 열어 본다 — DesignSystem이 부르는 PostScript 이름이
+    # 파일에 실재하는지 확인하기 위해서다(FontNameTests).
+    #
+    # XcodeGen에는 타깃 `resources:` 키가 **없다**. sources 항목에 buildPhase를 지정해야
+    # 하고, 그렇게 하지 않으면 조용히 무시된다 — 실제로 그렇게 돼서 테스트가 폰트를
+    # 못 찾고 전부 Helvetica로 떨어졌다(2026-07-28).
+    sources:
+      - path: PushPointTests
+      - path: Shared
+      - path: PushPoint/Resources/Fonts
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pushpoint.app.tests
@@ -84,6 +94,9 @@ targets:
   PushPoint:
     type: application
     platform: iOS
+    # 서체는 웹과 같은 파일에서 나온다(§10 2.2.1). 웹은 woff2, iOS는 ttf —
+    # iOS 텍스트 시스템이 woff2를 읽지 못해서 같은 원본을 변환해 둔 것뿐이다.
+    # PushPoint/ 아래에 있으므로 sources 스캔이 리소스로 자동 분류한다.
     sources: [PushPoint, Shared]
     dependencies:
       # 확장은 앱 번들 안에 들어간다 — XcodeGen이 app-extension 타입을 자동으로 임베드한다.
@@ -113,6 +126,11 @@ targets:
         # 인프로세스 서버는 127.0.0.1 평문 HTTP다. ATS가 루프백을 막지 않도록 명시한다.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # 등록하지 않으면 Font.custom이 조용히 시스템 폰트로 떨어진다 — 빌드도 통과하고
+        # 화면만 다르게 나오는 종류라, 값이 틀리면 눈으로만 잡힌다.
+        UIAppFonts:
+          - WantedSans-Variable.ttf
+          - GeistMono-Variable.ttf
 
   PushPointShare:
     type: app-extension
