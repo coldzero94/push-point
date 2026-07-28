@@ -2,7 +2,14 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <!-- 아이콘은 design/icon/mark.svg에서 `just icons`가 생성한다 — 직접 편집하지 않는다.
+         16·32px PNG를 따로 두는 이유: SVG를 그 크기로 줄이면 채움 0의 획이 먼저 죽어
+         사다리 3단이 2단으로 보인다. 브라우저는 rel="icon" 중 가장 맞는 것을 고른다. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0F2C22" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Push-Point</title>
     <script>
