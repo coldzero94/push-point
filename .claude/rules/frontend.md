@@ -5,7 +5,8 @@ paths:
 
 # Frontend workspace rules (web app)
 
-The web app is a first-class, full-feature client on par with iOS (adopted 2026-07-21). It consumes the same `api/openapi.yaml`, so save, list, search, tag filtering, detail, tag editing, delete, retry, and stats are all implemented end-to-end on the web. **The only difference**: the "2-second iOS share-sheet entry" for saving is an OS feature the web cannot have — the web saves via a URL input field (plus an optional bookmarklet).
+The web app is a first-class, full-feature client on par with iOS (adopted 2026-07-21). It consumes the same `api/openapi.yaml`, so save, list, search, tag filtering, detail, tag editing, delete, retry, and stats are all implemented end-to-end on the web.
+- **Parity is decided per feature, not assumed.** "Only the share sheet differs" was the original claim and it had already stopped being true — stats shipped on iOS alone, dictionary CRUD on web alone. Before adding a feature to either client, classify it against [`docs/v2/13-CLIENT-PARITY.md`](../../docs/v2/13-CLIENT-PARITY.md): ① archive work (both or neither), ② entry and platform affordances (each at its best, parity would be worse), ③ decided by where the data lives (state the condition). Record the axis in the PR.
 
 ## Stack (fixed — §16)
 

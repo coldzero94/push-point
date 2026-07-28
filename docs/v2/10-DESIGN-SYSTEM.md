@@ -699,6 +699,7 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
 
   /* radius — semantic only */
   --radius-chip:999px; --radius-control:10px; --radius-thumb:8px;
+  --radius-bar:3px;    /* 리듬/요일 막대 — iOS Chart의 cornerRadius와 같은 값 */
   --radius-card:16px;  --radius-panel:16px;   --radius-sheet:20px;
 
   /* easing */
@@ -725,6 +726,9 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
   --size-card-title:40px; --size-card-desc:40px;
   --size-thumb:56px; --size-thumb-sm:44px;
   --size-header:56px; --size-toolbar:44px; --size-rail:2px; --size-spark-min:3px;
+  /* 리듬 섹션 차트 높이 — iOS StatsView의 frame(height:)와 같은 값으로 둔다.
+     12스텝 밖이라 여기 상수로 있어야 한다(h-32는 32px이라 차트로 못 쓴다). */
+  --size-rhythm:110px; --size-weekday:76px;
   --w-page:1200px; --w-content:768px; --w-inspector:400px; --w-list-min:480px;
   --w-search-input:480px; --w-form:560px;
   --gutter: max(env(safe-area-inset-left), clamp(16px, 2.5vw, 32px));
@@ -1445,7 +1449,7 @@ enum DS {
 | 탭 타겟 | 포인터 24×24px / 터치 44×44px(§7.5) | 항상 44×44pt(터치 전용 플랫폼) |
 | 큰 글자 대응 | `flex-wrap` | `ViewThatFits`로 가로 배치 → 세로 스택 전환 |
 | 모션 | ms 토큰 + cubic-bezier | **같은 duration을 `.easeInOut(duration:)`으로 이식**(§8.2 `DS.Motion`). `.spring`은 `dampingFraction: 1.0`일 때만 허용 — 오버슈트 금지는 플랫폼 공통이다 |
-| 저장 진입 | URL 입력 필드(+북마클릿) | Share Extension(2초 진입) — 유일하게 웹이 가질 수 없는 기능 |
+| 저장 진입 | URL 입력 필드(+북마클릿) | Share Extension(2초 진입) — OS 기능이라 웹엔 없다([13 §1 ② 축](13-CLIENT-PARITY.md)) |
 
 ## 9. 구현 검증 게이트
 

@@ -1048,12 +1048,18 @@ internal enum Components {
                 case facet
             }
         }
-        /// 통계 응답 (iOS 위젯용 — 위젯 활용은 M6)
+        /// 통계 응답. iOS 통계 탭·웹 설정의 리듬 섹션이 소비한다 (위젯 활용은 M6).
+        ///
         ///
         /// - Remark: Generated from `#/components/schemas/Stats`.
         internal struct Stats: Codable, Hashable, Sendable {
             /// - Remark: Generated from `#/components/schemas/Stats/total_links`.
             internal var total_links: Swift.Int
+            /// by_day 창의 **마지막 7칸 합** — 오늘 포함 최근 7일.
+            /// 화면이 이 값과 by_day에서 파생한 "지난주 대비"를 한 문장 안에 나란히
+            /// 놓으므로 기준이 같아야 한다.
+            ///
+            ///
             /// - Remark: Generated from `#/components/schemas/Stats/links_this_week`.
             internal var links_this_week: Swift.Int
             /// - Remark: Generated from `#/components/schemas/Stats/by_tagPayload`.
@@ -1085,7 +1091,7 @@ internal enum Components {
             internal var by_tag: Components.Schemas.Stats.by_tagPayload
             /// - Remark: Generated from `#/components/schemas/Stats/by_dayPayload`.
             internal struct by_dayPayloadPayload: Codable, Hashable, Sendable {
-                /// YYYY-MM-DD (localtime)
+                /// YYYY-MM-DD (서버 로컬타임)
                 ///
                 /// - Remark: Generated from `#/components/schemas/Stats/by_dayPayload/date`.
                 internal var date: Swift.String
@@ -1094,7 +1100,7 @@ internal enum Components {
                 /// Creates a new `by_dayPayloadPayload`.
                 ///
                 /// - Parameters:
-                ///   - date: YYYY-MM-DD (localtime)
+                ///   - date: YYYY-MM-DD (서버 로컬타임)
                 ///   - count:
                 internal init(
                     date: Swift.String,
@@ -1108,11 +1114,31 @@ internal enum Components {
                     case count
                 }
             }
-            /// 최근 30일 일별 저장 수
+            /// 최근 30일 일별 저장 수. **세 가지를 보장한다**:
+            ///
+            /// 1. 항상 정확히 30개 — 저장이 없는 날도 count 0으로 들어 있다
+            /// 2. date 오름차순
+            /// 3. 마지막 원소가 **서버 로컬타임 기준 오늘**
+            ///
+            /// 이 보장이 없던 시절에는 GROUP BY 결과를 그대로 줘서 빈 날의 행이
+            /// 아예 없었고, 배열을 위치로 인덱싱한 클라이언트가 조용히 틀렸다
+            /// (웹·iOS 둘 다 그랬다 — 2026-07-28). 3번 덕분에 클라이언트는 "오늘"을
+            /// 자기 타임존으로 추측할 필요가 없다: 뒤에서부터 세면 된다.
+            ///
             ///
             /// - Remark: Generated from `#/components/schemas/Stats/by_day`.
             internal typealias by_dayPayload = [Components.Schemas.Stats.by_dayPayloadPayload]
-            /// 최근 30일 일별 저장 수
+            /// 최근 30일 일별 저장 수. **세 가지를 보장한다**:
+            ///
+            /// 1. 항상 정확히 30개 — 저장이 없는 날도 count 0으로 들어 있다
+            /// 2. date 오름차순
+            /// 3. 마지막 원소가 **서버 로컬타임 기준 오늘**
+            ///
+            /// 이 보장이 없던 시절에는 GROUP BY 결과를 그대로 줘서 빈 날의 행이
+            /// 아예 없었고, 배열을 위치로 인덱싱한 클라이언트가 조용히 틀렸다
+            /// (웹·iOS 둘 다 그랬다 — 2026-07-28). 3번 덕분에 클라이언트는 "오늘"을
+            /// 자기 타임존으로 추측할 필요가 없다: 뒤에서부터 세면 된다.
+            ///
             ///
             /// - Remark: Generated from `#/components/schemas/Stats/by_day`.
             internal var by_day: Components.Schemas.Stats.by_dayPayload
@@ -1120,9 +1146,9 @@ internal enum Components {
             ///
             /// - Parameters:
             ///   - total_links:
-            ///   - links_this_week:
+            ///   - links_this_week: by_day 창의 **마지막 7칸 합** — 오늘 포함 최근 7일.
             ///   - by_tag:
-            ///   - by_day: 최근 30일 일별 저장 수
+            ///   - by_day: 최근 30일 일별 저장 수. **세 가지를 보장한다**:
             internal init(
                 total_links: Swift.Int,
                 links_this_week: Swift.Int,

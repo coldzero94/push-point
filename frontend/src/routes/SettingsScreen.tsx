@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { RhythmSection } from './RhythmSection'
 import { SheetsSection } from './SheetsSection'
 import { Eye, EyeOff } from 'lucide-react'
 import { api, errorMessage } from '../lib/api/client'
@@ -231,6 +232,11 @@ export function SettingsScreen() {
           </p>
         ) : null}
       </div>
+
+      {/* ── 리듬 ───────────────────────────────────────────────
+          위쪽 구분선을 이 컴포넌트가 직접 그린다 — 401이면 섹션이 통째로 사라지는데,
+          구분선이 밖에 있으면 빈 줄 두 개가 겹쳐 남는다. */}
+      <RhythmSection />
 
       <div className="border-t border-line-2" />
 

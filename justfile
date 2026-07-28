@@ -300,11 +300,24 @@ release: web-build
 web-lint: _web-required
     cd frontend && npm run lint
 
+# 프론트엔드 단위 테스트 (vitest) — 순수 로직만. DOM도 React도 안 띄운다.
+#
+# 이 자리가 오래 비어 있었고, 그 사이 `web-test`라는 이름을 아래 Go 레시피가 갖고 있어서
+# "웹 테스트가 있다"처럼 보였다(실제로는 TypeScript를 한 줄도 실행하지 않는다).
+# 2026-07-28에 이름을 제 주인에게 돌려줬다 — 그날 리뷰가 `weekOverWeek`의 실제 버그를
+# 잡았는데, 테스트 러너가 있었으면 진작 빨개졌을 종류였다.
+web-test: _web-required
+    cd frontend && npm test
+
 # spa.go는 embed_frontend 태그에서만 컴파일돼 태그 없는 just test가 커버하지 못하고,
 # 임베드에 dist가 필요하므로 web-build 뒤에 돈다.
 # 웹 embed 경로 테스트 — SPA 셸·자산 헤더·계약 표면 JSON 404
-web-test: web-build
+web-embed-test: web-build
     cd backend && go test -count=1 -tags embed_frontend ./internal/web/... ./internal/api/...
+
+# 연속 저장 규칙이 웹·터미널에서 같은 답을 내는지 (testdata/streak-cases.json 공용 픽스처)
+streak-selftest:
+    bash scripts/streak.sh --self-test
 
 # 정적 분석 (golangci-lint — govet 포함)
 lint:

@@ -9,7 +9,7 @@ Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker
 - `backend/` — Go single binary (API + worker + NLU runtime inference). All executable code lives here.
 - `nlu/` — NLU offline **assets only**: dictionary/ (tag dictionary), golden/ (eval set), models/ (ONNX conversion). Runtime inference is `backend/internal/tagger` (Go); Python is allowed only under `nlu/models/`.
 - `ios/` — M4: SwiftUI app + Share Extension. No code yet.
-- `frontend/` — web app (Vite + React + TS, consumes the `api/openapi.yaml` contract, peer of iOS). Only the "2-second share-sheet entry" for saving is iOS-specific; every other feature is identical.
+- `frontend/` — web app (Vite + React + TS, consumes the `api/openapi.yaml` contract, peer of iOS). **Parity is decided per feature, not assumed** — classify against `docs/v2/13-CLIENT-PARITY.md` and record the axis in the PR. ("Only the share sheet differs" was the old claim; it had already stopped being true.)
 - `docs/v2/` = single source of truth, `docs/v1/` = v1 archive (do not modify), comparison in `docs/README.md`.
 - `deploy/k8s-future/` — preserved v1 k8s manifests (unused, do not modify).
 

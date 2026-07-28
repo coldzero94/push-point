@@ -76,7 +76,9 @@ All Go recipes run inside `backend/`. Recipes for milestones that have not lande
 | `just web-gen-check` | Web contract drift guard (CI) |
 | `just web-build` | Production bundle → `frontend/dist/`, copied to `backend/internal/web/dist/` for `go:embed` |
 | `just web-lint` | oxlint |
-| `just web-test` | `web-build`, then the backend tests that only compile under `-tags embed_frontend` |
+| `just web-test` | frontend unit tests (vitest) — the pure logic in `src/lib/`, no DOM |
+| `just web-embed-test` | `web-build`, then the backend tests that only compile under `-tags embed_frontend` |
+| `just streak-selftest` | checks the streak rule agrees between the web and `scripts/streak.sh` (shared fixture in `testdata/`) |
 
 `scripts/` holds the shell harnesses these recipes call: `bench_http.sh`, `coldstart.sh` (exec → `/healthz` 200 in under 1 s), `test_crash.sh`, `lint_enums.sh`.
 
