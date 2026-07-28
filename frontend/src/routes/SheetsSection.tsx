@@ -53,7 +53,7 @@ export function SheetsSection() {
             연결은 터미널에서 한 번만 하면 됩니다. 구글 승인을 브라우저에서 직접 밟아야 해서
             이 화면이 대신할 수 없습니다.
           </p>
-          <pre className="overflow-x-auto rounded-(--r-control) border border-line-2 bg-surface p-12 text-mono text-fg-1">
+          <pre className="overflow-x-auto rounded-control border border-line-2 bg-surface p-12 text-mono text-fg-1">
             just sheets-setup
           </pre>
           <p className="text-caption text-fg-3">

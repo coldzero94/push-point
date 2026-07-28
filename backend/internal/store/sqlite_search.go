@@ -282,17 +282,33 @@ func (s *sqliteStore) attachSearchTags(ctx context.Context, items []SearchResult
 	return attachTags(ctx, s.db.Reader, ptrs)
 }
 
-// Stats는 위젯용 통계 — 06 §7. this_week은 최근 7일, by_day는 최근 30일(localtime).
+// Stats는 위젯용 통계 — 06 §7. by_day는 최근 30일(localtime), this_week은 그 마지막 7일.
+//
+// **by_day는 빈 날을 0으로 채워서 돌려준다 — 정확히 30개, 오름차순, 마지막이 오늘이다.**
+// GROUP BY 결과를 그대로 주던 시절에는 저장이 없는 날에 행이 아예 없었고, 그 배열을
+// 받은 클라이언트가 위치로 인덱싱하면 조용히 틀렸다. 실제로 웹과 iOS 둘 다 그렇게
+// 틀려 있었다(2026-07-28 발견): 활동일 5일이 30칸 중 다섯 칸에 **붙어서** 그려지는
+// 바람에 한 달 내내 띄엄띄엄 저장한 사람이 "최근 5일에 몰아서 저장함"으로 보였고,
+// 웹은 오른쪽 끝 iOS는 왼쪽 끝이라 같은 응답에서 두 화면이 반대로 그려졌다.
+//
+// 채우는 쪽을 서버로 정한 이유는 두 가지다.
+//
+//  1. **클라이언트가 "오늘"을 추측하지 않아도 된다.** 날짜 문자열은 서버 로컬타임에서
+//     만들어지는데(`date(...,'localtime')`) 클라이언트는 자기 타임존으로 오늘을
+//     계산해 맞춰 보고 있었다. 타임존이 갈리면 연속 일수가 하루 어긋나고, 그 숫자는
+//     M6 완료 판정 지표다. 마지막 칸이 오늘이라고 계약이 보장하면 날짜 연산 자체가
+//     사라진다 — 뒤에서부터 세면 된다.
+//  2. **소비자가 셋이다**(웹·iOS·scripts/streak.sh). 채우는 코드를 세 언어로 세 번
+//     짜는 것은 `docs/v2/13-CLIENT-PARITY.md` §3이 막으려는 바로 그 형태다.
+//
+// this_week도 같은 창의 마지막 7칸 합으로 낸다. 예전에는 `unixepoch() - 7*86400`이라
+// 롤링 초 단위였는데, 화면이 이 값과 by_day에서 파생한 "지난주 대비"를 **한 문장 안에**
+// 나란히 놓기 때문에(리듬 섹션) 기준이 다르면 문단이 자기모순이 된다.
 func (s *sqliteStore) Stats(ctx context.Context) (*Stats, error) {
 	st := &Stats{ByTag: []TagCount{}, ByDay: []DayCount{}}
 	if err := s.db.Reader.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM links WHERE deleted_at IS NULL`).Scan(&st.TotalLinks); err != nil {
 		return nil, fmt.Errorf("store: total_links 조회 실패: %w", err)
-	}
-	if err := s.db.Reader.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM links WHERE deleted_at IS NULL AND created_at >= unixepoch() - 7*86400`,
-	).Scan(&st.LinksThisWeek); err != nil {
-		return nil, fmt.Errorf("store: links_this_week 조회 실패: %w", err)
 	}
 
 	rows, err := s.db.Reader.QueryContext(ctx, `
@@ -318,12 +334,25 @@ func (s *sqliteStore) Stats(ctx context.Context) (*Stats, error) {
 		return nil, fmt.Errorf("store: by_tag 순회 실패: %w", err)
 	}
 
+	// 창(30칸)을 SQLite가 만들게 두는 것이 핵심이다. Go가 time.Now()로 만들면 "오늘"의
+	// 정의가 둘이 되고(Go의 로컬타임 vs SQLite의 'localtime'), 그 둘이 갈리는 순간
+	// 마지막 칸이 오늘이라는 계약이 깨진다. hits를 따로 GROUP BY 해서 붙이는 이유는
+	// 성능이다 — 창에 직접 조인하면 날짜당 links 스캔이 30번 돈다.
 	drows, err := s.db.Reader.QueryContext(ctx, `
-		SELECT date(created_at, 'unixepoch', 'localtime') AS d, COUNT(*)
-		FROM links
-		WHERE deleted_at IS NULL AND created_at >= unixepoch() - 30*86400
-		GROUP BY d
-		ORDER BY d`)
+		WITH RECURSIVE win(d) AS (
+			SELECT date('now', 'localtime', '-29 days')
+			UNION ALL
+			SELECT date(d, '+1 day') FROM win WHERE d < date('now', 'localtime')
+		),
+		hits AS (
+			SELECT date(created_at, 'unixepoch', 'localtime') AS d, COUNT(*) AS c
+			FROM links
+			WHERE deleted_at IS NULL AND created_at >= unixepoch() - 31*86400
+			GROUP BY d
+		)
+		SELECT win.d, COALESCE(hits.c, 0)
+		FROM win LEFT JOIN hits ON hits.d = win.d
+		ORDER BY win.d`)
 	if err != nil {
 		return nil, fmt.Errorf("store: by_day 조회 실패: %w", err)
 	}
@@ -338,5 +367,17 @@ func (s *sqliteStore) Stats(ctx context.Context) (*Stats, error) {
 	if err := drows.Err(); err != nil {
 		return nil, fmt.Errorf("store: by_day 순회 실패: %w", err)
 	}
+	// 30칸 보장은 계약이다(위 주석). 클라이언트 셋이 "마지막이 오늘"에 기대어 날짜
+	// 연산을 지웠으므로, 여기서 깨지면 조용히 틀리는 대신 요청이 실패해야 한다.
+	if len(st.ByDay) != statsWindowDays {
+		return nil, fmt.Errorf("store: by_day가 %d칸 — %d칸이어야 한다", len(st.ByDay), statsWindowDays)
+	}
+	for _, d := range st.ByDay[len(st.ByDay)-7:] {
+		st.LinksThisWeek += d.Count
+	}
 	return st, nil
 }
+
+// statsWindowDays는 by_day 창의 길이. 클라이언트가 이 값을 가정하지 않도록 계약은
+// "배열 길이"로 말하지만, 서버 쪽 검증에는 상수가 필요하다.
+const statsWindowDays = 30

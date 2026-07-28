@@ -748,38 +748,76 @@ func TestStats(t *testing.T) {
 	if err := s.DeleteLink(ctx, id3); err != nil {
 		t.Fatalf("DeleteLink 실패: %v", err)
 	}
-	// id1을 8일 전으로 밀어 this_week에서 제외
+	// id1을 8일 전으로 밀어 this_week에서 제외하고, id4를 **정확히 6일 전**에 둔다.
+	// id4가 없으면 7일 창을 6일로 줄이는 변이가 테스트를 그대로 통과한다 — 경계에
+	// 데이터가 없으면 경계를 옮겨도 합이 안 변하기 때문이다(2026-07-28 변이 검증).
 	var now int64
 	if err := db.Reader.QueryRow(`SELECT unixepoch()`).Scan(&now); err != nil {
 		t.Fatalf("unixepoch 조회 실패: %v", err)
 	}
 	setCreatedAt(t, db, id1, now-8*86400)
+	id4, _, _, _ := s.SaveLink(ctx, SaveInput{URL: "https://st.com/4", Note: ""})
+	setCreatedAt(t, db, id4, now-6*86400)
 
 	st, err := s.Stats(ctx)
 	if err != nil {
 		t.Fatalf("Stats 실패: %v", err)
 	}
-	if st.TotalLinks != 2 {
-		t.Fatalf("total_links = %d, want 2 (소프트 삭제 제외)", st.TotalLinks)
+	if st.TotalLinks != 3 {
+		t.Fatalf("total_links = %d, want 3 (소프트 삭제 제외)", st.TotalLinks)
 	}
-	if st.LinksThisWeek != 1 {
-		t.Fatalf("links_this_week = %d, want 1", st.LinksThisWeek)
+	if st.LinksThisWeek != 2 {
+		t.Fatalf("links_this_week = %d, want 2 (오늘 + 6일 전)", st.LinksThisWeek)
 	}
 	// by_tag: dev 2건 > golang 1건 (삭제된 링크는 미집계)
 	if len(st.ByTag) != 2 || st.ByTag[0].Name != "dev" || st.ByTag[0].Count != 2 ||
 		st.ByTag[1].Name != "golang" || st.ByTag[1].Count != 1 {
 		t.Fatalf("by_tag = %+v", st.ByTag)
 	}
-	if len(st.ByDay) == 0 {
-		t.Fatal("by_day가 비어 있음")
+	// by_day는 빈 날을 0으로 채운 30칸이고 마지막이 오늘이다. 클라이언트 셋이 이 세 가지
+	// 성질에 기대어 날짜 연산을 지웠으므로(웹·iOS·streak.sh) 전부 여기서 못을 박는다.
+	// 이 단언들이 없던 동안 웹과 iOS가 막대를 서로 반대편에 그리고 있었다.
+	if len(st.ByDay) != 30 {
+		t.Fatalf("by_day 길이 = %d, want 30 (빈 날 0으로 채움)", len(st.ByDay))
 	}
-	// id1(8일 전)·id2(현재) 모두 최근 30일 이내, id3은 삭제 → 합계 2
+	for i := 1; i < len(st.ByDay); i++ {
+		if st.ByDay[i-1].Date >= st.ByDay[i].Date {
+			t.Fatalf("by_day가 오름차순이 아님: [%d]=%s >= [%d]=%s",
+				i-1, st.ByDay[i-1].Date, i, st.ByDay[i].Date)
+		}
+	}
+	var today string
+	if err := db.Reader.QueryRow(`SELECT date('now','localtime')`).Scan(&today); err != nil {
+		t.Fatalf("today 조회 실패: %v", err)
+	}
+	if got := st.ByDay[len(st.ByDay)-1].Date; got != today {
+		t.Fatalf("by_day 마지막 = %s, want %s (오늘)", got, today)
+	}
+	// id1(8일 전)·id4(6일 전)·id2(오늘) 모두 창 안, id3은 삭제 → 합계 3
 	var dayTotal int64
 	for _, d := range st.ByDay {
 		dayTotal += d.Count
 	}
-	if dayTotal != 2 {
-		t.Fatalf("by_day 합계 = %d, want 2", dayTotal)
+	if dayTotal != 3 {
+		t.Fatalf("by_day 합계 = %d, want 3", dayTotal)
+	}
+	// 자리도 맞아야 한다. 합계만 보면 링크가 어느 칸에 있든 통과하는데, 정확히 그
+	// 느슨함 때문에 클라이언트의 위치 인덱싱 버그가 백엔드 테스트를 그대로 통과했다.
+	want := map[int]int64{21: 1, 23: 1, 29: 1} // 8일 전 · 6일 전 · 오늘
+	for i, d := range st.ByDay {
+		if got := d.Count; got != want[i] {
+			t.Fatalf("by_day[%d](%s) = %d, want %d", i, d.Date, got, want[i])
+		}
+	}
+	// this_week은 창의 마지막 7칸 합이다. 화면이 이 값과 by_day 파생값을 한 문장에
+	// 나란히 놓으므로 기준이 같아야 한다.
+	var lastSeven int64
+	for _, d := range st.ByDay[23:] {
+		lastSeven += d.Count
+	}
+	if st.LinksThisWeek != lastSeven {
+		t.Fatalf("links_this_week = %d, 창 마지막 7칸 합 = %d — 같아야 한다",
+			st.LinksThisWeek, lastSeven)
 	}
 }
 

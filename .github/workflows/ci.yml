@@ -87,6 +87,16 @@ jobs:
         working-directory: frontend
         run: npx tsc --noEmit -p tsconfig.app.json
 
+      # 순수 로직 단위 테스트. 여기까지의 단계는 전부 "타입이 맞고 빌드가 된다"만
+      # 보는데, 이 리포가 실제로 낸 웹 버그는 전부 그 관문을 통과했다.
+      - name: 단위 테스트 (vitest)
+        working-directory: frontend
+        run: npm test
+
+      # 연속 저장 규칙이 웹과 터미널에서 같은 답을 내는지 — 같은 픽스처를 둘이 읽는다.
+      - name: streak 구현 일치 (just streak-selftest)
+        run: just streak-selftest
+
       - name: 웹 빌드 (just web-build)
         run: just web-build
 

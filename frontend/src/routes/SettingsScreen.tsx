@@ -233,13 +233,16 @@ export function SettingsScreen() {
         ) : null}
       </div>
 
+      {/* ── 리듬 ───────────────────────────────────────────────
+          위쪽 구분선을 이 컴포넌트가 직접 그린다 — 401이면 섹션이 통째로 사라지는데,
+          구분선이 밖에 있으면 빈 줄 두 개가 겹쳐 남는다. */}
+      <RhythmSection />
+
       <div className="border-t border-line-2" />
 
       {/* ── 스프레드시트 ──────────────────────────────────────
           연결은 터미널(just sheets-setup)이 맡는다 — 구글 승인을 브라우저에서 밟아야 해서
           서버가 대신할 수 없다. 연결된 뒤로는 여기서 끝나야 한다. */}
-      <RhythmSection />
-
       <SheetsSection />
 
       <div className="border-t border-line-2" />

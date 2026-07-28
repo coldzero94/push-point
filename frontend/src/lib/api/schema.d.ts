@@ -420,17 +420,33 @@ export interface components {
             aliases?: string[];
             facet?: components["schemas"]["TagFacet"];
         };
-        /** @description 통계 응답 (iOS 위젯용 — 위젯 활용은 M6) */
+        /** @description 통계 응답. iOS 통계 탭·웹 설정의 리듬 섹션이 소비한다 (위젯 활용은 M6). */
         Stats: {
             total_links: number;
+            /**
+             * @description by_day 창의 **마지막 7칸 합** — 오늘 포함 최근 7일.
+             *     화면이 이 값과 by_day에서 파생한 "지난주 대비"를 한 문장 안에 나란히
+             *     놓으므로 기준이 같아야 한다.
+             */
             links_this_week: number;
             by_tag: {
                 name: string;
                 count: number;
             }[];
-            /** @description 최근 30일 일별 저장 수 */
+            /**
+             * @description 최근 30일 일별 저장 수. **세 가지를 보장한다**:
+             *
+             *     1. 항상 정확히 30개 — 저장이 없는 날도 count 0으로 들어 있다
+             *     2. date 오름차순
+             *     3. 마지막 원소가 **서버 로컬타임 기준 오늘**
+             *
+             *     이 보장이 없던 시절에는 GROUP BY 결과를 그대로 줘서 빈 날의 행이
+             *     아예 없었고, 배열을 위치로 인덱싱한 클라이언트가 조용히 틀렸다
+             *     (웹·iOS 둘 다 그랬다 — 2026-07-28). 3번 덕분에 클라이언트는 "오늘"을
+             *     자기 타임존으로 추측할 필요가 없다: 뒤에서부터 세면 된다.
+             */
             by_day: {
-                /** @description YYYY-MM-DD (localtime) */
+                /** @description YYYY-MM-DD (서버 로컬타임) */
                 date: string;
                 count: number;
             }[];

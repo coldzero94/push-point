@@ -212,7 +212,9 @@ type Stats struct {
 	TotalLinks    int64
 	LinksThisWeek int64
 	ByTag         []TagCount
-	ByDay         []DayCount // 최근 30일
+	// ByDay는 **항상 정확히 30개**이고, 오름차순이며, 마지막 원소가 서버 로컬타임 기준
+	// 오늘이다. 저장이 없는 날도 Count 0으로 들어 있다 — 자세한 이유는 Stats() 주석.
+	ByDay []DayCount
 }
 
 // Store는 저장 계층 인터페이스. 모든 쓰기는 writer 커넥션의 트랜잭션에서 수행하고,
