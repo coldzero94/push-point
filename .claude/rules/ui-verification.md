@@ -6,9 +6,15 @@ Three tools now cover this. They are **not alternatives**; they do different job
 
 | | Job | Committed assets | Command |
 |---|---|---|---|
-| **Maestro** | Read the screen, drive it, keep portable flows | `maestro/*.yaml` | `just flow [file]` |
-| **AXe** | Screenshot and coordinate input, no test file needed | none | `axe` (see below) |
-| **XCUITest** | Deterministic CI gate with seeded fixtures | `ios/PushPointUITests/` | `just ios-uitest` |
+| **Maestro** | Read the screen, drive it, keep portable flows — **iOS and web** | `maestro/*.yaml` | `just flow [file]` |
+| **AXe** | Screenshot and coordinate input, no test file needed (iOS) | none | `axe` (see below) |
+| **XCUITest** | Deterministic CI gate with seeded fixtures (iOS) | `ios/PushPointUITests/` | `just ios-uitest` |
+| **Chrome headless** | Rasterize an SVG/HTML, screenshot a URL | none | see "Web" below |
+
+**Web screens can be inspected.** `list_devices` returns a `chromium` device; point a flow
+at a URL instead of an `appId`. Do not repeat the claim that they cannot — it sat in
+`docs/v2/13-CLIENT-PARITY.md` §4 for a day without anyone calling `list_devices`, and it
+was used to justify shipping web UI on "it typechecks and builds".
 
 ## Reach for these in this order
 
@@ -62,3 +68,46 @@ Target rows in long lists by `accessibilityIdentifier`, not by display text: the
 ## The duplication to watch
 
 Maestro flows and XCUITest cases both describe the same screens. That is two sets of assets to update per UI change, which is exactly what the sweep rule in CLAUDE.md exists to prevent. It is tolerable now because the two cover different ground (structure-on-real-data vs behaviour-on-fixtures). **If they start asserting the same things, converge on one** — and the one to keep is whichever runs in CI.
+
+## Web
+
+Serve the real thing, not a mock: `just release` then run the binary with
+`PUSHPOINT_DATA_DIR` and `PUSHPOINT_API_KEY` pointed at a scratch directory, so the
+embedded SPA and the API share an origin exactly as they do in production.
+
+```
+maestro: device_id "chromium", flow starts `url:` + `openLink:` (not appId/launchApp)
+key entry: tapOn {id: "apikey", index: 1} → inputText → tapOn {text: "저장", below: "API 키"}
+```
+
+Chrome headless covers what Maestro does not — rasterizing an SVG at a fixed size, or
+screenshotting a URL without a driver session:
+
+```
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+  --screenshot=out.png --window-size=1024,1024 --hide-scrollbars "file://$PWD/page.html"
+```
+
+Two traps, both hit for real:
+
+- **Chrome has a minimum window size.** `--window-size=16,16` does not scale the page down;
+  it screenshots the top-left 16px of a full-size canvas, which for an icon is empty
+  background. Render once at a large size and resample with `sips -Z`.
+- **A page served by `python3 -m http.server` has no charset**, so Korean renders as mojibake.
+  Put `<meta charset="utf-8">` in any scratch HTML you intend to look at.
+
+### The Tailwind scale is explicit — off-scale utilities are silently dropped
+
+`frontend/tailwind.css` resets `--spacing-*` and `--radius-*` to `initial` and defines only
+**2 4 6 8 12 16 20 24 32 40 56 80** (the number *is* the pixel value). So `h-64`, `gap-1` and
+`rounded-xs` produce **a class with no CSS** — no lint error, no type error, nothing on screen.
+A loading skeleton written as `h-64` reserved no height at all. Dimensions outside the 12 steps
+belong in `--size-*` and are used as `h-(--size-name)`.
+
+## What driving finds, and what it does not
+
+Every defect in this file's opening list was found by *looking*. Reading the diff found none
+of them. But the reverse is also true and worth stating: driving the app has never found an
+error path, a cancellation bug, or a race. The one such defect this project shipped — a poller
+that replaced the list with page one and discarded pagination — was caught by **XCUITest**, not
+by any amount of tapping. Use both; they do not overlap.
