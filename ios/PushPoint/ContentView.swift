@@ -14,6 +14,8 @@ struct ContentView: View {
     @Binding var filter: ListFilter?
 
     @EnvironmentObject private var backend: Backend
+    /// 백그라운드에서는 폴링하지 않는다 — 화면에 없는 목록을 갱신할 이유가 없다.
+    @Environment(\.scenePhase) private var scenePhase
     @State private var links: [Components.Schemas.Link] = []
     @State private var loadError: String?
     /// 방금 지운 링크. 되돌릴 수 있는 동안만 들고 있는다.
@@ -44,6 +46,9 @@ struct ContentView: View {
     @State private var loadingMore = false
     /// 목록 밀도. 기기에 남는다 — 매번 고르게 하면 그건 선택지가 아니라 잡일이다.
     @AppStorage("pushpoint.density") private var density: ListDensity = .card
+    /// 앱 안에서 링크를 저장하는 시트. 공유 시트만 있던 시절에는 앱을 켜 놓고도
+    /// 링크를 넣을 방법이 없었다(SaveSheet 주석).
+    @State private var saving = false
 
     var body: some View {
         NavigationStack {
@@ -61,7 +66,14 @@ struct ContentView: View {
                         }
                         .accessibilityLabel("\(density.next.label)로 보기")
                     }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { saving = true } label: { Image(systemName: "plus") }
+                            .accessibilityLabel("링크 저장")
+                    }
                 }
+            .sheet(isPresented: $saving) {
+                SaveSheet(onSave: saveLink)
+            }
             .navigationDestination(item: $opening) { target in
                 LinkDetailView(linkID: target.id,
                                facetOf: { facets[$0] ?? .neutral },
@@ -72,6 +84,18 @@ struct ContentView: View {
         // 탭을 나누면 "필터가 걸린 목록"과 "검색 결과"라는 거의 같은 두 화면을 사용자가
         // 구분해 가며 써야 한다. `.searchable`은 iOS가 이미 가르쳐 둔 자리이기도 하다.
         .searchable(text: $query, prompt: "제목 · 메모 · 태그")
+        // **진행 중인 링크가 있는 동안만 폴링한다.**
+        //
+        // 이 앱의 핵심 주장은 "저장하면 3초 안에 분류된다"인데, iOS에는 폴러가 없어서
+        // 그 순간이 화면에 나타나지 않았다(2026-07-29 발견). 공유 시트로 저장한 링크가
+        // 도메인만 적힌 빈 카드로 남아 있다가, 사용자가 손으로 당겨 새로고침해야
+        // 제목·태그·커버가 채워졌다 — 제품이 하는 일 중 가장 중요한 것이 보이지 않았다.
+        // 디자인 시스템 §1.4 S2가 "폴러가 링크를 갱신하면 슬롯이 켜진다"고 규정해 둔
+        // 그 폴러다.
+        //
+        // 타이머가 아니라 **상태 조건**이다: 종단이 아닌 링크가 하나라도 있으면 돌고,
+        // 전부 끝나면 스스로 멈춘다. 그래서 아무 일도 없는 아카이브에서는 요청이 0이다.
+        .task(id: pollKey) { await pollWhileWorking() }
         .task(id: backend.state) { await load() }
         .task(id: filter) { await load() }
         // 타이핑마다 요청을 보내지 않는다. 한 글자마다 FTS를 때리면 폰 안에서 도는
@@ -110,8 +134,17 @@ struct ContentView: View {
                 }
             } else if links.isEmpty {
                 refreshableState {
-                    ContentUnavailableView("아직 저장한 링크가 없습니다", systemImage: "tray",
-                                           description: Text("공유 시트로 링크를 보내면 여기에 쌓입니다."))
+                    // **액션이 있는 빈 상태다.** 예전에는 "공유 시트로 보내면 쌓입니다"만
+                    // 적혀 있어서, 읽고 나서 할 수 있는 일이 앱을 나가는 것뿐이었다.
+                    ContentUnavailableView {
+                        Label("아직 저장한 링크가 없습니다", systemImage: "tray")
+                    } description: {
+                        Text("다른 앱에서 공유 시트로 보내거나, 여기서 주소를 붙여넣어 저장하세요.")
+                    } actions: {
+                        Button("링크 저장") { saving = true }
+                            .buttonStyle(.borderedProminent)
+                            .tint(PP.Palette.accent)
+                    }
                 }
             } else {
                 board
@@ -146,8 +179,15 @@ struct ContentView: View {
             }
         } else if results.isEmpty {
             refreshableState {
-                ContentUnavailableView("결과가 없습니다", systemImage: "magnifyingglass",
-                                       description: Text("\u{201C}\(query)\u{201D}와 맞는 링크를 찾지 못했습니다."))
+                // 빈 결과에도 나갈 길을 준다. 검색어를 지우는 것이 유일하게 확실한
+                // 다음 동작인데, 그걸 사용자가 스스로 알아내게 두면 화면이 막힌다.
+                ContentUnavailableView {
+                    Label("결과가 없습니다", systemImage: "magnifyingglass")
+                } description: {
+                    Text("\u{201C}\(query)\u{201D}와 맞는 링크를 찾지 못했습니다.")
+                } actions: {
+                    Button("검색어 지우기") { query = "" }
+                }
             }
         } else {
             List {
@@ -427,6 +467,20 @@ struct ContentView: View {
     /// undelete한다(별도 복구 엔드포인트가 없다). 단, 그 경로는 링크를 pending으로
     /// 되돌리고 다시 스크랩하므로 **태그·요약은 새로 만들어진다**. 링크가 돌아오는 것이
     /// 요점이고 그 값들은 어차피 파생물이라 받아들일 만하다.
+    /// 시트에서 온 저장. 실패하면 **문구를 돌려주고 시트를 열어 둔다** — 닫아 버리면
+    /// 방금 친 주소를 잃는다.
+    private func saveLink(_ url: String, _ note: String) async -> String? {
+        guard let client = backend.client else { return "서버가 아직 준비되지 않았습니다." }
+        do {
+            _ = try await client.createLink(.init(body: .json(
+                .init(url: url, note: note.isEmpty ? nil : note))))
+            await load()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     private func undo(_ link: Components.Schemas.Link) async {
         guard let client = backend.client else { return }
         justDeleted = nil
@@ -528,6 +582,45 @@ struct ContentView: View {
     // MARK: - 로드
 
     /// 첫 장. 커서를 버리고 처음부터 다시 받는다 — 당겨서 새로고침·필터 변경이 여기로 온다.
+    /// 폴링을 다시 시작해야 하는 조건. 진행 중 링크의 **집합이 바뀔 때만** 값이 바뀌므로
+    /// 매 갱신마다 task가 재시작되지 않는다.
+    private var pollKey: String {
+        let working = links.filter { $0.status != .done && $0.status != .failed }
+        return working.isEmpty ? "idle" : working.map { String($0.id) }.joined(separator: ",")
+    }
+
+    private func pollWhileWorking() async {
+        // 종단이 아닌 링크가 없으면 아무것도 하지 않는다.
+        guard links.contains(where: { $0.status != .done && $0.status != .failed }) else { return }
+        // 워커가 스크랩+태깅에 쓰는 시간이 초 단위라 1.5초면 "채워지는" 것으로 읽히고,
+        // 인프로세스 서버라 요청 비용이 사실상 0이다.
+        while !Task.isCancelled, scenePhase == .active {
+            try? await Task.sleep(for: .milliseconds(1500))
+            if Task.isCancelled { return }
+            await pollRefresh()
+            if !links.contains(where: { $0.status != .done && $0.status != .failed }) { return }
+        }
+    }
+
+    /// 폴링용 갱신. **`load()`를 부르면 안 된다** — 그건 links를 1페이지로 갈아치워서
+    /// 이미 스크롤해 받아 둔 뒷장을 버린다. 실제로 그렇게 만들었다가 페이지네이션
+    /// UI 테스트가 잡았다(2026-07-29).
+    ///
+    /// 진행 중인 링크는 거의 항상 목록 맨 위에 있으므로 첫 장만 다시 받아 **제자리로
+    /// 덮어쓴다.** 커서와 뒷장은 건드리지 않는다.
+    private func pollRefresh() async {
+        guard case .running = backend.state, let client = backend.client else { return }
+        guard let page = try? await fetchPage(client, cursor: nil) else { return }
+        var byID = [Int: Int]()
+        for (i, l) in links.enumerated() { byID[l.id] = i }
+        var fresh: [Components.Schemas.Link] = []
+        for l in page.links {
+            if let i = byID[l.id] { links[i] = l } else { fresh.append(l) }
+        }
+        // 다른 경로(공유 시트)로 들어온 링크는 앞에 붙인다.
+        if !fresh.isEmpty { links.insert(contentsOf: fresh, at: 0) }
+    }
+
     private func load() async {
         guard case .running = backend.state, let client = backend.client else { return }
         do {
