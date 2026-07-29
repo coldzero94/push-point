@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   activeDays,
+  groupedTags,
   cappedStreak,
   dominantFacet,
   streak,
@@ -171,5 +172,47 @@ describe('dominantFacet', () => {
 
   it('태그가 없으면 null', () => {
     expect(dominantFacet([], facetOf({}))).toBeNull()
+  })
+})
+
+describe('groupedTags', () => {
+  const facetOf = (map: Record<string, TagFacet>) => (n: string) => map[n] ?? 'neutral'
+
+  it('facet 순서는 개수가 아니라 TAG_FACETS 고정이다', () => {
+    // life가 훨씬 많아도 craft가 먼저다. 개수로 재배치하면 화면을 열 때마다 같은
+    // 태그가 다른 자리에 있어 위치 기억이 무너진다.
+    const g = groupedTags(
+      [
+        { name: '뉴스', count: 90 },
+        { name: '개발', count: 3 },
+      ],
+      facetOf({ 뉴스: 'life', 개발: 'craft' }),
+    )
+    expect(g.map((x) => x.facet)).toEqual(['craft', 'life'])
+  })
+
+  it('묶음 안은 개수 내림차순, 동점은 이름순', () => {
+    const g = groupedTags(
+      [
+        { name: 'swift', count: 2 },
+        { name: 'golang', count: 9 },
+        { name: 'ai', count: 2 },
+      ],
+      facetOf({ swift: 'craft', golang: 'craft', ai: 'craft' }),
+    )
+    expect(g[0]?.tags.map((t) => t.name)).toEqual(['golang', 'ai', 'swift'])
+    expect(g[0]?.total).toBe(13)
+  })
+
+  it('빈 facet은 내보내지 않는다 — 0인 줄은 소음이다', () => {
+    const g = groupedTags([{ name: '개발', count: 1 }], facetOf({ 개발: 'craft' }))
+    expect(g).toHaveLength(1)
+  })
+
+  it('사전에 없는 태그는 neutral로 묶이고 사라지지 않는다', () => {
+    const g = groupedTags([{ name: '처음보는것', count: 4 }], facetOf({}))
+    expect(g).toEqual([
+      { facet: 'neutral', total: 4, tags: [{ name: '처음보는것', count: 4 }] },
+    ])
   })
 })
