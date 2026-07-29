@@ -20,4 +20,7 @@ enum AppGroup {
         else { return nil }
         return container.appendingPathComponent("data", isDirectory: true)
     }
+
+    /// 앱과 확장이 공유하는 UserDefaults. 확장에서 일어난 일을 본체 앱이 알아야 할 때 쓴다.
+    static var defaults: UserDefaults? { UserDefaults(suiteName: identifier) }
 }

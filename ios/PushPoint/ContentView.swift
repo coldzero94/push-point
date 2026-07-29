@@ -51,6 +51,8 @@ struct ContentView: View {
     /// 불러왔고 삭제만 실패한 것인데 **저장한 것이 전부 사라진 것처럼 보인다.**
     /// 검색 쪽은 같은 이유로 이미 채널을 나눠 뒀다(searchError 주석).
     @State private var actionError: String?
+    /// 확장이 알림을 못 띄우고 버린 횟수. 0보다 크면 배너로 알린다.
+    @State private var droppedNotices = 0
     /// 목록 밀도. 기기에 남는다 — 매번 고르게 하면 그건 선택지가 아니라 잡일이다.
     @AppStorage("pushpoint.density") private var density: ListDensity = .card
     /// 앱 안에서 링크를 저장하는 시트. 공유 시트만 있던 시절에는 앱을 켜 놓고도
@@ -59,7 +61,10 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            content
+            VStack(spacing: 0) {
+                notificationBanner
+                content
+            }
                 .background(PP.Palette.canvas)
                 .navigationTitle("Push-Point")
                 .toolbar {
@@ -103,6 +108,16 @@ struct ContentView: View {
         // 타이머가 아니라 **상태 조건**이다: 종단이 아닌 링크가 하나라도 있으면 돌고,
         // 전부 끝나면 스스로 멈춘다. 그래서 아무 일도 없는 아카이브에서는 요청이 0이다.
         .task(id: pollKey) { await pollWhileWorking() }
+        // 앱이 앞으로 나올 때마다 다시 본다 — 확장은 앱이 없는 동안 돈다.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            droppedNotices = AppGroup.defaults?.integer(forKey: SaveNotifier.droppedKey) ?? 0
+            // 권한이 다시 켜졌으면 배너를 치우고 카운트도 비운다.
+            if droppedNotices > 0, await SaveNotifier.canNotify() {
+                AppGroup.defaults?.set(0, forKey: SaveNotifier.droppedKey)
+                droppedNotices = 0
+            }
+        }
         .task(id: backend.state) { await load() }
         .task(id: filter) { await load() }
         // 타이핑마다 요청을 보내지 않는다. 한 글자마다 FTS를 때리면 폰 안에서 도는
@@ -128,6 +143,37 @@ struct ContentView: View {
             guard actionError != nil else { return }
             try? await Task.sleep(for: .seconds(5))
             if !Task.isCancelled { actionError = nil }
+        }
+    }
+
+    /// 공유 시트로 저장한 결과를 사용자가 **볼 수 없는 상태**임을 알린다.
+    ///
+    /// 확장은 화면을 그리지 않고 즉시 닫히므로 알림이 유일한 통로다. 권한이 없으면
+    /// 성공·중복·실패가 전부 "아무 일도 없음"으로 똑같이 보인다 — 저장된 것과 잃은 것을
+    /// 구분할 수 없다는 뜻이고, 아카이브에서 가장 나쁜 실패 방식이다.
+    @ViewBuilder
+    private var notificationBanner: some View {
+        if droppedNotices > 0 {
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "bell.slash.fill").font(PP.Typo.label)
+                    Text("알림이 꺼져 있어 공유 저장 결과를 알 수 없습니다 (\(droppedNotices)건)")
+                        .font(PP.Typo.label)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 4)
+                    Text("설정 열기").font(PP.Typo.label).underline()
+                }
+                .foregroundStyle(PP.Palette.fg1)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(PP.Palette.warnTint)
+            }
+            .buttonStyle(.plain)
         }
     }
 
