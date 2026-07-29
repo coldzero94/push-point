@@ -34,7 +34,7 @@ export const FACET_TOKENS: Record<TagFacet, { ink: string; tint: string; cover: 
 export const FACET_LABELS: Record<TagFacet, string> = {
   craft: '만드는 것',
   media: '형식',
-  life: '일 바깥',
+  life: '세상과 일상',
   neutral: '분류 없음',
 }
 

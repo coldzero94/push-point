@@ -15,11 +15,10 @@ import { Link } from '@tanstack/react-router'
 import { useStats } from '../hooks/useStats'
 import { useTags } from '../hooks/useTags'
 import { isUnauthorized } from '../lib/api/client'
-import { activeDays, cappedStreak, dominantFacet, groupedTags, streak, weekOverWeek, weekdayCounts } from '../lib/rhythm'
+import { activeDays, cappedStreak, daysSinceLastSave, groupedTags, streak } from '../lib/rhythm'
 import { FACET_LABELS } from '../lib/tags/facet'
 import type { Stats, TagFacet } from '../lib/api/types'
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const
 
 // facet -> 점 색. **리터럴이어야 한다** — `bg-${token}`은 Tailwind 스캐너가 못 보고
 // CSS가 생성되지 않아 점이 투명해진다(클래스는 붙고 화면만 틀리는 종류).
@@ -105,12 +104,10 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
   const active = activeDays(s.by_day)
   const groups = groupedTags(s.by_tag, facetOf)
   const max = Math.max(1, ...s.by_day.map((d) => d.count))
-  const weekdays = weekdayCounts(s.by_day)
-  const peak = Math.max(...weekdays)
 
   return (
     <div className="space-y-16">
-      <p className="text-body text-fg-1">{narrative(s, facetOf)}</p>
+      <p className="text-body text-fg-1">{narrative(s)}</p>
 
       <p className="text-body text-accent">{goalLine(days, cappedStreak(s.by_day, days))}</p>
 
@@ -138,45 +135,6 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
         </div>
       </div>
 
-      {/* 30일 막대는 "얼마나 꾸준한가"에 답하지만 "언제"에는 답하지 못한다 — iOS의
-          `언제 저장하나`와 같은 화면이다(11 §8 (3-1), 13 §2 ① 축). */}
-      {peak > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-baseline justify-between">
-            <span className="text-label text-fg-3">언제 저장하나</span>
-            <span className="text-label text-fg-3">
-              {WEEKDAYS[weekdays.indexOf(peak)]}요일에 가장 많이
-            </span>
-          </div>
-          {/* 막대와 라벨을 **두 줄로 나눈다.** 한 칸 안에 세로로 쌓으면 막대의 height:%가
-              높이 미정인 flex-col 부모에 걸려 0으로 접힌다 — 타입도 빌드도 통과하고
-              화면에서만 사라지는 종류라, 실제로 브라우저에 띄워 보고 찾았다(2026-07-28). */}
-          <div className="flex h-(--size-weekday) items-end gap-4">
-            {weekdays.map((n, i) => (
-              // 높이로만 말한다 — 라벨 7개면 축이 따로 필요 없다.
-              <div
-                key={WEEKDAYS[i]}
-                className={n > 0 ? 'flex-1 rounded-bar bg-accent' : 'flex-1 rounded-bar bg-line-2'}
-                style={{ height: `${Math.max(n > 0 ? 10 : 3, (n / peak) * 100)}%` }}
-              />
-            ))}
-          </div>
-          <div className="flex gap-4">
-            {WEEKDAYS.map((label, i) => (
-              <span
-                key={label}
-                className={
-                  weekdays[i] === peak
-                    ? 'flex-1 text-center text-label text-fg-1'
-                    : 'flex-1 text-center text-label text-fg-3'
-                }
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* 무엇을 모았나 — iOS와 같은 묶음이다(13 §1 ① 축).
           예전에는 상위 5개를 평면으로 늘어놨는데, 그러면 "내가 무엇에 관심이 있나"라는
@@ -219,45 +177,47 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
 }
 
 /**
- * 데이터에서 한 문단을 만든다 — 지난주 대비·지배 관심사·주 활동 요일까지 담아
- * "무엇이 어떻게 바뀌었나"를 읽고 끝낼 수 있게 한다.
+ * 화면이 사람에게 하는 말. **지지되는 수만 쓴다.**
  *
- * iOS `StatsView.narrative`와 **같은 문장·같은 순서**여야 한다. 두 클라이언트가 같은
- * 데이터로 다른 말을 하면 어느 쪽이 맞는지 사용자가 판단해야 한다. 2026-07-28까지는
- * 실제로 갈라져 있었다 — 관심사 문장을 고르는 순서가 달랐다(`dominantFacet` 주석).
+ * 예전 문장은 네 절이었고 그중 둘을 데이터가 받치지 못했다(14 §1). "지난주보다 N개"는
+ * 행동이 전혀 안 변해도 평균 2.41개가 나오고 방향 단어가 사흘에 한 번 뒤집혔다.
+ * "최근 30일은 X요일에 가장 많이"는 **어떤 저장 속도에서도** 성립하지 않았다 —
+ * 30일은 4주+2일이라 오늘·어제 요일만 5칸을 갖고 그 둘이 매일 회전하므로, 하루 두 건씩
+ * 한 번도 거르지 않는 사용자조차 매일 다른 답을 들었다.
+ *
+ * 남은 것은 **사실의 개수**다. 활성 일수와 연속일은 추론이 아니라 세는 것이고, 흔들릴
+ * 때는 진짜로 무언가 일어났다는 뜻이다. 이 프로젝트는 이미 그 둘을 알고 있었다 — M6
+ * 완료 판정을 `scripts/streak.sh`에 맡길 때 고른 것이 정확히 이 둘이다.
+ *
+ * facet 절도 뺐다. `by_tag`에 날짜 조건이 없어 전 기간 누계이므로 "이번 주"로 시작한
+ * 문단의 두 번째 자리에서 최근성 주장으로 읽혔는데, 실제로는 링크 100건이면 200일에
+ * 한 번 움직이는 영구 사실이다. iOS가 facet 도넛을 걷어내며 쓴 이유가 그대로 적용된다.
+ * 구성은 아래 "무엇을 모았나" 목록이 근거와 함께 보여 준다.
+ *
+ * 문장은 iOS와 **글자까지 같아야 한다**(13 §3). 두 화면이 같은 데이터로 다른 말을 하면
+ * 어느 쪽이 맞는지 사용자가 판단해야 한다.
  */
-function narrative(s: Stats, facetOf: (name: string) => TagFacet): string {
-  if (s.total_links === 0) return '아직 저장한 링크가 없어요'
-  if (s.links_this_week === 0) {
-    return `이번 주에는 아직 저장한 게 없네요. 지금까지 ${s.total_links}개를 모았어요.`
+function narrative(s: Stats): string {
+  if (s.total_links === 0) return '아직 아무것도 저장하지 않았어요.'
+
+  const active = activeDays(s.by_day)
+  const days = streak(s.by_day)
+  const capped = cappedStreak(s.by_day, days)
+
+  // 창 안에 아무것도 없으면 활성 일수는 0이고, "0일 저장했어요"는 정보가 아니다.
+  if (active === 0) return `최근 30일에는 저장한 게 없어요. 지금까지 ${s.total_links}개를 모았어요.`
+
+  const first = `최근 30일 가운데 ${active}일 저장했어요.`
+  if (days > 0) {
+    return capped
+      ? `${first} 30일 이상 이어가고 있어요.`
+      : `${first} 지금 ${days}일째 이어가고 있어요.`
   }
 
-  const out = [`이번 주에 ${s.links_this_week}개를 저장했어요.`]
-
-  // 지난주 대비 — "바뀌었다"는 비교가 있어야 성립한다. null은 "아직 비교할 수 없다"이고
-  // 0("같다")과 다르므로 문장을 아예 만들지 않는다.
-  const delta = weekOverWeek(s)
-  if (delta !== null) {
-    out.push(
-      delta > 0
-        ? `지난주보다 ${delta}개 많아요.`
-        : delta < 0
-          ? `지난주보다 ${-delta}개 적어요.`
-          : '지난주와 같은 수예요.',
-    )
-  }
-
-  // 무엇에 관심이 갔나 — facet 라벨은 iOS와 같은 단어를 쓴다(§8.1).
-  const facet = dominantFacet(s.by_tag, facetOf)
-  if (facet) out.push(`주로 '${FACET_LABELS[facet]}'에 관심이 갔고,`)
-
-  // 언제 — 이 절은 **30일치** 통계다. 앞의 두 문장이 이번 주 얘기라 그냥 이어 붙이면
-  // 이번 주 요일로 읽힌다. 기간을 말에 넣어서 그 오독을 막는다.
-  const counts = weekdayCounts(s.by_day)
-  const peak = Math.max(...counts)
-  if (peak > 0) out.push(`최근 30일은 ${WEEKDAYS[counts.indexOf(peak)]}요일에 가장 많이 저장했어요.`)
-
-  return out.join(' ')
+  // 끊긴 것은 사실이므로 말하되, 되돌리라고 요구하지 않는다. 자가추적 연구가
+  // 반복해서 찾아낸 이탈 원인이 정확히 그 반대편이다(14 §D1).
+  const gap = daysSinceLastSave(s.by_day)
+  return gap === null ? first : `${first} 마지막은 ${gap === 1 ? '어제' : `${gap}일 전`}이에요.`
 }
 
 /**

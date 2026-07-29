@@ -49,12 +49,15 @@ struct StatsView: View {
                                        description: Text("링크를 저장하면 여기에 리듬이 쌓입니다."))
                     .padding(.top, 40)
             } else {
+                // **순차 등장 안무를 뺐다.** §6.1의 모션 표에 없었고 §6.2는 목록 항목의
+                // stagger 진입을 이름으로 금지한다. §1.4의 절제 규칙도 "다른 화면 전환·목록
+                // 진입에 안무를 추가하지 않는다"고 못박는다 — 웹에는 없어서 두 클라이언트가
+                // 갈라져 있기도 했다. 문서에 없는 연출은 코드를 되돌리는 쪽으로 판정한다.
                 VStack(alignment: .leading, spacing: 26) {
-                    streakBlock(stats).reveal(0)
-                    rhythm(stats).reveal(1)
-                    weekly(stats).reveal(2)
-                    topTags(stats).reveal(3)
-                    needsAttention().reveal(4)
+                    streakBlock(stats)
+                    rhythm(stats)
+                    topTags(stats)
+                    needsAttention()
                 }
             }
         } else if let loadError {
@@ -88,40 +91,60 @@ struct StatsView: View {
         }
     }
 
-    /// 데이터에서 문장을 만든다. 지난주 대비·지배 관심사·주 활동 요일까지 한 문단에 담아
-    /// "무엇이 어떻게 바뀌었나"를 읽고 끝낼 수 있게 한다.
+    /// 화면이 사람에게 하는 말. **지지되는 수만 쓴다.**
+    ///
+    /// 예전 문장은 네 절이었고 그중 둘을 데이터가 받치지 못했다(14 §1). "지난주보다 N개"는
+    /// 행동이 전혀 안 변해도 평균 2.41개가 나오고 방향 단어가 사흘에 한 번 뒤집혔다.
+    /// "최근 30일은 X요일에 가장 많이"는 **어떤 저장 속도에서도** 성립하지 않았다 —
+    /// 30일은 4주+2일이라 오늘·어제 요일만 5칸을 갖고 그 둘이 매일 회전하므로, 하루 두
+    /// 건씩 한 번도 거르지 않는 사용자조차 매일 다른 답을 들었다.
+    ///
+    /// 남은 것은 **사실의 개수**다. 활성 일수와 연속일은 추론이 아니라 세는 것이고,
+    /// 흔들릴 때는 진짜로 무언가 일어났다는 뜻이다. 이 프로젝트는 이미 그 둘을 알고
+    /// 있었다 — M6 판정을 `scripts/streak.sh`에 맡길 때 고른 것이 정확히 이 둘이다.
+    ///
+    /// facet 절도 뺐다. `by_tag`에 날짜 조건이 없어 전 기간 누계인데 "이번 주"로 시작한
+    /// 문단의 두 번째 자리에서 최근성 주장으로 읽혔다. 이 화면은 **같은 판단을 이미 한 번
+    /// 내렸다** — 아래 목록 주석의 facet 도넛 제거 이유가 그대로 이 절에도 적용된다.
+    ///
+    /// 웹과 **글자까지 같다**(13 §3).
     private func narrative(_ s: Components.Schemas.Stats) -> String {
-        let week = s.links_this_week
-        if s.total_links == 0 { return "아직 저장한 링크가 없어요" }
-        if week == 0 {
-            return "이번 주에는 아직 저장한 게 없네요. 지금까지 \(s.total_links)개를 모았어요."
+        if s.total_links == 0 { return "아직 아무것도 저장하지 않았어요." }
+
+        let active = Self.activeDays(s.by_day)
+        let days = streak(s.by_day)
+        let capped = days > 0 && days >= s.by_day.count
+
+        if active == 0 {
+            return "최근 30일에는 저장한 게 없어요. 지금까지 \(s.total_links)개를 모았어요."
         }
 
-        var sentences = ["이번 주에 \(week)개를 저장했어요."]
-
-        // 지난주 대비 — "바뀌었다"는 비교가 있어야 성립한다.
-        if let delta = weekOverWeek(s) {
-            switch delta {
-            case let d where d > 0: sentences.append("지난주보다 \(d)개 많아요.")
-            case let d where d < 0: sentences.append("지난주보다 \(-d)개 적어요.")
-            default: sentences.append("지난주와 같은 수예요.")
-            }
+        let first = "최근 30일 가운데 \(active)일 저장했어요."
+        if days > 0 {
+            return capped
+                ? "\(first) 30일 이상 이어가고 있어요."
+                : "\(first) 지금 \(days)일째 이어가고 있어요."
         }
 
-        // 무엇에 관심이 갔나 — facet 라벨은 웹과 같은 단어를 쓴다(§8.1).
-        // 아래 목록의 묶음과 같은 계산을 써서 문장과 화면이 어긋나지 않게 한다.
-        if let top = groupedTags(s).max(by: { $0.total < $1.total }), top.facet != .neutral {
-            sentences.append("주로 '\(top.facet.label)'에 관심이 갔고,")
-        }
+        // 끊긴 것은 사실이므로 말하되, 되돌리라고 요구하지 않는다(14 §D1).
+        guard let gap = Self.daysSinceLastSave(s.by_day) else { return first }
+        return "\(first) 마지막은 \(gap == 1 ? "어제" : "\(gap)일 전")이에요."
+    }
 
-        // 언제 — 요일은 습관에 대한 정보다.
-        let counts = weekdayCounts(s.by_day)
-        if let peak = counts.max(), peak > 0, let index = counts.firstIndex(of: peak) {
-            // 이 절은 **30일치** 통계다. 앞의 두 문장이 이번 주 얘기라 그냥 이어 붙이면
-            // 이번 주 요일로 읽힌다. 기간을 말에 넣어서 그 오독을 막는다.
-            sentences.append("최근 30일은 \(Self.weekdayNames[index])요일에 가장 많이 저장했어요.")
+    /// 30일 창 안에서 저장한 날의 수. 웹 `activeDays`와 같은 계산이다.
+    private static func activeDays(_ byDay: Components.Schemas.Stats.by_dayPayload) -> Int {
+        byDay.filter { $0.count > 0 }.count
+    }
+
+    /// 마지막 저장이 며칠 전인가. 창에 아무것도 없으면 nil.
+    ///
+    /// **위치로 센다** — 계약이 `by_day`를 "정확히 30개, 마지막이 서버 로컬 오늘"로
+    /// 보장하므로 뒤에서부터 걸으면 끝이고, 날짜 연산이 없으니 타임존도 없다.
+    private static func daysSinceLastSave(_ byDay: Components.Schemas.Stats.by_dayPayload) -> Int? {
+        for (i, d) in byDay.enumerated().reversed() where d.count > 0 {
+            return byDay.count - 1 - i
         }
-        return sentences.joined(separator: " ")
+        return nil
     }
 
     private func goalLine(_ days: Int, _ capped: Bool) -> String {
@@ -133,28 +156,6 @@ struct StatsView: View {
         }
     }
 
-    /// 최근 7**칸**과 그 앞 7칸을 비교한다. 창이 빈 날까지 채운 30칸이라(계약 보장)
-    /// 칸 = 날이고, 뒤에서 센다.
-    ///
-    /// 2026-07-28 이전에는 이 계산이 틀려 있었다. by_day가 GROUP BY 결과라 저장이 있는
-    /// 날만 행이 있었고, `suffix(7)`은 "최근 7일"이 아니라 "저장이 있던 마지막 7행"이라
-    /// 한 달에 걸친 7행을 "이번 주"로 세고 있었다. 서버가 창을 채우게 바꿔서 고쳤다.
-    ///
-    /// nil은 "아직 비교할 수 없다"이고 0("같다")과 다르다. 판정 기준은 **히스토리 14일**
-    /// 이다 — 창 안의 첫 저장이 14일 이상 전이거나, 창보다 오래된 링크가 아예 있거나
-    /// (`total_links`가 창 합계보다 큼). 뒤 조건이 오래 쉰 사용자를 신규로 취급하지 않게 한다.
-    private func weekOverWeek(_ s: Components.Schemas.Stats) -> Int? {
-        let byDay = s.by_day
-        guard byDay.count >= 14 else { return nil }
-
-        let inWindow = byDay.reduce(0) { $0 + $1.count }
-        let daysOfHistory = byDay.firstIndex { $0.count > 0 }.map { byDay.count - $0 } ?? 0
-        guard daysOfHistory >= 14 || s.total_links > inWindow else { return nil }
-
-        let recent = byDay.suffix(7).reduce(0) { $0 + $1.count }
-        let prior = byDay.suffix(14).prefix(7).reduce(0) { $0 + $1.count }
-        return recent - prior
-    }
 
     /// 마지막 칸(=오늘)부터 거슬러 올라가며 저장이 있는 날을 센다.
     ///
@@ -223,72 +224,6 @@ struct StatsView: View {
                 Text("오늘").font(PP.Typo.label).foregroundStyle(PP.Palette.fg3)
             }
         }
-    }
-
-    // MARK: - 언제
-
-    /// 요일별 패턴 — "나는 언제 저장하나".
-    ///
-    /// 30일 막대는 "얼마나 꾸준한가"에는 답하지만 "언제"에는 답하지 못한다. 저장이
-    /// 평일 업무 중에 몰리는지 주말에 몰리는지는 자기 습관에 대한 정보이고,
-    /// `by_day`의 날짜에서 요일을 뽑으면 서버 변경 없이 알 수 있다.
-    @ViewBuilder
-    private func weekly(_ s: Components.Schemas.Stats) -> some View {
-        let counts = weekdayCounts(s.by_day)
-        let peak = counts.max() ?? 0
-        if peak > 0 {
-            VStack(alignment: .leading, spacing: 10) {
-                sectionTitle("언제 저장하나", trailing: busiestLabel(counts))
-                HStack(alignment: .bottom, spacing: 6) {
-                    ForEach(0 ..< 7, id: \.self) { index in
-                        VStack(spacing: 5) {
-                            // 높이로만 말한다 — 라벨 7개면 축이 따로 필요 없다.
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(counts[index] > 0 ? PP.Palette.accent : PP.Palette.line2)
-                                .frame(height: barHeight(counts[index], peak))
-                            Text(Self.weekdayNames[index])
-                                .font(PP.Typo.label)
-                                .foregroundStyle(counts[index] == peak && peak > 0
-                                                 ? PP.Palette.fg1 : PP.Palette.fg3)
-                        }
-                    }
-                }
-                .frame(height: 76, alignment: .bottom)
-            }
-        }
-    }
-
-    private static let weekdayNames = ["일", "월", "화", "수", "목", "금", "토"]
-
-    private func weekdayCounts(_ byDay: Components.Schemas.Stats.by_dayPayload) -> [Int] {
-        var counts = [Int](repeating: 0, count: 7)
-        let f = DateFormatter()
-        // **로케일을 박는다.** 없으면 사용자 지역을 따라가는데, 비그레고리력 지역
-        // (일본력·불기·민국)에서는 `yyyy`가 연호 연도로 해석돼 서버가 준 그레고리력
-        // 날짜가 하나도 파싱되지 않는다 — 요일 막대가 통째로 비고, 원인은 화면에
-        // 안 보인다. 달력도 같이 고정한다.
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.calendar = Calendar(identifier: .gregorian)
-        f.timeZone = .current
-        f.dateFormat = "yyyy-MM-dd"
-        let cal = Calendar(identifier: .gregorian)
-        for day in byDay where day.count > 0 {
-            guard let date = f.date(from: day.date) else { continue }
-            counts[cal.component(.weekday, from: date) - 1] += day.count
-        }
-        return counts
-    }
-
-    /// 가장 많이 저장한 요일을 문장으로 — 막대를 눈으로 비교하게 두지 않는다.
-    private func busiestLabel(_ counts: [Int]) -> String? {
-        guard let peak = counts.max(), peak > 0,
-              let index = counts.firstIndex(of: peak) else { return nil }
-        return "\(Self.weekdayNames[index])요일에 가장 많이"
-    }
-
-    private func barHeight(_ value: Int, _ peak: Int) -> CGFloat {
-        // 0도 흔적을 남긴다 — 막대가 없으면 "저장 안 한 요일"인지 알 수 없다.
-        peak > 0 ? Swift.max(CGFloat(value) / CGFloat(peak) * 52, 3) : 3
     }
 
     // MARK: - 구성
@@ -411,12 +346,16 @@ struct StatsView: View {
     }
 
     /// 시간 척추와 같은 serif 머리글 — 화면이 달라도 같은 목소리다.
+    /// **serif가 아니다.** §2.2.5는 serif의 용처를 "시간 척추 머리글 한 곳"으로 한정하고,
+    /// 그 규칙을 어기면 §1.3의 "본문 serif 금지"가 되살아난다고 못박는다. 이 화면은 그
+    /// 예외를 문서에 등재하지 않은 채 `spine`을 써 왔고, 웹의 같은 자리는 안 써서 두
+    /// 클라이언트도 갈라져 있었다. 문서를 고치는 대신 코드를 되돌린다 — 웹과 같은
+    /// `label` 슬롯이다.
     private func sectionTitle(_ text: String, trailing: String?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 9) {
             Text(text)
-                .font(PP.Typo.spine)
-                .tracking(PP.Tracking.spine)
-                .foregroundStyle(PP.Palette.fg1)
+                .font(PP.Typo.label)
+                .foregroundStyle(PP.Palette.fg3)
             Rectangle().fill(PP.Palette.line1).frame(height: 1)
             if let trailing {
                 Text(trailing)

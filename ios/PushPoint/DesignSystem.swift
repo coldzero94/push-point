@@ -117,7 +117,7 @@ extension PP {
             switch self {
             case .craft: "만드는 것"
             case .media: "형식"
-            case .life: "일 바깥"
+            case .life: "세상과 일상"
             case .neutral: "분류 없음"
             }
         }

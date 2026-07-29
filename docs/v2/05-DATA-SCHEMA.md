@@ -184,7 +184,7 @@ CREATE VIRTUAL TABLE links_fts USING fts5(
 |---|---|
 | `name` | 태그 이름. `COLLATE NOCASE`로 대소문자 무시 유니크 |
 | `aliases` | JSON 배열 문자열. 동의어·영문/한글 표기 — Phase A 문자열 매칭의 재료 |
-| `facet` | 분류 축. `craft`(만드는 데 직접 쓰는 레퍼런스) / `media`(형식 자체가 정보) / `life`(일 바깥과 나 자신) / `neutral`(미분류, 기본값). CHECK 값 집합은 `api/openapi.yaml`의 `TagFacet` enum과 같아야 하며 `scripts/lint_enums.sh`가 대조한다 |
+| `facet` | 분류 축. `craft`(만드는 데 직접 쓰는 레퍼런스) / `media`(형식 자체가 정보) / `life`(세상과 일상과 나 자신) / `neutral`(미분류, 기본값). CHECK 값 집합은 `api/openapi.yaml`의 `TagFacet` enum과 같아야 하며 `scripts/lint_enums.sh`가 대조한다 |
 
 v1의 `category`/`icon`/`usage_count` 컬럼은 폐기. 사용 수는 집계 컬럼 대신 쿼리로 구한다 (§6). v1의 `color`도 폐기했다 — **DB에 색을 저장하지 않는다.** 저장하는 것은 의미(`facet`)뿐이고, 그 facet을 어떤 색으로 그릴지는 각 클라이언트가 자기 토큰 체계로 정한다 (색은 라이트/다크 2벌이라 DB 컬럼 하나로 표현할 수 없고, 저장하는 순간 표현이 서버로 역전된다).
 
