@@ -374,6 +374,25 @@ ios-bind-check:
         echo "바인드 스탬프가 없습니다(이 게이트 이전에 만든 프레임워크입니다)."
         echo "just ios-bind 로 다시 만드세요 — 낡았는지 확인할 방법이 없습니다."; exit 1
     fi
+    # 캡처 규칙 사본이 실제로 있는지, 원본과 같은지 본다.
+    #
+    # **스탬프만으로는 못 잡는다** — 스탬프는 원본(extension/src/extract.js)을 해싱하므로
+    # 사본이 사라져도 값이 그대로다. 실제로 사본을 지우고 빌드하면 `ios-bind-check`가
+    # OK를 내고 빌드도 성공하는데, 확장 번들에 파일이 없어 **사파리 캡처가 조용히
+    # 죽는다**: Info.plist가 NSExtensionJavaScriptPreprocessingFile을 요구하지만 없으면
+    # 시스템이 전처리를 건너뛰고, 저장은 URL만으로 진행돼 본문·요약·태그가 사라진다.
+    # 배너는 그래도 "저장했습니다"라고 말한다(2026-07-29 재현).
+    copy=ios/PushPointShare/extract.js
+    if [ ! -f "$copy" ]; then
+        echo "캡처 규칙 사본이 없습니다: $copy"
+        echo "확장 번들에 안 들어가 사파리 본문 캡처가 조용히 죽습니다 — just ios-bind"
+        exit 1
+    fi
+    if ! cmp -s extension/src/extract.js "$copy"; then
+        echo "캡처 규칙 사본이 원본과 다릅니다 ($copy)"
+        echo "브라우저 확장과 iOS가 다른 규칙으로 본문을 뽑게 됩니다 — just ios-bind"
+        exit 1
+    fi
     want=$(bash scripts/bind_stamp.sh)
     got=$(cat "$f")
     if [ "$want" != "$got" ]; then
@@ -564,10 +583,23 @@ ios-gen:
 
 # 시뮬레이터용 앱 + 확장 빌드 (ad-hoc 서명 — 계정 불요, App Group 동작)
 ios-build device="iPhone 17": ios-bind-check ios-gen
+    #!/usr/bin/env bash
+    set -euo pipefail
     cd ios && xcodebuild -project PushPoint.xcodeproj -scheme PushPoint \
         -destination 'platform=iOS Simulator,name={{device}}' \
         -derivedDataPath .build \
         CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES build
+    # **산출물을 본다.** 입력 검사(ios-bind-check)는 빌드 전 상태만 알고, 리소스가
+    # 번들에 실제로 들어갔는지는 모른다 — XcodeGen에서 리소스 선언이 조용히 무시된
+    # 전례가 있다(테스트 타깃에 `resources:` 키를 썼다가 폰트가 안 들어갔다).
+    # Info.plist가 요구하는 파일이 없으면 시스템은 전처리를 건너뛰고, 저장은 URL만으로
+    # 진행돼 본문·요약·태그가 사라지는데 배너는 "저장했습니다"라고 말한다.
+    appex=$(find .build/Build/Products/Debug-iphonesimulator/PushPoint.app/PlugIns \
+              -maxdepth 1 -name '*.appex' | head -1)
+    if [ -n "$appex" ] && [ ! -f "$appex/extract.js" ]; then
+        echo "확장 번들에 extract.js가 없습니다 — 사파리 본문 캡처가 죽습니다"
+        exit 1
+    fi
 
 # 시뮬레이터에 설치·실행 (부팅 포함)
 ios-run device="iPhone 17": (ios-build device)

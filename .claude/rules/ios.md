@@ -18,6 +18,15 @@ paths:
 - **`ios/Frameworks/` is a gitignored local build product, and nothing about a `git pull` refreshes it.** Run `just ios-bind` after any change under `backend/` — `just ios-build` now depends on `just ios-bind-check`, which compares a content hash of the binding's inputs (non-test Go sources, `migrations/*.sql`, `go.mod`/`go.sum`, `extension/src/extract.js`) against the stamp `ios-bind` writes. It is a **local** gate: CI has neither macOS nor gomobile, exactly like `ios-api-gen-check`.
 - Why it exists: the binding was two days stale on 2026-07-28 and the app carried **30 of 42 tags** because migrations 0008–0011 were not in it. The symptom on screen was "why does this one link have no tags", and nothing pointed at the binding. Test files are excluded from the hash on purpose — a 15-minute rebind after editing a test is how a gate gets bypassed.
 
+- **The Safari capture rule is a build product too.** `ios/PushPointShare/extract.js` is
+  gitignored and copied by `just ios-bind` from `extension/src/extract.js`, the single
+  source. If it goes missing the build still succeeds and `Info.plist` still declares
+  `NSExtensionJavaScriptPreprocessingFile` — the system just skips preprocessing, the save
+  falls back to URL-only, and body, summary and most tags disappear **while the banner still
+  says 저장했습니다**. `ios-bind-check` verifies the copy exists and matches the source, and
+  `ios-build` additionally asserts it reached the `.appex` — the input check cannot see what
+  the bundle actually contains, and XcodeGen has silently dropped resources before.
+
 ## Custom fonts
 
 - The app ships **Wanted Sans / Geist Mono** (OFL) from `ios/PushPoint/Resources/Fonts/*.ttf`, registered via `UIAppFonts` in `project.yml`. Sources are the same files the web serves as woff2 (§10 2.2.1); iOS cannot read woff2, so the ttf is a conversion of the same original.
