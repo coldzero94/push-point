@@ -79,6 +79,11 @@
 
     /* tag facet — hue lock 168 / 112 / 318. neutral 은 토큰을 만들지 않는다(fg-2 + bg-hover) */
     --tag-craft-ink:#004E39; --tag-craft-tint:#E1F9EF;
+    /* 커버 바탕 — 칩 tint와 **다른 값**이다(§10 4.5.2). 칩 tint는 12px ink 텍스트가
+       읽히도록 잡은 밝은 값이라, 카드의 40%를 차지하는 커버에 쓰면 흰 사각형이 된다.
+       hue는 그대로 두고 L만 내렸다. 하한을 정하는 건 도메인 워드마크 대비(4.5:1)다. */
+    --cover-craft:#A7E4CB; --cover-media:#D5D9A4;
+    --cover-life:#E8C6F3;  --cover-neutral:#CED6D3;
     --tag-media-ink:#54570B; --tag-media-tint:#F2F5E0;
     --tag-life-ink:#4B2656;  --tag-life-tint:#FBEDFF;
 
@@ -111,6 +116,8 @@
 
     /* tag facet — hue 고정, L·C만 슬롯별. "다크에서 채도 −20%" 전역 공식을 쓰지 않는다 */
     --tag-craft-ink:#84E4C1; --tag-craft-tint:#0F2C22;
+    --cover-craft:#193A2E; --cover-media:#333519;
+    --cover-life:#3C2B42;  --cover-neutral:#2F3432;
     --tag-media-ink:#BFC573; --tag-media-tint:#262810;
     --tag-life-ink:#EEBBFE;  --tag-life-tint:#2E2033;
 

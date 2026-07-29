@@ -20,7 +20,7 @@ struct GeneratedCover: View {
         }
         // Canvas가 그리기 전에도 회색이 보이지 않도록 tint를 바닥에 깐다 —
         // R4의 "빈칸을 만들지 않는다"는 첫 프레임에도 적용된다.
-        .background(facet.tint)
+        .background(facet.cover)
         .overlay(alignment: .bottomLeading) {
             // 도메인 워드마크. 커버가 출처의 표식이 되려면 무늬만으로는 부족하다.
             Text(domain)

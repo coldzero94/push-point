@@ -100,6 +100,18 @@ extension PP {
             }
         }
 
+        /// 생성 커버의 바탕. **칩 tint와 다른 값이다**(§4.5.2) — 칩 tint는 12px ink
+        /// 텍스트가 읽히도록 잡은 밝은 값이고, 커버는 카드의 40%를 차지하는 면이라
+        /// 같은 값을 쓰면 흰 사각형이 된다. hue는 같고 L만 내렸다.
+        var cover: Color {
+            switch self {
+            case .craft: Color("coverCraft")
+            case .media: Color("coverMedia")
+            case .life: Color("coverLife")
+            case .neutral: Color("coverNeutral")
+            }
+        }
+
         /// 한글 라벨은 두 클라이언트가 **같은 단어**를 써야 한다(§8.1).
         var label: String {
             switch self {

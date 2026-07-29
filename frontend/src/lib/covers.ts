@@ -71,6 +71,10 @@ const CSS_VAR: Record<string, string> = {
   'tag-life-tint': '--tag-life-tint',
   'fg-2': '--fg-2',
   hover: '--bg-hover',
+  'cover-craft': '--cover-craft',
+  'cover-media': '--cover-media',
+  'cover-life': '--cover-life',
+  'cover-neutral': '--cover-neutral',
 }
 
 export type CoverColors = { ground: string; stroke: string }
@@ -91,7 +95,8 @@ export function coverColors(facet: TagFacet, el: Element): CoverColors {
   const style = getComputedStyle(el)
   const t = FACET_TOKENS[facet]
   const read = (token: string) => style.getPropertyValue(CSS_VAR[token] ?? '--fg-2').trim() || '#808D86'
-  return { ground: read(t.tint), stroke: read(t.ink) }
+  // 바탕은 칩 tint가 아니라 **커버 전용 토큰**이다 — 요구가 다르다(§10 4.5.2).
+  return { ground: read(t.cover), stroke: read(t.ink) }
 }
 
 /** Stroke alpha per pattern. `stack` fills rather than strokes, so it sits lower. */
