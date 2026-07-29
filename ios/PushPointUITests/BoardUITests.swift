@@ -226,7 +226,44 @@ final class BoardUITests: XCTestCase {
         XCTAssertLessThan(f.height, 120, "배너 히트 영역이 그려진 것보다 훨씬 크다")
     }
 
-    /// 목록이 길어 화면 밖에 있는 요소를 찾을 때까지 스크롤한다.
+    /// 조밀 모드가 **실제로 더 조밀해야** 한다.
+    ///
+    /// **조밀 모드에는 자동 게이트가 하나도 없었다.** 밀도 토글에 식별자가 없어 테스트가 누를
+    /// 수도 없었고, 그래서 재설계 대상인 쪽이 사각지대였다.
+    ///
+    /// **44pt 터치 하한은 여기서 단언하지 않는다.** 처음엔 그걸 넣었는데, 커버를 12pt로 줄이고
+    /// 패딩을 0으로 만들어도 통과했다 — `List`가 자체적으로 44pt 최소 행 높이를 보장하기
+    /// 때문이다. **실패할 수 없는 단언은 커버리지로 읽혀서 없는 것보다 나쁘다.** 하한은
+    /// 플랫폼이 지키고, 이 테스트는 플랫폼이 지켜 주지 않는 것을 본다.
+    ///
+    /// 한계: 높이만 본다. 가로로 무엇이 잘리는지는 트리에 없고 화면을 봐야 한다(CLAUDE.md).
+    func testCompactModeIsActuallyDenser() {
+        app.launch()
+
+        let toggle = app.buttons["density.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 8), "밀도 전환 버튼이 없다")
+
+        let title = app.staticTexts["Swift Concurrency 정리"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8), "카드가 안 뜬다")
+        // **셀을 재야 한다** — staticText의 높이는 제목 글자 높이(36pt)이지 행 높이가 아니다.
+        // 처음엔 그걸 비교해서 단언이 무의미했다.
+        let cellOf = { self.app.cells
+            .containing(.staticText, identifier: "Swift Concurrency 정리").firstMatch }
+        XCTAssertTrue(cellOf().waitForExistence(timeout: 5), "셀을 못 찾았다")
+        let cardHeight = cellOf().frame.height
+
+        toggle.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 5), "조밀 모드에서 카드가 사라졌다")
+
+        // 기본값은 카드이므로 한 번 누르면 조밀이다. `@AppStorage`가 이전 실행에서 남으면
+        // 방향이 반대가 되어 이 단언이 실패한다 — **실제로 그렇게 실패했고**, 그래서
+        // `UITestMode.resetSharedDefaults`가 표준 defaults의 밀도 키까지 비운다.
+        XCTAssertLessThan(cellOf().frame.height, cardHeight * 0.75,
+                          "조밀 행이 카드의 3/4보다 낮지 않다 — 밀도가 바뀌지 않았거나 "
+                              + "@AppStorage가 남았거나, 조밀이 조밀하지 않다")
+    }
+
+    /// 목록이 길어 화면 밖에 있는 요소를 찾을 때까지 스크롤한다.    /// 목록이 길어 화면 밖에 있는 요소를 찾을 때까지 스크롤한다.
     /// 못 찾으면 false — 무한히 밀면 실패가 타임아웃으로 위장된다.
     private func scrollToFind(_ element: XCUIElement, maxSwipes: Int = 8) -> Bool {
         if element.waitForExistence(timeout: 3), element.isHittable { return true }

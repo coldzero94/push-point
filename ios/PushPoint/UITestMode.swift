@@ -49,6 +49,15 @@ enum UITestMode {
     ///
     /// `seedDroppedFlag`가 있으면 그 값을 심는다 — 배너 자체를 검증하려면 필요하다.
     static func resetSharedDefaults() {
+        // **표준 defaults도 격리한다.** `@AppStorage`는 App Group이 아니라 표준 스위트를
+        // 쓰므로 `AppGroup.defaults`만 비우면 남는다. 목록 밀도가 그 예다 — 손으로 조밀
+        // 모드를 켜 두면 다음 UI 테스트가 그 상태로 시작하고, 밀도를 토글하는 테스트는
+        // 방향이 반대가 되어 실패한다. 실제로 그렇게 실패했다(2026-07-30).
+        //
+        // `droppedNotices`와 같은 부류이고 키만 다르다. 격리를 키마다 따로 기억해야 하는
+        // 구조 자체가 위험이라, 새 `@AppStorage`를 추가하면 여기도 함께 늘려야 한다.
+        UserDefaults.standard.removeObject(forKey: "pushpoint.density")
+
         guard let d = AppGroup.defaults else { return }
         let seeded = ProcessInfo.processInfo.arguments
             .firstIndex(of: seedDroppedFlag)
