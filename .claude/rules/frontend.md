@@ -27,3 +27,23 @@ The web app is a first-class, full-feature client on par with iOS (adopted 2026-
 - **Auth**: the API key is entered on the settings screen, stored in localStorage, and attached as `Authorization: Bearer` (parity with iOS). Do not add new auth exemptions, and do not ask for server-side loopback bypasses or relaxed auth (api.md rule — the only exemptions are healthz and thumbs).
 - **`dist/` is not committed** (build artifact — CI produces it with `just web-build`). Production serves `dist/` via `//go:embed all:dist` + `http.FileServerFS`, but the embed-serving code sits behind the `embed_frontend` build tag — without dist/ it fails to compile, so backend-only `just build` and CI stay green without the tag, and only releases run `web-build && go build -tags embed_frontend`.
 - Display fallback follows the same discipline as iOS: when the server returns an empty string for `title` (no og or title tag), show `domain` instead (then `url`) — preventing empty cells is the client's responsibility.
+
+## Tests
+
+- `just web-test` runs **vitest** over the pure logic in `src/lib/` (node environment, no DOM). Added 2026-07-28; before that `frontend/` had no runner at all and `just web-test` was a Go recipe that executed zero TypeScript. Component testing (jsdom/testing-library) is still an open decision.
+- **TZ is pinned to `America/Los_Angeles` in `vitest.config.ts` on purpose.** A mutation reverting the local-time date parse in `rhythm.ts` passes in KST, because east of Greenwich the UTC-parse trap cannot fire. A west-of-Greenwich zone is what gives the suite the power to catch it.
+- Rules implemented in more than one language keep a **shared fixture**, not a claim: `testdata/streak-cases.json` is read by both `rhythm.test.ts` and `scripts/streak.sh --self-test` (`just streak-selftest`). The sentence it replaced — "verified against four cases by hand" — could not be re-run and was wrong about two neighbouring rules.
+
+## The spacing and radius scales are explicit — off-scale classes do nothing
+
+`tailwind.css` resets `--spacing-*` and `--radius-*` to `initial` and defines exactly
+**2 4 6 8 12 16 20 24 32 40 56 80** (number = pixels), plus named radii
+(chip/control/thumb/card/panel/sheet/bar). Anything else — `h-64`, `gap-1`, `rounded-xs` —
+compiles to **a class with no CSS**: no lint error, no type error, and nothing on screen.
+A skeleton written `h-64` reserved no height at all and nobody noticed until the page was
+opened. Dimensions outside the 12 steps go in `--size-*` and are referenced as `h-(--size-name)`.
+
+## Looking at the screen
+
+Maestro's `chromium` device drives the real app — see `.claude/rules/ui-verification.md`.
+Serve it with `just release` + the binary so the SPA and API share an origin, not a mock.
