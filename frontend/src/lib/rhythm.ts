@@ -149,3 +149,45 @@ export function dominantFacet(
 }
 
 export { WINDOW as RHYTHM_WINDOW }
+
+export type TagGroup = {
+  facet: TagFacet
+  total: number
+  tags: readonly Stats['by_tag'][number][]
+}
+
+/**
+ * 태그를 facet으로 묶는다 — iOS `StatsView.groupedTags`와 같은 규칙.
+ *
+ * **facet 순서는 `TAG_FACETS` 고정이고 개수로 재배치하지 않는다.** 개수순으로 묶음을
+ * 흔들면 화면을 열 때마다 같은 태그가 다른 자리에 있어 위치 기억이 무너진다 — 이 목록의
+ * 값어치가 "저번에 여기 있었지"에서 오기 때문이다.
+ *
+ * 묶음 **안**은 개수 내림차순이다. 묶음 사이의 순서와 달리 여기서는 "무엇을 많이 모았나"가
+ * 곧 읽고 싶은 것이고, 태그 자체는 사전 순서에 아무 의미가 없다.
+ *
+ * 비어 있는 facet은 내보내지 않는다 — 0인 줄은 정보가 아니라 소음이다.
+ */
+export function groupedTags(
+  byTag: readonly Stats['by_tag'][number][],
+  facetOf: (name: string) => TagFacet,
+): TagGroup[] {
+  const bucket = new Map<TagFacet, Stats['by_tag'][number][]>()
+  for (const t of byTag) {
+    const f = facetOf(t.name)
+    const list = bucket.get(f)
+    if (list) list.push(t)
+    else bucket.set(f, [t])
+  }
+  const out: TagGroup[] = []
+  for (const facet of TAG_FACETS) {
+    const tags = bucket.get(facet)
+    if (!tags || tags.length === 0) continue
+    out.push({
+      facet,
+      total: tags.reduce((a, t) => a + t.count, 0),
+      tags: [...tags].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    })
+  }
+  return out
+}

@@ -7,16 +7,28 @@ import SwiftUI
 /// 토스트는 반대다 — 흔한 경우는 방해받지 않고, 실수했을 때만 손을 뻗으면 된다.
 struct UndoToast: View {
     let message: String
+    /// 액션 라벨. 되돌리기가 아닌 용도(변경 실패 알림)로도 쓰므로 고정하지 않는다.
+    var actionLabel: String = "실행 취소"
+    /// 실패 문구일 때 danger 색을 쓴다 — §4.10이 토스트에 상태 색을 허용하는 유일한 경우.
+    var isError: Bool = false
     let onUndo: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
+            if isError {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(PP.Typo.label)
+                    .foregroundStyle(PP.Palette.danger)
+            }
             Text(message)
                 .font(PP.Typo.body)
                 .foregroundStyle(PP.Palette.fg1)
-            Button("실행 취소", action: onUndo)
+                .lineLimit(2)
+            Button(actionLabel, action: onUndo)
                 .font(PP.Typo.label)
-                .foregroundStyle(PP.Palette.accent)
+                .foregroundStyle(PP.Palette.fg2)
+                // 44×44pt는 예외 없다(§7.5·§8.5). 텍스트 상자만으로는 12pt짜리 표적이다.
+                .frame(minWidth: 44, minHeight: 44)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

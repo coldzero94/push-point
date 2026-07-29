@@ -44,6 +44,13 @@ struct ContentView: View {
     /// 다음 장을 이미 받고 있는지. 없으면 마지막 카드가 화면에 머무는 동안 같은 요청이
     /// 여러 번 나간다 — onAppear는 스크롤 중 여러 번 불린다.
     @State private var loadingMore = false
+    /// **변경(삭제·재시도·되돌리기) 실패 전용 채널.**
+    ///
+    /// 예전에는 이것들이 `loadError`에 썼는데, 그러면 화면 전체가
+    /// "목록을 불러오지 못했습니다 / wifi.exclamationmark"로 바뀐다 — 목록은 멀쩡히
+    /// 불러왔고 삭제만 실패한 것인데 **저장한 것이 전부 사라진 것처럼 보인다.**
+    /// 검색 쪽은 같은 이유로 이미 채널을 나눠 뒀다(searchError 주석).
+    @State private var actionError: String?
     /// 목록 밀도. 기기에 남는다 — 매번 고르게 하면 그건 선택지가 아니라 잡일이다.
     @AppStorage("pushpoint.density") private var density: ListDensity = .card
     /// 앱 안에서 링크를 저장하는 시트. 공유 시트만 있던 시절에는 앱을 켜 놓고도
@@ -104,11 +111,24 @@ struct ContentView: View {
         // 확인창 대신 되돌리기. 확인창은 **모든** 삭제를 느리게 만들어 흔한 경우에
         // 세금을 매기고, 서버가 소프트 삭제라 되살릴 수단이 실제로 있다.
         .overlay(alignment: .bottom) {
+            // 되돌리기 토스트가 있으면 그것이 우선이다 — 되돌리기는 시간 제한이 있는
+            // 동작이고, 오류 문구는 그 위에 겹치지 않아야 한다.
             if let link = justDeleted {
                 UndoToast(message: "삭제했습니다") { Task { await undo(link) } }
+            } else if let actionError {
+                // **변경 실패는 여기서 말한다.** loadError로 보내면 화면 전체가
+                // "목록을 불러오지 못했습니다"가 되어 링크가 사라진 것처럼 보인다.
+                UndoToast(message: actionError, actionLabel: "닫기", isError: true) { self.actionError = nil }
             }
         }
         .animation(.smooth(duration: 0.25), value: justDeleted?.id)
+        .animation(.smooth(duration: 0.25), value: actionError)
+        // 오류 토스트는 스스로 사라진다 — 사용자가 닫아야만 없어지면 다음 조작을 막는다.
+        .task(id: actionError) {
+            guard actionError != nil else { return }
+            try? await Task.sleep(for: .seconds(5))
+            if !Task.isCancelled { actionError = nil }
+        }
     }
 
     @ViewBuilder
@@ -432,11 +452,25 @@ struct ContentView: View {
     private func retry(_ link: Components.Schemas.Link) async {
         guard let client = backend.client else { return }
         do {
-            _ = try await client.retryLink(.init(path: .init(id: link.id)))
-            // 상태가 pending으로 돌아가면 레일이 다시 켜지므로 목록을 새로 받는다.
-            await load()
+            // `try`는 400·404에서 던지지 않는다(APIOutcome). 분기하지 않으면
+            // "이미 실패 상태가 아님"·"없는 링크"가 성공으로 읽힌다.
+            switch try await client.retryLink(.init(path: .init(id: link.id))) {
+            case .accepted:
+                // 상태가 pending으로 돌아가면 레일이 다시 켜지므로 목록을 새로 받는다.
+                await load()
+            case let .badRequest(r):
+                actionError = APIOutcome.message(try? r.body.json, fallback: "다시 시도할 수 없는 링크입니다.")
+            case .notFound:
+                actionError = "링크를 찾을 수 없습니다."
+            case .unauthorized:
+                actionError = "인증에 실패했습니다."
+            case let .internalServerError(r):
+                actionError = APIOutcome.message(try? r.body.json, fallback: "다시 시도하지 못했습니다.")
+            case let .undocumented(statusCode, _):
+                actionError = "다시 시도하지 못했습니다 (HTTP \(statusCode))."
+            }
         } catch {
-            loadError = error.localizedDescription
+            actionError = error.localizedDescription
         }
     }
 
@@ -472,24 +506,54 @@ struct ContentView: View {
     private func saveLink(_ url: String, _ note: String) async -> String? {
         guard let client = backend.client else { return "서버가 아직 준비되지 않았습니다." }
         do {
-            _ = try await client.createLink(.init(body: .json(
+            // **Output을 반드시 분기한다.** `try`는 400·401·500에서 던지지 않는다
+            // (APIOutcome 주석). 예전에는 여기서 바로 성공 처리해서, 잘못된 주소를
+            // 붙여넣으면 시트가 조용히 닫히고 아무 일도 일어나지 않았다.
+            let out = try await client.createLink(.init(body: .json(
                 .init(url: url, note: note.isEmpty ? nil : note))))
-            await load()
-            return nil
+            switch out {
+            case .created, .ok: // .ok는 이미 저장된 URL(중복) — 사용자에겐 성공이다
+                await load()
+                return nil
+            case let .badRequest(r):
+                return APIOutcome.message(try? r.body.json, fallback: "주소를 확인해 주세요.")
+            case .unauthorized:
+                return "인증에 실패했습니다."
+            case let .internalServerError(r):
+                return APIOutcome.message(try? r.body.json, fallback: "서버에서 저장하지 못했습니다.")
+            case let .undocumented(statusCode, _):
+                return "저장하지 못했습니다 (HTTP \(statusCode))."
+            }
         } catch {
             return error.localizedDescription
         }
     }
 
     private func undo(_ link: Components.Schemas.Link) async {
-        guard let client = backend.client else { return }
-        justDeleted = nil
+        guard let client = backend.client else {
+            actionError = "서버가 아직 준비되지 않았습니다."
+            return
+        }
         undoTask?.cancel()
+        // **토스트를 미리 지우지 않는다.** 예전에는 요청 전에 justDeleted를 비웠고,
+        // 요청이 실패하면 토스트도 링크도 사라져서 **되살릴 방법이 아예 없었다** —
+        // URL이 화면 어디에도 남지 않아 손으로 다시 저장할 수도 없었다.
         do {
-            _ = try await client.createLink(.init(body: .json(.init(url: link.url))))
-            await load()
+            switch try await client.createLink(.init(body: .json(.init(url: link.url)))) {
+            case .created, .ok:
+                justDeleted = nil
+                await load()
+            case let .badRequest(r):
+                actionError = APIOutcome.message(try? r.body.json, fallback: "되돌리지 못했습니다.")
+            case .unauthorized:
+                actionError = "인증에 실패했습니다."
+            case let .internalServerError(r):
+                actionError = APIOutcome.message(try? r.body.json, fallback: "되돌리지 못했습니다.")
+            case let .undocumented(statusCode, _):
+                actionError = "되돌리지 못했습니다 (HTTP \(statusCode))."
+            }
         } catch {
-            loadError = error.localizedDescription
+            actionError = error.localizedDescription
         }
     }
 

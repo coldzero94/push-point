@@ -15,11 +15,21 @@ import { Link } from '@tanstack/react-router'
 import { useStats } from '../hooks/useStats'
 import { useTags } from '../hooks/useTags'
 import { isUnauthorized } from '../lib/api/client'
-import { activeDays, cappedStreak, dominantFacet, streak, weekOverWeek, weekdayCounts } from '../lib/rhythm'
+import { activeDays, cappedStreak, dominantFacet, groupedTags, streak, weekOverWeek, weekdayCounts } from '../lib/rhythm'
 import { FACET_LABELS } from '../lib/tags/facet'
 import type { Stats, TagFacet } from '../lib/api/types'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const
+
+// facet -> 점 색. **리터럴이어야 한다** — `bg-${token}`은 Tailwind 스캐너가 못 보고
+// CSS가 생성되지 않아 점이 투명해진다(클래스는 붙고 화면만 틀리는 종류).
+// `components/ui/Chip.tsx`가 같은 이유로 같은 형태의 맵을 갖고 있다.
+const FACET_DOT: Record<TagFacet, string> = {
+  craft: 'bg-tag-craft-ink',
+  media: 'bg-tag-media-ink',
+  life: 'bg-tag-life-ink',
+  neutral: 'bg-fg-3',
+}
 
 export function RhythmSection() {
   const stats = useStats()
@@ -93,7 +103,7 @@ function facetLookup(list: ReturnType<typeof useTags>['data']): (name: string) =
 function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet }) {
   const days = streak(s.by_day)
   const active = activeDays(s.by_day)
-  const top = [...s.by_tag].sort((a, b) => b.count - a.count).slice(0, 5)
+  const groups = groupedTags(s.by_tag, facetOf)
   const max = Math.max(1, ...s.by_day.map((d) => d.count))
   const weekdays = weekdayCounts(s.by_day)
   const peak = Math.max(...weekdays)
@@ -168,22 +178,36 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
         </div>
       )}
 
-      {top.length > 0 && (
-        <div className="space-y-4">
-          <span className="text-caption text-fg-3">상위 태그</span>
-          {/* 모든 항목이 어딘가로 닿는다 — 숫자만 보여주는 화면은 한 번 보고 다시 오지 않는다. */}
-          <div className="flex flex-wrap gap-x-12 gap-y-4">
-            {top.map((t) => (
-              <Link
-                key={t.name}
-                to="/"
-                search={{ tag: t.name }}
-                className="text-body text-fg-2 underline-offset-4 hover:text-fg-1 hover:underline"
-              >
-                {t.name} <span className="text-mono text-caption text-fg-3">{t.count}</span>
-              </Link>
-            ))}
+      {/* 무엇을 모았나 — iOS와 같은 묶음이다(13 §1 ① 축).
+          예전에는 상위 5개를 평면으로 늘어놨는데, 그러면 "내가 무엇에 관심이 있나"라는
+          이 섹션의 질문에 답하지 못한다: 상위 5개가 전부 같은 facet일 수도 있고, 6번째
+          이후는 아예 없는 것처럼 보인다. facet으로 묶으면 그 분포가 곧 답이 된다. */}
+      {groups.length > 0 && (
+        <div className="space-y-8">
+          <div className="flex items-baseline justify-between">
+            <span className="text-caption text-fg-3">무엇을 모았나</span>
+            <span className="text-caption text-fg-3">누르면 그 목록으로</span>
           </div>
+          {groups.map((g) => (
+            <div key={g.facet} className="space-y-2">
+              <div className="flex items-center gap-6">
+                <span aria-hidden className={`size-6 shrink-0 rounded-full ${FACET_DOT[g.facet]}`} />
+                <span className="text-label text-fg-2">{FACET_LABELS[g.facet]}</span>
+                <span className="text-mono text-caption text-fg-3">{g.total}</span>
+              </div>
+              {g.tags.map((t) => (
+                <Link
+                  key={t.name}
+                  to="/"
+                  search={{ tag: t.name }}
+                  className="flex items-baseline justify-between gap-8 rounded-control py-2 pl-12 pr-4 text-body text-fg-2 hover:bg-hover hover:text-fg-1"
+                >
+                  <span className="truncate">{t.name}</span>
+                  <span className="text-mono text-caption text-fg-3">{t.count}</span>
+                </Link>
+              ))}
+            </div>
+          ))}
         </div>
       )}
 
