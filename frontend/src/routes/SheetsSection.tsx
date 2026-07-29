@@ -53,10 +53,10 @@ export function SheetsSection() {
             연결은 터미널에서 한 번만 하면 됩니다. 구글 승인을 브라우저에서 직접 밟아야 해서
             이 화면이 대신할 수 없습니다.
           </p>
-          <pre className="overflow-x-auto rounded-control border border-line-2 bg-surface p-12 text-mono text-fg-1">
+          <pre className="overflow-x-auto rounded-control border border-line-2 bg-surface p-12 font-mono text-meta text-fg-1">
             just sheets-setup
           </pre>
-          <p className="text-caption text-fg-3">
+          <p className="text-meta text-fg-3">
             스크립트를 클립보드에 넣고 브라우저를 열어 줍니다. 붙여넣고 배포한 뒤 URL만
             되돌려 주면 끝입니다.
           </p>
@@ -66,7 +66,7 @@ export function SheetsSection() {
           <div className="flex flex-wrap items-center justify-between gap-16">
             <div className="space-y-4">
               <p className="text-body text-fg-1">연결됨</p>
-              <p className="text-caption text-fg-2">{lastRun(s)}</p>
+              <p className="text-meta text-fg-2">{lastRun(s)}</p>
             </div>
             <div className="flex gap-8">
               {s.sheet_url ? (
@@ -83,17 +83,17 @@ export function SheetsSection() {
           {/* 실패는 그대로 보여준다. 시트는 다른 탭에 있어 화면만 봐서는 모르고,
               사유를 삼키면 사용자가 무엇을 고쳐야 할지 알 수 없다. */}
           {s.last_error ? (
-            <p className="text-caption text-danger" role="status">
+            <p className="text-meta text-danger" role="status">
               마지막 동기화 실패: {s.last_error}
             </p>
           ) : null}
           {sync.isError ? (
-            <p className="text-caption text-danger" role="status">
+            <p className="text-meta text-danger" role="status">
               동기화 요청이 실패했습니다.
             </p>
           ) : null}
 
-          <p className="text-caption text-fg-3">
+          <p className="text-meta text-fg-3">
             매번 시트를 <strong className="text-fg-2">통째로 다시 씁니다</strong> — 태그를 고치거나
             링크를 지운 것이 반영돼야 하기 때문입니다. 그래서 시트에 손으로 적은 것은 지워집니다.
             메모를 남기려면 다른 탭에 하세요.
