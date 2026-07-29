@@ -52,6 +52,11 @@ struct LinkCard: View {
         // 있거나 잘못됐다"는 뜻이어야 한다.
         .overlay(alignment: .leading) { rail }
         .clipShape(RoundedRectangle(cornerRadius: PP.Radius.card, style: .continuous))
+        // 상태를 **색과 움직임만으로** 말하지 않는다(§4.7·§7.1). 진행 중 카드에는 다른
+        // 텍스트가 없어서, 레일에 라벨을 붙이던 예전 방식으로는 VoiceOver에 아무것도
+        // 전달되지 않았다.
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(link.status == .done ? "" : statusLabel)
     }
 
     // MARK: - 커버
@@ -144,16 +149,33 @@ struct LinkCard: View {
         case .failed:
             Rectangle().fill(PP.Palette.danger)
                 .frame(width: PP.Size.rail)
-                .accessibilityLabel("실패")
+                // Shape에 라벨만 붙이면 VoiceOver에 안 뜨거나 행 안에 불필요한 정지점을
+                // 만든다(§8.4). 레일은 숨기고 상태는 행이 값으로 말한다(아래 body).
+                .accessibilityHidden(true)
         case .pending, .scraping, .tagging:
             Rectangle().fill(PP.Palette.railProgress)
                 .frame(width: PP.Size.rail)
-                .opacity(pulsing ? 1 : 0.7)
+                // **reduced-motion은 감소가 아니라 제거다**(§7.4·§4.7·§8.2). 정적
+                // `opacity 1`이어야 하고, 그 값으로 대비 5.94/5.57이 계산돼 있다.
+                // 예전 구현은 펄스의 **하한**인 0.7에 멈춰 있었다 — 명세가 피하려던
+                // 바로 그 값이다.
+                .opacity(reduceMotion ? 1 : (pulsing ? 1 : 0.7))
                 .animation(reduceMotion ? nil
                            : .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
                            value: pulsing)
-                .onAppear { if !reduceMotion { pulsing = true } }
-                .accessibilityLabel(statusLabel)
+                // **`.task(id:)`로 돌린다.** `onAppear`에서 한 번 뒤집는 방식은 셀이
+                // 재사용되면 이미 true라 값이 안 바뀌고, `.animation(value:)`은 값 변화가
+                // 있어야 도므로 펄스가 조용히 멎는다. 실패한 링크를 재시도해 pending으로
+                // 돌아왔을 때도 마찬가지였다. id에 상태를 넣으면 상태가 바뀔 때마다
+                // 새로 시작하고, 사라질 때 취소된다.
+                .task(id: link.status) {
+                    pulsing = false
+                    guard !reduceMotion else { return }
+                    // 다음 프레임에 뒤집어야 값 변화로 인식된다.
+                    try? await Task.sleep(for: .milliseconds(16))
+                    if !Task.isCancelled { pulsing = true }
+                }
+                .accessibilityHidden(true)
         case .done:
             EmptyView() // 완료에는 획이 없다
         }

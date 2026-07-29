@@ -184,6 +184,34 @@ final class BoardUITests: XCTestCase {
         app.staticTexts[title].waitForExistence(timeout: timeout)
     }
 
+    /// 검색 결과에서 지운 카드가 **화면에서도 사라지는가.**
+    ///
+    /// 목록이 둘(`links`·`results`)인데 삭제가 `links`만 건드리고 있었다. 검색 결과에서
+    /// 밀어 지우면 "삭제했습니다" 토스트는 뜨는데 **카드가 그대로 남고**, 눌러 들어가면
+    /// 없는 링크라 404가 났다(2026-07-29 리뷰). 목록이 하나 더 생겨도 같은 사고가 나지
+    /// 않도록 `apply(_:)` 한 곳으로 모았고, 이 테스트가 그걸 고정한다.
+    func testDeletingFromSearchRemovesTheCard() {
+        let title = "쿠버네티스 프로덕션 운영 가이드"
+        XCTAssertTrue(waitForCard(title))
+
+        search(for: "쿠버네티스")
+        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 5),
+                      "검색 결과에 대상 링크가 없다")
+
+        // 오른쪽 끝은 파괴적인 것(§8.4). 전체 스와이프에 기대지 않고 드러난 버튼을
+        // 누른다 — 제스처가 안 먹은 것과 삭제가 반영 안 된 것을 구분하기 위해서다.
+        app.staticTexts[title].swipeLeft()
+        let deleteButton = app.buttons["삭제"].firstMatch
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 5),
+                      "스와이프로 삭제 버튼이 나오지 않았다 — 제스처 문제")
+        deleteButton.tap()
+
+        // 사라져야 한다. 남아 있으면 그 카드는 눌렀을 때 404가 나는 유령이다.
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: app.staticTexts[title])
+        waitForExpectations(timeout: 8)
+    }
+
     private func search(for text: String) {
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5), "검색창이 없다")

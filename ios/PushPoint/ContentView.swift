@@ -6,6 +6,12 @@ import SwiftUI
 /// 않아 화면이 "내가 모은 것"이 아니라 "레코드 목록"으로 읽혔다. 그리고 개인 아카이브에서
 /// 회상의 단서는 대개 "언제"이므로 날짜로 끊는다 — keyset 커서가 `(created_at, id)`
 /// 정렬이라 페이지 경계와 섹션 경계가 자연스럽게 맞는다.
+/// 목록에 반영해야 할 링크 한 건의 변화. `ContentView.apply(_:)`가 유일한 입구다.
+enum LinkChange {
+    case removed(Int)
+    case replaced(Components.Schemas.Link)
+}
+
 struct ContentView: View {
     /// 태그 이름 → facet. 탭 컨테이너(RootView)가 받아 두 탭이 나눠 쓴다 —
     /// 탭마다 따로 받으면 같은 태그가 화면마다 다른 색이 될 수 있다.
@@ -53,6 +59,12 @@ struct ContentView: View {
     @State private var actionError: String?
     /// 확장이 알림을 못 띄우고 버린 횟수. 0보다 크면 배너로 알린다.
     @State private var droppedNotices = 0
+    /// 방금 지운 링크 id. **폴러가 되살리는 것을 막는다.**
+    ///
+    /// `pollRefresh`는 서버의 1장을 받아 덮어쓰는데, 삭제 요청과 폴링 응답이 엇갈리면
+    /// (응답이 삭제 전 상태로 계산됨) 지운 링크가 "새 링크"로 보여 맨 위에 다시 붙는다.
+    /// 되돌리기 토스트가 떠 있는 동안 그 카드가 되살아나는 것이 실제로 가능했다.
+    @State private var recentlyDeleted: Set<Int> = []
     /// 목록 밀도. 기기에 남는다 — 매번 고르게 하면 그건 선택지가 아니라 잡일이다.
     @AppStorage("pushpoint.density") private var density: ListDensity = .card
     /// 앱 안에서 링크를 저장하는 시트. 공유 시트만 있던 시절에는 앱을 켜 놓고도
@@ -502,8 +514,10 @@ struct ContentView: View {
             // "이미 실패 상태가 아님"·"없는 링크"가 성공으로 읽힌다.
             switch try await client.retryLink(.init(path: .init(id: link.id))) {
             case .accepted:
-                // 상태가 pending으로 돌아가면 레일이 다시 켜지므로 목록을 새로 받는다.
-                await load()
+                // 상태가 pending으로 돌아가면 레일이 다시 켜진다. **load()를 부르지
+                // 않는다** — 그건 목록을 1장으로 갈아치워 스크롤해 받아 둔 뒷장을 버린다
+                // (폴러가 같은 실수를 했고 페이지네이션 UI 테스트가 잡았다).
+                await pollRefresh()
             case let .badRequest(r):
                 actionError = APIOutcome.message(try? r.body.json, fallback: "다시 시도할 수 없는 링크입니다.")
             case .notFound:
@@ -527,7 +541,7 @@ struct ContentView: View {
         do {
             _ = try await client.deleteLink(.init(path: .init(id: link.id))).noContent
             withAnimation(.smooth(duration: 0.25)) {
-                links.removeAll { $0.id == link.id }
+                apply(.removed(link.id))
             }
             justDeleted = link
             // 되돌리기 창을 닫는 타이머. 새로 지우면 앞의 타이머는 취소된다 —
@@ -539,7 +553,25 @@ struct ContentView: View {
                 if justDeleted?.id == link.id { justDeleted = nil }
             }
         } catch {
-            loadError = error.localizedDescription
+            actionError = error.localizedDescription
+        }
+    }
+
+    /// 링크 한 건의 변화를 **화면에 있는 모든 목록에** 반영한다.
+    ///
+    /// 목록이 둘(`links`·`results`)인데 삭제·재시도가 `links`만 건드리고 있었다. 검색
+    /// 결과에서 카드를 밀어 지우면 "삭제했습니다" 토스트는 뜨는데 **카드가 그대로 남고**,
+    /// 눌러 들어가면 없는 링크라 404가 났다. 목록이 하나 더 생겨도 같은 사고가 나지
+    /// 않도록 입구를 하나로 둔다.
+    private func apply(_ change: LinkChange) {
+        switch change {
+        case let .removed(id):
+            links.removeAll { $0.id == id }
+            results.removeAll { $0.id == id }
+            recentlyDeleted.insert(id)
+        case let .replaced(link):
+            if let i = links.firstIndex(where: { $0.id == link.id }) { links[i] = link }
+            if let i = results.firstIndex(where: { $0.id == link.id }) { results[i] = link }
         }
     }
 
@@ -588,6 +620,7 @@ struct ContentView: View {
             switch try await client.createLink(.init(body: .json(.init(url: link.url)))) {
             case .created, .ok:
                 justDeleted = nil
+                recentlyDeleted.remove(link.id)
                 await load()
             case let .badRequest(r):
                 actionError = APIOutcome.message(try? r.body.json, fallback: "되돌리지 못했습니다.")
@@ -725,7 +758,14 @@ struct ContentView: View {
         for (i, l) in links.enumerated() { byID[l.id] = i }
         var fresh: [Components.Schemas.Link] = []
         for l in page.links {
+            // **방금 지운 것은 되살리지 않는다.** 삭제 요청과 이 응답이 엇갈리면 서버가
+            // 삭제 전 상태로 계산한 1장이 오고, 그 링크는 links에 없으므로 "새 링크"로
+            // 판정돼 맨 위에 다시 붙는다 — 되돌리기 토스트가 떠 있는 채로.
+            if recentlyDeleted.contains(l.id) { continue }
             if let i = byID[l.id] { links[i] = l } else { fresh.append(l) }
+            // 검색 결과가 떠 있으면 거기도 같이 갱신한다 — 안 하면 검색 화면의 카드만
+            // 옛 상태로 남는다.
+            if let j = results.firstIndex(where: { $0.id == l.id }) { results[j] = l }
         }
         // 다른 경로(공유 시트)로 들어온 링크는 앞에 붙인다.
         if !fresh.isEmpty { links.insert(contentsOf: fresh, at: 0) }
