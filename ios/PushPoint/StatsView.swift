@@ -109,8 +109,9 @@ struct StatsView: View {
     ///
     /// 웹과 **글자까지 같다**(13 §3).
     private func narrative(_ s: Components.Schemas.Stats) -> String {
-        if s.total_links == 0 { return "아직 아무것도 저장하지 않았어요." }
-
+        // `total_links == 0`은 여기 안 온다 — `content`가 먼저 ContentUnavailableView로
+        // 가로챈다. 그 분기를 여기 또 두면 **닿지 않는 문구**가 생기고, 웹과 갈라져도
+        // 아무도 모른다(실제로 그렇게 두 문장이 갈라져 있었다).
         let active = Self.activeDays(s.by_day)
         let days = streak(s.by_day)
         let capped = days > 0 && days >= s.by_day.count
@@ -340,10 +341,6 @@ struct StatsView: View {
     }
 
     // MARK: -
-
-    private func ratio(_ value: Int, _ maxCount: Int) -> CGFloat {
-        maxCount > 0 ? CGFloat(value) / CGFloat(maxCount) : 0
-    }
 
     /// 시간 척추와 같은 serif 머리글 — 화면이 달라도 같은 목소리다.
     /// **serif가 아니다.** §2.2.5는 serif의 용처를 "시간 척추 머리글 한 곳"으로 한정하고,
