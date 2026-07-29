@@ -5,6 +5,18 @@ import SwiftUI
 /// 행이 아니라 카드인 이유: 계약이 이미 주고 있는 `description`을 행이 한 글자도 쓰지
 /// 않아서 화면이 "내가 모은 것"이 아니라 "레코드 목록"으로 읽혔다. 밀도를 조금 내주고
 /// 읽을 수 있는 본문과 절대 비지 않는 커버를 얻는다.
+/// 목록 밀도(§1.3, 2026-07-29 iOS 한정 해제).
+///
+/// **웹에는 없다.** 창 폭이 이미 그 일을 하기 때문이고, 폰은 뷰포트가 하나뿐이라
+/// "밀도는 뷰포트가 결정한다"는 원래 규칙이 폰에서만 성립하지 않았다(13 §1 ② 축).
+enum ListDensity: String, CaseIterable {
+    case card, compact
+
+    var label: String { self == .card ? "카드" : "조밀" }
+    var symbol: String { self == .card ? "rectangle.grid.1x2" : "list.bullet" }
+    var next: ListDensity { self == .card ? .compact : .card }
+}
+
 struct LinkCard: View {
     let link: Components.Schemas.Link
     /// 태그 이름 → facet. 계약의 `LinkTag`에는 facet이 없어서 사전에서 해석한다.
@@ -15,6 +27,10 @@ struct LinkCard: View {
     let resolveThumb: (String) -> URL?
     /// 실패한 링크의 잡을 다시 넣는다. nil이면 재시도 줄을 그리지 않는다.
     var onRetry: (() -> Void)? = nil
+    /// 조밀 모드는 **커버만 뺀다** — 제목·태그·상태·메타는 그대로다. 커버가 카드
+    /// 높이의 절반이라 그것만 빼도 한 화면에 들어가는 수가 2장에서 6~7장이 된다.
+    /// 글자 크기는 건드리지 않는다: 타입 스케일은 밀도의 손잡이가 아니다(§2.2.2).
+    var density: ListDensity = .card
 
     /// 펄스를 감소가 아니라 **제거**로 처리하기 위한 것(§7.4).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -22,7 +38,7 @@ struct LinkCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            cover
+            if density == .card { cover }
             content
         }
         .background(PP.Palette.surface)

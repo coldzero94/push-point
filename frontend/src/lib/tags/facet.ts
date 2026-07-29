@@ -18,11 +18,13 @@ export const TAG_FACETS: readonly TagFacet[] = ['craft', 'media', 'life', 'neutr
  * values) — §5.2. `neutral` makes NO new token: it reuses `fg-2` / `hover`, so
  * the token name itself says "there is no color here".
  */
-export const FACET_TOKENS: Record<TagFacet, { ink: string; tint: string }> = {
-  craft: { ink: 'tag-craft-ink', tint: 'tag-craft-tint' },
-  media: { ink: 'tag-media-ink', tint: 'tag-media-tint' },
-  life: { ink: 'tag-life-ink', tint: 'tag-life-tint' },
-  neutral: { ink: 'fg-2', tint: 'hover' }, // reuse existing tokens (§5.2)
+export const FACET_TOKENS: Record<TagFacet, { ink: string; tint: string; cover: string }> = {
+  craft: { ink: 'tag-craft-ink', tint: 'tag-craft-tint', cover: 'cover-craft' },
+  media: { ink: 'tag-media-ink', tint: 'tag-media-tint', cover: 'cover-media' },
+  life: { ink: 'tag-life-ink', tint: 'tag-life-tint', cover: 'cover-life' },
+  // neutral reuses existing tokens for chips (§5.2) but NOT for covers — a cover
+  // needs its own ground for the same reason the coloured facets do (§4.5.2).
+  neutral: { ink: 'fg-2', tint: 'hover', cover: 'cover-neutral' },
 }
 
 /**
