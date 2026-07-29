@@ -31,6 +31,9 @@ struct LinkCard: View {
     /// 높이의 절반이라 그것만 빼도 한 화면에 들어가는 수가 2장에서 6~7장이 된다.
     /// 글자 크기는 건드리지 않는다: 타입 스케일은 밀도의 손잡이가 아니다(§2.2.2).
     var density: ListDensity = .card
+    /// 이 카드가 **날짜 머리글 아래**에 있는가. 보드는 true, 검색 결과는 false —
+    /// 구간이 없는 화면에서는 "어제"가 유일한 날짜 정보다.
+    var dayStated: Bool = false
 
     /// 펄스를 감소가 아니라 **제거**로 처리하기 위한 것(§7.4).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -262,6 +265,6 @@ struct LinkCard: View {
     /// 상대 시각. 규칙은 Shared/RelativeTime.swift에 있다 — 웹과 값이 맞아야 하고
     /// 갈라져도 양쪽 다 정상으로 보이므로 기준값을 테스트로 박아 둔 자리다.
     private var relativeTime: String {
-        RelativeTime.label(link.created_at)
+        RelativeTime.label(link.created_at, dayStated: dayStated)
     }
 }

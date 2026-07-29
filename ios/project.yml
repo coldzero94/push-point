@@ -74,6 +74,10 @@ targets:
       - path: PushPoint/Generated
       - path: PushPoint/Resources/Fonts
         buildPhase: resources
+      # 상대 시각 기준값 — **웹과 같은 파일을 읽는다.** 주장으로 두면 갈라져도 양쪽 다
+      # 정상으로 보이고, streak에서 그 문제를 이미 겪었다(13 §3).
+      - path: ../testdata/relative-time-cases.json
+        buildPhase: resources
     dependencies:
       # 생성 타입이 OpenAPIRuntime 타입(HTTPBody 등)을 참조하므로 Types.swift만 넣어도
       # 링크가 필요하다. 스텁은 APIProtocol만 구현하지만 타입 자체가 런타임에 묶여 있다.

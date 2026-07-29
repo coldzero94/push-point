@@ -1,0 +1,16 @@
+{
+  "_comment": "상대 시각 규칙의 기준값. iOS PushPointTests/RelativeTimeFixtureTests와 웹 src/lib/time.test.ts가 같이 읽는다 — 갈라지면 둘 중 하나가 빨개진다. now와 at은 로컬타임이다(규칙이 달력 하루 차이로 판정하므로 기준도 로컬이어야 한다). today는 '달력상 오늘인가' — dayStated는 오늘이 아닌 항목만 바꾼다.",
+  "now": "2026-07-26T15:00:00",
+  "cases": [
+    { "name": "1분 미만",              "at": "2026-07-26T14:59:30", "today": true,  "plain": "방금",      "dayStated": "방금" },
+    { "name": "분 단위",                "at": "2026-07-26T14:20:00", "today": true,  "plain": "40분 전",   "dayStated": "40분 전" },
+    { "name": "시간 단위",              "at": "2026-07-26T11:00:00", "today": true,  "plain": "4시간 전",  "dayStated": "4시간 전" },
+    { "name": "오늘 새벽",              "at": "2026-07-26T00:30:00", "today": true,  "plain": "14시간 전", "dayStated": "14시간 전" },
+    { "name": "어제지만 24시간 미만",     "at": "2026-07-25T23:00:00", "today": false, "plain": "16시간 전", "dayStated": "오후 11:00" },
+    { "name": "어제 오후",              "at": "2026-07-25T14:20:00", "today": false, "plain": "어제",      "dayStated": "오후 2:20" },
+    { "name": "어제 오전",              "at": "2026-07-25T09:05:00", "today": false, "plain": "어제",      "dayStated": "오전 9:05" },
+    { "name": "어제 자정",              "at": "2026-07-25T00:00:00", "today": false, "plain": "어제",      "dayStated": "오전 12:00" },
+    { "name": "어제 정오",              "at": "2026-07-25T12:00:00", "today": false, "plain": "어제",      "dayStated": "오후 12:00" },
+    { "name": "이틀 전",                "at": "2026-07-24T15:00:00", "today": false, "plain": "7월 24일",  "dayStated": "7월 24일" }
+  ]
+}
