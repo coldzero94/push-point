@@ -31,8 +31,14 @@ enum SaveNotifier {
     /// **`add(_:)`의 성공 여부로는 알 수 없다** — 권한이 거부돼 있어도 add는 던지지 않고
     /// 성공한 뒤 알림만 버려진다. 그래서 상태를 직접 물어보는 것 말고는 방법이 없다.
     static func canNotify() async -> Bool {
-        let s = await UNUserNotificationCenter.current().notificationSettings()
-        return s.authorizationStatus == .authorized || s.authorizationStatus == .provisional
+        let s = await status()
+        return s == .authorized || s == .provisional
+    }
+
+    /// 현재 권한 상태. **아직 물어본 적 없음(.notDetermined)과 거부됨(.denied)은 다르다** —
+    /// 전자는 앱이 그 자리에서 물어보면 되고, 후자만 설정으로 보내야 한다.
+    static func status() async -> UNAuthorizationStatus {
+        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
     /// 저장 결과를 배너로 띄운다.

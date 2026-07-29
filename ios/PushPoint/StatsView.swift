@@ -458,9 +458,3 @@ struct StatsView: View {
     /// 실패 개수를 세려고 받아 오는 최대 건수. 개수만 필요하므로 최소로 받는다.
     private var failedProbeLimit: Int { 100 }
 }
-
-/// 통계에서 목록으로 넘기는 필터.
-enum ListFilter: Equatable {
-    case tag(String)
-    case failed
-}

@@ -67,8 +67,18 @@ targets:
     sources:
       - path: PushPointTests
       - path: Shared
+      # 피드 모델과 그것이 쓰는 생성 타입. **뷰는 넣지 않는다** — 화면을 끌어들이면
+      # 단위 테스트가 아니게 되고, 이 모델을 뷰에서 떼어 낸 이유가 사라진다.
+      - path: PushPoint/FeedModel.swift
+      - path: PushPoint/ListFilter.swift
+      - path: PushPoint/Generated
       - path: PushPoint/Resources/Fonts
         buildPhase: resources
+    dependencies:
+      # 생성 타입이 OpenAPIRuntime 타입(HTTPBody 등)을 참조하므로 Types.swift만 넣어도
+      # 링크가 필요하다. 스텁은 APIProtocol만 구현하지만 타입 자체가 런타임에 묶여 있다.
+      - package: OpenAPIRuntime
+        product: OpenAPIRuntime
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.pushpoint.app.tests

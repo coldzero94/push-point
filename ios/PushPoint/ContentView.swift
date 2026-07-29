@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 /// 목록 — 시간 척추로 끊은 카드 보드.
 ///
@@ -16,8 +17,11 @@ struct ContentView: View {
     @EnvironmentObject private var backend: Backend
     /// 백그라운드에서는 폴링하지 않는다 — 화면에 없는 목록을 갱신할 이유가 없다.
     @Environment(\.scenePhase) private var scenePhase
-    @State private var links: [Components.Schemas.Link] = []
-    @State private var loadError: String?
+    @State private var feed = FeedModel()
+    /// 검색 페이지네이션 전용 플래그. **목록과 공유하지 않는다** — 예전에는 하나였고,
+    /// 한쪽이 진행 중이면 다른 쪽 onAppear가 조용히 반환한 뒤 다시 불리지 않아
+    /// 페이지네이션이 멎었다(리뷰 지적).
+    @State private var searchLoadingMore = false
     /// 방금 지운 링크. 되돌릴 수 있는 동안만 들고 있는다.
     @State private var justDeleted: Components.Schemas.Link?
     @State private var undoTask: Task<Void, Never>?
@@ -39,11 +43,9 @@ struct ContentView: View {
     /// 다음 페이지 커서. nil이면 마지막 페이지다 — 계약이 그렇게 말한다.
     /// **페이지 번호가 아니다.** keyset 커서라 목록에 쓰기가 일어나도 항목이 건너뛰거나
     /// 중복되지 않는다(.claude/rules/ios.md).
-    @State private var nextCursor: String?
     @State private var searchCursor: String?
     /// 다음 장을 이미 받고 있는지. 없으면 마지막 카드가 화면에 머무는 동안 같은 요청이
     /// 여러 번 나간다 — onAppear는 스크롤 중 여러 번 불린다.
-    @State private var loadingMore = false
     /// **변경(삭제·재시도·되돌리기) 실패 전용 채널.**
     ///
     /// 예전에는 이것들이 `loadError`에 썼는데, 그러면 화면 전체가
@@ -53,6 +55,8 @@ struct ContentView: View {
     @State private var actionError: String?
     /// 확장이 알림을 못 띄우고 버린 횟수. 0보다 크면 배너로 알린다.
     @State private var droppedNotices = 0
+    /// 알림 권한 상태. **아직 안 물어봤는가 / 거부됐는가**로 배너의 동작이 갈린다.
+    @State private var notifyStatus: UNAuthorizationStatus = .notDetermined
     /// 목록 밀도. 기기에 남는다 — 매번 고르게 하면 그건 선택지가 아니라 잡일이다.
     @AppStorage("pushpoint.density") private var density: ListDensity = .card
     /// 앱 안에서 링크를 저장하는 시트. 공유 시트만 있던 시절에는 앱을 켜 놓고도
@@ -107,16 +111,11 @@ struct ContentView: View {
         //
         // 타이머가 아니라 **상태 조건**이다: 종단이 아닌 링크가 하나라도 있으면 돌고,
         // 전부 끝나면 스스로 멈춘다. 그래서 아무 일도 없는 아카이브에서는 요청이 0이다.
-        .task(id: pollKey) { await pollWhileWorking() }
+        .task(id: feed.pollKey) { await pollWhileWorking() }
         // 앱이 앞으로 나올 때마다 다시 본다 — 확장은 앱이 없는 동안 돈다.
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
-            droppedNotices = AppGroup.defaults?.integer(forKey: SaveNotifier.droppedKey) ?? 0
-            // 권한이 다시 켜졌으면 배너를 치우고 카운트도 비운다.
-            if droppedNotices > 0, await SaveNotifier.canNotify() {
-                AppGroup.defaults?.set(0, forKey: SaveNotifier.droppedKey)
-                droppedNotices = 0
-            }
+            await refreshNotifyState()
         }
         .task(id: backend.state) { await load() }
         .task(id: filter) { await load() }
@@ -155,14 +154,22 @@ struct ContentView: View {
     private var notificationBanner: some View {
         if droppedNotices > 0 {
             Button {
-                // **알림 설정으로 곧장 보낸다.** `openSettingsURLString`은 앱의 설정
-                // 최상위로 가는데, 거기서 사용자가 "알림"을 다시 찾아 들어가야 하고
-                // 시뮬레이터에서는 그 페이지가 비어 있기까지 하다. iOS 16+의
-                // `openNotificationSettingsURLString`이 정확히 그 화면을 연다 —
-                // 배너가 말하는 문제와 사용자가 도착하는 곳이 같아야 한다.
-                let target = URL(string: UIApplication.openNotificationSettingsURLString)
-                    ?? URL(string: UIApplication.openSettingsURLString)
-                if let target { UIApplication.shared.open(target) }
+                Task {
+                    // **아직 안 물어봤으면 여기서 물어본다.** 설정 앱으로 내보내는 것은
+                    // 이미 거부한 사용자에게만 맞는 동작이고, 그 경우에도 iOS가 어디로
+                    // 떨어뜨릴지는 앱이 정하지 못한다(권한을 한 번도 요청하지 않은 앱은
+                    // 설정에 항목 자체가 없어 최상위로 간다 — 실제로 그렇게 나왔다).
+                    //
+                    // notDetermined에서 시스템 프롬프트를 띄우는 쪽이 **한 번에 끝난다.**
+                    if notifyStatus == .notDetermined {
+                        await SaveNotifier.requestAuthorization()
+                        await refreshNotifyState()
+                        return
+                    }
+                    let target = URL(string: UIApplication.openNotificationSettingsURLString)
+                        ?? URL(string: UIApplication.openSettingsURLString)
+                    if let target { await UIApplication.shared.open(target) }
+                }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "bell.slash.fill").font(PP.Typo.label)
@@ -194,7 +201,7 @@ struct ContentView: View {
         case .running:
             if !query.isEmpty {
                 searchContent
-            } else if let loadError {
+            } else if let loadError = feed.loadError {
                 // 빈/오류 상태도 스크롤 뷰에 담는다. ContentUnavailableView는 스크롤이
                 // 아니라서 그대로 두면 **바로 그때** — 다시 시도하고 싶은 순간 — 당겨서
                 // 새로고침이 안 된다.
@@ -203,7 +210,7 @@ struct ContentView: View {
                                            systemImage: "wifi.exclamationmark",
                                            description: Text(loadError))
                 }
-            } else if links.isEmpty {
+            } else if feed.links.isEmpty {
                 refreshableState {
                     // **액션이 있는 빈 상태다.** 예전에는 "공유 시트로 보내면 쌓입니다"만
                     // 적혀 있어서, 읽고 나서 할 수 있는 일이 앱을 나가는 것뿐이었다.
@@ -328,7 +335,7 @@ struct ContentView: View {
                             // 전체 목록의 마지막**을 기준으로 삼는다 — 구간 단위로 보면
                             // "오늘" 섹션 끝에서도 발동해 아직 필요 없는 장을 당겨 온다.
                             .onAppear {
-                                if link.id == links.last?.id { Task { await loadMore() } }
+                                if link.id == feed.links.last?.id { Task { await loadMore() } }
                             }
                     }
                 } header: {
@@ -477,7 +484,7 @@ struct ContentView: View {
         var buckets: [(String, [Components.Schemas.Link])] = [
             ("오늘", []), ("어제", []), ("이번 주", []), ("이전", []),
         ]
-        for link in links {
+        for link in feed.links {
             let date = Date(timeIntervalSince1970: TimeInterval(link.created_at))
             let index: Int
             if cal.isDateInToday(date) {
@@ -532,7 +539,7 @@ struct ContentView: View {
         do {
             _ = try await client.deleteLink(.init(path: .init(id: link.id))).noContent
             withAnimation(.smooth(duration: 0.25)) {
-                links.removeAll { $0.id == link.id }
+                apply(.removed(link.id))
             }
             justDeleted = link
             // 되돌리기 창을 닫는 타이머. 새로 지우면 앞의 타이머는 취소된다 —
@@ -544,7 +551,7 @@ struct ContentView: View {
                 if justDeleted?.id == link.id { justDeleted = nil }
             }
         } catch {
-            loadError = error.localizedDescription
+            actionError = error.localizedDescription
         }
     }
 
@@ -577,6 +584,59 @@ struct ContentView: View {
             }
         } catch {
             return error.localizedDescription
+        }
+    }
+
+    /// 알림 권한 상태와 버려진 알림 수를 다시 읽는다.
+    private func refreshNotifyState() async {
+        notifyStatus = await SaveNotifier.status()
+        droppedNotices = AppGroup.defaults?.integer(forKey: SaveNotifier.droppedKey) ?? 0
+        // 권한이 다시 켜졌으면 배너를 치우고 카운트도 비운다.
+        if droppedNotices > 0, await SaveNotifier.canNotify() {
+            AppGroup.defaults?.set(0, forKey: SaveNotifier.droppedKey)
+            droppedNotices = 0
+        }
+    }
+
+    // MARK: - 피드 (FeedModel 위임)
+    //
+    // 뷰가 client·filter를 알고 모델은 모른다. 그래서 모델은 스텁 클라이언트로 테스트할
+    // 수 있고, 뷰는 여전히 backend 상태 하나만 확인하면 된다.
+
+    private func load() async {
+        guard case .running = backend.state, let client = backend.client else { return }
+        await feed.load(client, filter: filter)
+    }
+
+    private func loadMore() async {
+        guard case .running = backend.state, let client = backend.client, feed.hasMore else { return }
+        await feed.loadMore(client, filter: filter)
+    }
+
+    private func pollRefresh() async {
+        guard case .running = backend.state, let client = backend.client else { return }
+        await feed.pollRefresh(client, filter: filter)
+    }
+
+    /// **진행 중인 링크가 있는 동안만 폴링한다.** 타이머가 아니라 상태 조건이라
+    /// 전부 끝나면 스스로 멈추고, 아무 일 없는 아카이브에서는 요청이 0이다.
+    private func pollWhileWorking() async {
+        guard feed.hasWorkInFlight else { return }
+        while !Task.isCancelled, scenePhase == .active {
+            try? await Task.sleep(for: .milliseconds(1500))
+            if Task.isCancelled { return }
+            await pollRefresh()
+            if !feed.hasWorkInFlight { return }
+        }
+    }
+
+    /// 변화를 **화면에 있는 모든 목록에** 반영한다. 보드는 모델이, 검색 결과는 여기가 든다.
+    private func apply(_ change: LinkChange) {
+        feed.apply(change)
+        switch change {
+        case let .removed(id): results.removeAll { $0.id == id }
+        case let .replaced(l):
+            if let i = results.firstIndex(where: { $0.id == l.id }) { results[i] = l }
         }
     }
 
@@ -672,10 +732,10 @@ struct ContentView: View {
     /// 검색 커서는 목록 커서와 **형식이 다르고 서로 호환되지 않는다**(계약). 그래서 상태를
     /// 따로 들고 있고, 검색어가 바뀌면 버린다.
     private func searchMore() async {
-        guard !loadingMore, let cursor = searchCursor,
+        guard !searchLoadingMore, let cursor = searchCursor,
               case .running = backend.state, let client = backend.client else { return }
-        loadingMore = true
-        defer { loadingMore = false }
+        searchLoadingMore = true
+        defer { searchLoadingMore = false }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         var q2 = Operations.search.Input.Query(q: q, limit: 50)
@@ -696,92 +756,9 @@ struct ContentView: View {
 
     // MARK: - 로드
 
-    /// 첫 장. 커서를 버리고 처음부터 다시 받는다 — 당겨서 새로고침·필터 변경이 여기로 온다.
-    /// 폴링을 다시 시작해야 하는 조건. 진행 중 링크의 **집합이 바뀔 때만** 값이 바뀌므로
-    /// 매 갱신마다 task가 재시작되지 않는다.
-    private var pollKey: String {
-        let working = links.filter { $0.status != .done && $0.status != .failed }
-        return working.isEmpty ? "idle" : working.map { String($0.id) }.joined(separator: ",")
-    }
 
-    private func pollWhileWorking() async {
-        // 종단이 아닌 링크가 없으면 아무것도 하지 않는다.
-        guard links.contains(where: { $0.status != .done && $0.status != .failed }) else { return }
-        // 워커가 스크랩+태깅에 쓰는 시간이 초 단위라 1.5초면 "채워지는" 것으로 읽히고,
-        // 인프로세스 서버라 요청 비용이 사실상 0이다.
-        while !Task.isCancelled, scenePhase == .active {
-            try? await Task.sleep(for: .milliseconds(1500))
-            if Task.isCancelled { return }
-            await pollRefresh()
-            if !links.contains(where: { $0.status != .done && $0.status != .failed }) { return }
-        }
-    }
 
-    /// 폴링용 갱신. **`load()`를 부르면 안 된다** — 그건 links를 1페이지로 갈아치워서
-    /// 이미 스크롤해 받아 둔 뒷장을 버린다. 실제로 그렇게 만들었다가 페이지네이션
-    /// UI 테스트가 잡았다(2026-07-29).
-    ///
-    /// 진행 중인 링크는 거의 항상 목록 맨 위에 있으므로 첫 장만 다시 받아 **제자리로
-    /// 덮어쓴다.** 커서와 뒷장은 건드리지 않는다.
-    private func pollRefresh() async {
-        guard case .running = backend.state, let client = backend.client else { return }
-        guard let page = try? await fetchPage(client, cursor: nil) else { return }
-        var byID = [Int: Int]()
-        for (i, l) in links.enumerated() { byID[l.id] = i }
-        var fresh: [Components.Schemas.Link] = []
-        for l in page.links {
-            if let i = byID[l.id] { links[i] = l } else { fresh.append(l) }
-        }
-        // 다른 경로(공유 시트)로 들어온 링크는 앞에 붙인다.
-        if !fresh.isEmpty { links.insert(contentsOf: fresh, at: 0) }
-    }
 
-    private func load() async {
-        guard case .running = backend.state, let client = backend.client else { return }
-        do {
-            let page = try await fetchPage(client, cursor: nil)
-            links = page.links
-            nextCursor = page.next_cursor
-            loadError = nil
-        } catch {
-            loadError = error.localizedDescription
-        }
-    }
 
-    /// 다음 장. 마지막 카드가 보이면 불린다.
-    ///
-    /// **더보기 버튼을 두지 않는 이유**는 취향이 아니다. 이 앱은 아카이브이고, 목록을
-    /// 거슬러 올라가는 것이 저장한 것을 되찾는 주된 방법이다 — 그 길목마다 버튼을 세우면
-    /// 되찾기 자체가 일이 된다. 대신 실패했을 때 조용하지 않아야 해서 loadError로 드러낸다.
-    private func loadMore() async {
-        guard !loadingMore, let cursor = nextCursor,
-              case .running = backend.state, let client = backend.client else { return }
-        loadingMore = true
-        defer { loadingMore = false }
-        do {
-            let page = try await fetchPage(client, cursor: cursor)
-            // 중복 방지. keyset 커서는 원리상 안 겹치지만, 같은 커서로 두 번 불리는 경합이
-            // 남아 있으면 같은 카드가 두 장 생기고 ForEach(id:)가 런타임에 경고를 뱉는다.
-            let known = Set(links.map(\.id))
-            links.append(contentsOf: page.links.filter { !known.contains($0.id) })
-            nextCursor = page.next_cursor
-            loadError = nil
-        } catch {
-            loadError = error.localizedDescription
-        }
-    }
 
-    /// 목록 한 장. 커서만 다르고 필터는 항상 같이 간다 — 커서에 필터가 실려 있지 않으므로
-    /// 빠뜨리면 두 번째 장부터 필터가 풀린다.
-    private func fetchPage(_ client: Client, cursor: String?)
-        async throws -> Components.Schemas.LinkPage {
-        var query = Operations.listLinks.Input.Query(limit: 50)
-        query.cursor = cursor
-        switch filter {
-        case let .tag(name): query.tag = name
-        case .failed: query.status = .failed
-        case nil: break
-        }
-        return try await client.listLinks(.init(query: query)).ok.body.json
-    }
 }
