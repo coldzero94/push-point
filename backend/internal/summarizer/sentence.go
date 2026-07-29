@@ -246,6 +246,11 @@ func IsProse(s string) bool {
 	if last < 0 || !isTerminator(rs[last]) {
 		return false
 	}
+	// 붙어서 반복되는 토큰은 **DOM 노드가 구분자 없이 이어 붙은 자국**이다.
+	// 사람이 쓴 문장에는 사실상 나오지 않는다(아래 실측).
+	if hasGluedRepeat(rs) {
+		return false
+	}
 
 	var letters, digits, symbols, codeChars int
 	for _, r := range rs {
@@ -283,4 +288,55 @@ func isCodeChar(r rune) bool {
 		return true
 	}
 	return false
+}
+
+// hasGluedRepeat은 `SponsoredSponsored`처럼 같은 라틴 토큰이 **구분자 없이 곧바로**
+// 반복되는지 본다.
+//
+// ## 왜 이 신호인가 (2026-07-29)
+//
+// 상세 화면의 요약 자리에 NBC 기사 대신 광고가 떴다:
+//
+//	"…해보세요연구원16년차 / SponsoredSponsored뿌리 깊은 기미 … NBC NewsNBC NEWS / SHOPHow…"
+//
+// 이건 광고 위젯의 DOM 노드들이 텍스트로 이어 붙으면서 생긴 문자열이고, 기존 IsProse는
+// 전부 통과시킨다 — 길이도 글자비도 정상이고 마지막이 `?`로 끝난다.
+//
+// **골든 문장 9,028개(test·wild·dev 본문을 요약기가 보는 길이대로 자른 것)를 재 보면
+// 이 패턴이 있는 문장이 딱 1개다** — `TTTTTTTTTT (easy to predict) However, …`, 분기
+// 예측 글의 데이터 리터럴이다. 오탐률 0.01%이고 그나마 산문이라 보기 어려운 조각이다.
+// 반면 위 광고 문자열에는 2개 있다.
+//
+// 함께 재 본 "붙은 경계 밀도"(소문자→대문자 전이)는 **쓰지 않는다**: 골든 p99가 28.3이고
+// 광고가 12.9라 겹친다. 신호가 되지 못하는 것을 넣으면 문턱만 흐려진다.
+//
+// 라틴 문자로 제한한다. 한글은 조사 반복 등으로 우연히 걸릴 여지가 있고, 실제 관측된
+// 자국은 전부 라틴이었다.
+func hasGluedRepeat(rs []rune) bool {
+	const minUnit = 4 // 이보다 짧으면 "bonbon" 같은 실제 단어가 걸린다
+	n := len(rs)
+	for i := 0; i+2*minUnit <= n; i++ {
+		for u := minUnit; i+2*u <= n; u++ {
+			if !isASCIILetter(rs[i+2*u-1]) {
+				break // 라틴 연속 구간을 벗어나면 이 시작점은 끝
+			}
+			if runesEqual(rs[i:i+u], rs[i+u:i+2*u]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isASCIILetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func runesEqual(a, b []rune) bool {
+	for i := range a {
+		if a[i] != b[i] || !isASCIILetter(a[i]) {
+			return false
+		}
+	}
+	return true
 }
