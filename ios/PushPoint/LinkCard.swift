@@ -69,11 +69,27 @@ struct LinkCard: View {
             .aspectRatio(3, contentMode: .fit)
             .overlay {
                 if let thumb = link.thumb_url, let url = resolveThumb(thumb) {
-                    AsyncImage(url: url) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        // 로드 전에도 회색을 보이지 않는다 — R4.
-                        GeneratedCover(domain: link.domain, facet: dominantFacet)
+                    // **`phase`를 쓰는 이유는 `.failure`를 보기 위해서다.** 두 갈래
+                    // `AsyncImage(url:content:placeholder:)`는 "아직 안 왔다"와 "못 받았다"를
+                    // 같은 placeholder로 접는다. 그래서 썸네일이 깨져도 화면은 생성 커버를
+                    // 그리고, 생성 커버는 **썸네일이 원래 없는 링크의 정상 표시**이기도 하다
+                    // — 두 경우가 완전히 같아진다.
+                    //
+                    // 이 프로젝트는 그 부류를 이미 두 번 겪었다: 상대 `thumb_url`로 전부
+                    // 비었던 것, 그리고 2026-07-29에 **사용자가 먼저 알아챈** 죽은 경로.
+                    // 서버가 없는 파일을 광고하지 않게 고쳤지만(§thumbURL), 전송 실패는 여전히
+                    // 남는다. 보이는 것은 그대로 두고 — 회색을 보이지 않는 R4는 유효하다 —
+                    // **로그에는 남긴다.** 다음 번에도 우연에 기대지 않기 위해서다.
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case let .success(image):
+                            image.resizable().scaledToFill()
+                        case .failure:
+                            GeneratedCover(domain: link.domain, facet: dominantFacet)
+                                .task { PPLog.thumbFailed(url, linkID: link.id) }
+                        default:
+                            GeneratedCover(domain: link.domain, facet: dominantFacet)
+                        }
                     }
                 } else {
                     GeneratedCover(domain: link.domain, facet: dominantFacet)
