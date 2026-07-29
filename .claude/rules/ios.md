@@ -32,4 +32,6 @@ paths:
 
 ## Reading the simulator's database
 
+- **The App Group container id changes on reinstall.** Never hardcode the path you found earlier — get it each time with `xcrun simctl get_app_container booted com.pushpoint.app groups`. Seeding the old container after an uninstall/reinstall produces an app that sees an empty database and a feature that looks broken while the code is correct; that cost about an hour on 2026-07-29.
+- Shared `UserDefaults(suiteName:)` lives in that same container at `Library/Preferences/<suite>.plist`. `xcrun simctl spawn booted defaults write <suite> …` writes to the simulator's global store, **not** the container, so the app does not see it. Write the plist inside the container while the app is terminated.
 - The app group DB lives under `.../Containers/Shared/AppGroup/<id>/data/pushpoint.db`. **Copy `.db`, `-wal` and `-shm` together** — SQLite is in WAL mode, so copying the `.db` alone reads a stale or empty database. This was misread three times in one session, twice producing a wrong conclusion and once producing an unusable backup.
