@@ -71,6 +71,13 @@ func (f *fakeStore) addLink(url, status string, createdAt int64) int64 {
 	return id
 }
 
+// setThumb은 thumb_path를 주입한다 (Store 계약 밖 픽스처).
+func (f *fakeStore) setThumb(id int64, path string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.links[id].ThumbPath = &path
+}
+
 // setDescription은 절단 검증용 description을 주입한다 (Store 계약 밖 픽스처).
 func (f *fakeStore) setDescription(id int64, desc string) {
 	f.mu.Lock()

@@ -102,12 +102,29 @@ func truncate200(s string) string {
 	return string(r[:200])
 }
 
-// thumbURL은 thumb_path("aa/hash.jpg")를 서버 상대 경로 "/thumbs/aa/hash.jpg"로 변환.
-func thumbURL(p *string) *string {
+// thumbURL은 thumb_path("aa/hash.jpg")를 서버 상대 경로 "/thumbs/aa/hash.jpg"로 변환한다.
+//
+// **파일이 실제로 있는지 확인한다.** 없으면 nil을 준다 — 그러면 클라이언트가 생성
+// 커버를 그리고, 그건 R4가 규정한 정당한 표시다.
+//
+// 확인하지 않던 시절에는 서버가 **존재하지 않는 파일의 URL을 계속 광고했다.** 클라이언트는
+// 그걸 받아 이미지를 시도하고 404를 맞은 뒤 조용히 생성 커버로 떨어지는데, 생성 커버는
+// "썸네일이 원래 없는 링크"의 정상 표시이기도 하다 — 즉 **깨진 썸네일과 없는 썸네일이
+// 화면에서 완전히 같아진다.** 이 프로젝트는 이미 한 번 이 부류를 겪었고(상대 thumb_url
+// 때문에 전부 비었던 것) 그때도 원인만 고치고 탐지 가능성은 0으로 남겼다. 2026-07-29에
+// 사용자가 먼저 알아챘다.
+//
+// 비용은 목록 한 장(최대 50건)당 os.Stat 50회다. 로컬 파일시스템이고 디렉터리 엔트리가
+// 캐시에 있으므로 실측 가능한 수준이 아니며, save API p99 게이트와도 무관한 경로다.
+func (s *Server) thumbURL(p *string) *string {
 	if p == nil || *p == "" {
 		return nil
 	}
-	u := "/thumbs/" + strings.TrimPrefix(*p, "/")
+	rel := strings.TrimPrefix(*p, "/")
+	if _, err := os.Stat(filepath.Join(s.thumbsDir, filepath.FromSlash(rel))); err != nil {
+		return nil
+	}
+	u := "/thumbs/" + rel
 	return &u
 }
 
@@ -124,7 +141,7 @@ func toAPITags(tags []store.LinkTag) []gen.LinkTag {
 	return out
 }
 
-func toAPILink(l store.Link) gen.Link {
+func (s *Server) toAPILink(l store.Link) gen.Link {
 	return gen.Link{
 		Id:          int(l.ID),
 		Url:         l.URL,
@@ -132,7 +149,7 @@ func toAPILink(l store.Link) gen.Link {
 		Title:       l.Title,
 		Description: truncate200(l.Description),
 		ContentType: gen.ContentType(l.ContentType),
-		ThumbUrl:    thumbURL(l.ThumbPath),
+		ThumbUrl:    s.thumbURL(l.ThumbPath),
 		Status:      gen.LinkStatus(l.Status),
 		Tags:        toAPITags(l.Tags),
 		Note:        l.Note,
@@ -140,7 +157,7 @@ func toAPILink(l store.Link) gen.Link {
 	}
 }
 
-func toAPIDetail(d *store.LinkDetail) gen.LinkDetail {
+func (s *Server) toAPIDetail(d *store.LinkDetail) gen.LinkDetail {
 	out := gen.LinkDetail{
 		Id:          int(d.ID),
 		Url:         d.URL,
@@ -148,7 +165,7 @@ func toAPIDetail(d *store.LinkDetail) gen.LinkDetail {
 		Title:       d.Title,
 		Description: d.Description, // 상세는 절단 없음
 		ContentType: gen.ContentType(d.ContentType),
-		ThumbUrl:    thumbURL(d.ThumbPath),
+		ThumbUrl:    s.thumbURL(d.ThumbPath),
 		Status:      gen.LinkStatus(d.Status),
 		Tags:        toAPITags(d.Tags),
 		Note:        d.Note,
@@ -286,7 +303,7 @@ func (s *Server) ListLinks(ctx context.Context, request gen.ListLinksRequestObje
 	}
 	links := make([]gen.Link, 0, len(items))
 	for _, l := range items {
-		links = append(links, toAPILink(l))
+		links = append(links, s.toAPILink(l))
 	}
 	return gen.ListLinks200JSONResponse(gen.LinkPage{Links: links, NextCursor: nextCursorPtr(next)}), nil
 }
@@ -300,7 +317,7 @@ func (s *Server) GetLink(ctx context.Context, request gen.GetLinkRequestObject) 
 		}
 		return nil, err
 	}
-	return gen.GetLink200JSONResponse(toAPIDetail(d)), nil
+	return gen.GetLink200JSONResponse(s.toAPIDetail(d)), nil
 }
 
 // UpdateLink — note 교체 / tags 전체 교체 (feedback 기록은 store 책임).
@@ -324,7 +341,7 @@ func (s *Server) UpdateLink(ctx context.Context, request gen.UpdateLinkRequestOb
 		}
 		return nil, err
 	}
-	return gen.UpdateLink200JSONResponse(toAPIDetail(d)), nil
+	return gen.UpdateLink200JSONResponse(s.toAPIDetail(d)), nil
 }
 
 // DeleteLink — 소프트 삭제, 204.
@@ -399,7 +416,7 @@ func (s *Server) Search(ctx context.Context, request gen.SearchRequestObject) (g
 	}
 	links := make([]gen.SearchResult, 0, len(items))
 	for _, it := range items {
-		l := toAPILink(it.Link)
+		l := s.toAPILink(it.Link)
 		links = append(links, gen.SearchResult{
 			Id:          l.Id,
 			Url:         l.Url,
