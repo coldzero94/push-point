@@ -20,6 +20,8 @@ struct StatsView: View {
 
     @State private var stats: Components.Schemas.Stats?
     @State private var failedCount: Int?
+    /// 실패 개수가 조회 상한에 걸렸는가. 걸렸으면 "100개"가 아니라 "100개 이상"이다.
+    @State private var failedCountSaturated = false
     @State private var loadError: String?
 
     var body: some View {
@@ -31,7 +33,11 @@ struct StatsView: View {
             .navigationTitle("통계")
             .refreshable { await load() }
         }
-        .task { await load() }
+        // **`id:`가 있어야 한다.** 없으면 화면이 처음 뜰 때 한 번만 돌고, 그때 인프로세스
+        // 서버가 아직 시작 전이면 load()가 조용히 반환한 뒤 다시 돌지 않는다 —
+        // stats도 loadError도 nil이라 화면은 **영원히 스피너**다. 사용자에게는 로딩으로
+        // 보이므로 당겨서 새로고침할 이유조차 없다. ContentView는 처음부터 이 형태다.
+        .task(id: backend.state) { await load() }
     }
 
     @ViewBuilder
@@ -382,7 +388,7 @@ struct StatsView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(PP.Palette.danger)
-                    Text("수집에 실패한 링크 \(failedCount)개")
+                    Text("수집에 실패한 링크 \(failedCount)개\(failedCountSaturated ? " 이상" : "")")
                         .font(PP.Typo.body)
                         .foregroundStyle(PP.Palette.fg1)
                     Spacer()
@@ -424,14 +430,33 @@ struct StatsView: View {
         guard let client = backend.client else { return }
         do {
             stats = try await client.getStats(.init()).ok.body.json
-            // 실패 목록은 통계 응답에 없다 — 개수만 필요하므로 최소로 받는다.
-            let failed = try await client.listLinks(.init(query: .init(limit: 100, status: .failed)))
-            failedCount = try failed.ok.body.json.links.count
             loadError = nil
         } catch {
             loadError = error.localizedDescription
+            return
+        }
+        // **실패 개수는 따로 받고 따로 실패한다.**
+        //
+        // 예전에는 같은 do 블록 안에 있었는데, stats를 먼저 대입하므로 이 호출이 던지면
+        // loadError가 채워져도 화면은 `if let stats` 가지로 들어가 **오류를 못 보여준다.**
+        // 그리고 failedCount가 nil로 남아 "손이 필요한 것" 섹션이 통째로 사라진다 —
+        // 실패한 링크 12개를 가진 사용자가 완벽해 보이는 통계 화면을 보고, 그것을 찾아
+        // 재시도할 유일한 통로는 없어진 상태가 된다.
+        let query = Operations.listLinks.Input.Query(limit: failedProbeLimit, status: .failed)
+        if let out = try? await client.listLinks(.init(query: query)),
+           let body = try? out.ok.body.json {
+            failedCount = body.links.count
+            failedCountSaturated = body.links.count >= failedProbeLimit
+        } else {
+            // 못 셌으면 **0인 척하지 않는다.** 섹션은 사라지지만 그건 "실패가 없다"가
+            // 아니라 "모른다"이고, 다음 갱신에서 다시 시도된다.
+            failedCount = nil
+            failedCountSaturated = false
         }
     }
+
+    /// 실패 개수를 세려고 받아 오는 최대 건수. 개수만 필요하므로 최소로 받는다.
+    private var failedProbeLimit: Int { 100 }
 }
 
 /// 통계에서 목록으로 넘기는 필터.

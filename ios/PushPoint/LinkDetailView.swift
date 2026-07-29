@@ -64,7 +64,9 @@ struct LinkDetailView: View {
                 Task { await save(tags: names) }
             }
         }
-        .task { await load() }
+        // `id:` 없이 두면 서버가 준비되기 전에 열렸을 때 영원히 스피너가 된다
+        // (StatsView 주석 참조).
+        .task(id: backend.state) { await load() }
     }
 
     @ViewBuilder
