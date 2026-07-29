@@ -155,9 +155,14 @@ struct ContentView: View {
     private var notificationBanner: some View {
         if droppedNotices > 0 {
             Button {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
+                // **알림 설정으로 곧장 보낸다.** `openSettingsURLString`은 앱의 설정
+                // 최상위로 가는데, 거기서 사용자가 "알림"을 다시 찾아 들어가야 하고
+                // 시뮬레이터에서는 그 페이지가 비어 있기까지 하다. iOS 16+의
+                // `openNotificationSettingsURLString`이 정확히 그 화면을 연다 —
+                // 배너가 말하는 문제와 사용자가 도착하는 곳이 같아야 한다.
+                let target = URL(string: UIApplication.openNotificationSettingsURLString)
+                    ?? URL(string: UIApplication.openSettingsURLString)
+                if let target { UIApplication.shared.open(target) }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "bell.slash.fill").font(PP.Typo.label)

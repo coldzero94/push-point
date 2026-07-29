@@ -35,9 +35,17 @@ struct GeneratedCover: View {
         let step = CGFloat(pattern.step)
         let stroke = facet.ink
         // 무늬마다 획 알파가 다르다 — stack은 채우므로 더 낮게 앉는다.
-        let alpha: Double = pattern.kind == .stack ? 0.10 : 0.16
+        // **웹과 같은 값이어야 한다**(§4.5): 같은 도메인은 두 클라이언트에서 같은 그림이
+        // 나온다는 것이 R4의 약속이고, 해시가 같아도 렌더 상수가 다르면 그 약속이 깨진다.
+        // 2026-07-29까지 stack이 0.10(웹 0.13), 획이 1.5(웹 1.25)였다.
+        let alpha: Double = pattern.kind == .stack ? 0.13 : 0.16
 
+        // **중심을 기준으로 회전한다** — 웹이 그렇게 한다(covers.ts는 캔버스 중앙으로
+        // 옮겼다가 회전하고 되돌린다). 원점 기준으로 돌리면 같은 각도라도 무늬가 다른
+        // 자리에 놓인다.
+        context.translateBy(x: size.width / 2, y: size.height / 2)
         context.rotate(by: .degrees(Double(pattern.rotate)))
+        context.translateBy(x: -size.width / 2, y: -size.height / 2)
         let bounds = CGRect(origin: .zero, size: size).insetBy(dx: -size.width, dy: -size.height)
 
         var path = Path()
@@ -87,7 +95,7 @@ struct GeneratedCover: View {
         if pattern.kind == .stack {
             context.fill(path, with: .color(stroke.opacity(alpha)))
         } else {
-            context.stroke(path, with: .color(stroke.opacity(alpha)), lineWidth: 1.5)
+            context.stroke(path, with: .color(stroke.opacity(alpha)), lineWidth: 1.25)
         }
     }
 }
