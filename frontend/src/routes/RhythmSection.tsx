@@ -59,7 +59,7 @@ export function RhythmSection() {
             <button
               type="button"
               onClick={() => void stats.refetch()}
-              className="text-caption text-fg-2 underline underline-offset-4 hover:text-fg-1"
+              className="text-label text-fg-2 underline underline-offset-4 hover:text-fg-1"
             >
               다시 시도
             </button>
@@ -116,8 +116,8 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
 
       <div className="space-y-4">
         <div className="flex items-baseline justify-between">
-          <span className="text-caption text-fg-3">최근 30일</span>
-          <span className="text-mono text-caption text-fg-3">{active}일 저장</span>
+          <span className="text-label text-fg-3">최근 30일</span>
+          <span className="font-mono text-label text-fg-3">{active}일 저장</span>
         </div>
         {/* 계약이 by_day를 **빈 날까지 채운 30칸**으로 보장하므로(openapi.yaml Stats.by_day)
             i번째 칸이 곧 i번째 날이다. 예전에는 GROUP BY 결과를 그대로 받아 행 순서로
@@ -133,8 +133,8 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
           ))}
         </div>
         <div className="flex justify-between">
-          <span className="text-caption text-fg-3">30일 전</span>
-          <span className="text-caption text-fg-3">오늘</span>
+          <span className="text-label text-fg-3">30일 전</span>
+          <span className="text-label text-fg-3">오늘</span>
         </div>
       </div>
 
@@ -143,8 +143,8 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
       {peak > 0 && (
         <div className="space-y-4">
           <div className="flex items-baseline justify-between">
-            <span className="text-caption text-fg-3">언제 저장하나</span>
-            <span className="text-caption text-fg-3">
+            <span className="text-label text-fg-3">언제 저장하나</span>
+            <span className="text-label text-fg-3">
               {WEEKDAYS[weekdays.indexOf(peak)]}요일에 가장 많이
             </span>
           </div>
@@ -167,8 +167,8 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
                 key={label}
                 className={
                   weekdays[i] === peak
-                    ? 'flex-1 text-center text-caption text-fg-1'
-                    : 'flex-1 text-center text-caption text-fg-3'
+                    ? 'flex-1 text-center text-label text-fg-1'
+                    : 'flex-1 text-center text-label text-fg-3'
                 }
               >
                 {label}
@@ -185,15 +185,15 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
       {groups.length > 0 && (
         <div className="space-y-8">
           <div className="flex items-baseline justify-between">
-            <span className="text-caption text-fg-3">무엇을 모았나</span>
-            <span className="text-caption text-fg-3">누르면 그 목록으로</span>
+            <span className="text-label text-fg-3">무엇을 모았나</span>
+            <span className="text-label text-fg-3">누르면 그 목록으로</span>
           </div>
           {groups.map((g) => (
             <div key={g.facet} className="space-y-2">
               <div className="flex items-center gap-6">
                 <span aria-hidden className={`size-6 shrink-0 rounded-full ${FACET_DOT[g.facet]}`} />
                 <span className="text-label text-fg-2">{FACET_LABELS[g.facet]}</span>
-                <span className="text-mono text-caption text-fg-3">{g.total}</span>
+                <span className="font-mono text-label text-fg-3">{g.total}</span>
               </div>
               {g.tags.map((t) => (
                 <Link
@@ -203,7 +203,7 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
                   className="flex items-baseline justify-between gap-8 rounded-control py-2 pl-12 pr-4 text-body text-fg-2 hover:bg-hover hover:text-fg-1"
                 >
                   <span className="truncate">{t.name}</span>
-                  <span className="text-mono text-caption text-fg-3">{t.count}</span>
+                  <span className="font-mono text-label text-fg-3">{t.count}</span>
                 </Link>
               ))}
             </div>
@@ -211,8 +211,8 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
         </div>
       )}
 
-      <p className="text-caption text-fg-3">
-        전체 <span className="text-mono">{s.total_links.toLocaleString('ko-KR')}</span>
+      <p className="text-meta text-fg-3">
+        전체 <span className="font-mono">{s.total_links.toLocaleString('ko-KR')}</span>
       </p>
     </div>
   )

@@ -212,10 +212,10 @@ export function SettingsScreen() {
         </p>
         <ol className="ml-16 list-decimal space-y-6 text-body text-fg-2 marker:text-fg-3">
           <li>
-            Chrome 주소창에 <code className="text-mono text-fg-1">chrome://extensions</code> 입력 → 우측 상단
+            Chrome 주소창에 <code className="font-mono text-meta text-fg-1">chrome://extensions</code> 입력 → 우측 상단
             개발자 모드 켜기
           </li>
-          <li>“압축해제된 확장 프로그램을 로드” → 저장소의 <code className="text-mono text-fg-1">extension/</code> 폴더 선택</li>
+          <li>“압축해제된 확장 프로그램을 로드” → 저장소의 <code className="font-mono text-meta text-fg-1">extension/</code> 폴더 선택</li>
           <li>확장 옵션에서 아래 두 값을 붙여넣기</li>
         </ol>
         <div className="flex flex-wrap gap-8">
@@ -227,7 +227,7 @@ export function SettingsScreen() {
           </Button>
         </div>
         {copied ? (
-          <p className="text-caption text-fg-2" role="status">
+          <p className="text-meta text-fg-2" role="status">
             {copied}
           </p>
         ) : null}
