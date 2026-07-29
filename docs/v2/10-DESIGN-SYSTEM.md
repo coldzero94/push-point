@@ -160,7 +160,7 @@ Push-Point의 정체성은 "링크를 예쁘게 모으는 곳"이 아니라 **LL
 
 | 토큰 | 라이트 | 다크 | 용도 |
 |---|---|---|---|
-| `--bg-canvas` | `#F4F6F5` | `#0D1210` | 페이지 바닥 |
+| `--bg-canvas` | `#DEF0E8` | `#07140F` | 페이지 바닥. **중성 램프가 아니라 브랜드 hue 저채도**다(§2.1.4) |
 | `--bg-surface` | `#FCFDFD` | `#141A18` | 카드·입력·툴바 표면 |
 | `--bg-hover` | `#EAEEEC` | `#1A221F` | hover, 커버 로드 전 바탕 |
 | `--bg-elevated` | `#FCFDFD` | `#1C2320` | 인스펙터·팝오버·시트·팔레트 |
@@ -203,23 +203,23 @@ hue lock:  craft 168  /  media 112  /  life 318
 
 #### 2.1.3 대비 (빌드 게이트 대상)
 
-아래 수치는 WCAG 2.x sRGB 상대휘도 공식으로 **실제 계산한 값**이다(소수 둘째 자리 반올림). 토큰 값을 고치면 이 표도 같은 계산으로 다시 채운다 — 어림값을 적지 않는다.
+아래 수치는 WCAG 2.x sRGB 상대휘도 공식으로 **실제 계산한 값**이다(소수 둘째 자리 반올림). 토큰 값을 고치면 이 표도 같은 계산으로 다시 채운다 — 어림값을 적지 않는다. (2026-07-29에 `--bg-canvas`가 브랜드 hue로 바뀌면서 canvas가 걸린 다섯 행을 다시 계산했다. 그때 이 규칙이 지켜지지 않아 표가 옛 값으로 남아 있었다.)
 
 **텍스트 (기준 4.5:1)**
 
 | 조합 | 라이트 | 다크 | 판정 |
 |---|---|---|---|
-| `fg-1` on `bg-canvas` | 15.80 | 15.96 | AAA |
-| `fg-1` on `bg-surface` | 16.81 | 14.88 | AAA |
-| `fg-2` on `bg-canvas` | 6.44 | 8.75 | AA / AAA |
-| `fg-2` on `bg-surface` | 6.85 | 8.15 | **AA**(라이트는 7:1 미달) / AAA |
-| `fg-3` on `bg-canvas` (13px 메타) | **2.66** | 4.25 | **미달 — 아래 예외 규칙** |
-| `fg-3` on `bg-surface` (13px 메타) | **2.83** | 3.96 | **미달 — 아래 예외 규칙** |
-| `accent` 텍스트 on `bg-canvas` | **5.26** | **7.55** | AA |
-| `accent` 텍스트 on `bg-surface` | **5.60** | **7.03** | AA |
+| `fg-1` on `bg-canvas` | 14.44 | 15.93 | AAA |
+| `fg-1` on `bg-surface` | 16.78 | 14.93 | AAA |
+| `fg-2` on `bg-canvas` | 5.87 | 8.74 | AA / AAA |
+| `fg-2` on `bg-surface` | 6.82 | 8.19 | **AA**(라이트는 7:1 미달) / AAA |
+| `fg-3` on `bg-canvas` (13px 메타) | **2.42** | 4.26 | **미달 — 아래 예외 규칙** |
+| `fg-3` on `bg-surface` (13px 메타) | **2.81** | 4.00 | **미달 — 아래 예외 규칙** |
+| `accent` 텍스트 on `bg-canvas` | **4.81** | **7.50** | AA |
+| `accent` 텍스트 on `bg-surface` | **5.59** | **7.03** | AA |
 | `on-accent` on `accent` (primary 버튼) | **5.60** | **7.60** | AA |
 | `on-accent` on `accent-hover` (primary hover) | **7.32** | **9.63** | AAA |
-| `danger` on `bg-canvas` | 6.03 | 6.59 | AA |
+| `danger` on `bg-canvas` | 5.51 | 6.55 | AA |
 | `danger` on `danger-tint` | 5.66 | 5.99 | AA |
 | `warn` on `bg-canvas` | 4.88 | 5.79 | AA |
 | `warn` on `warn-tint` | 4.81 | 4.86 | AA |
@@ -613,380 +613,19 @@ z-index 사다리 — **이 7개 밖의 z-index 금지:**
 
 ## 3. Tailwind v4 `@theme` 매핑
 
-`frontend/tailwind.css` 전문. **블록 순서 자체가 명세다** — 아래 두 규칙을 어기면 빌드는 성공하고 화면만 조용히 깨진다.
+**값은 `frontend/tailwind.css`에 있고, 여기서 다시 적지 않는다.**
+
+원래 이 절은 그 파일 **전문을 복사**해 뒀다(377줄). 그래서 필연적으로 낡았다 —
+2026-07-29 기준으로 canvas 값, 폰트 스택, 자간 8단, `@font-face` 블록, `--cover-*`
+토큰이 전부 실제 파일과 달랐다. `.claude/rules/docs.md`가 "소스와 파생물은 같은 작업에서
+함께 고친다"고 요구하는데, **377줄짜리 파생물은 그 요구를 구조적으로 못 지킨다.**
+
+그래서 값 복사를 버리고 **파일이 스스로 설명하지 못하는 것**만 남긴다. 아래 두 규칙이
+그것이다 — 값이 아니라 **블록 순서**이고, 어기면 빌드는 성공하고 화면만 조용히 깨진다.
+
 
 1. **리셋 블록(`--네임스페이스-*: initial`)이 모든 정의 블록보다 먼저 온다.** v4는 `@theme`를 소스 순서대로 병합하고 `initial`은 그 시점까지 등록된 키를 전부 지운다. 리셋을 `@theme inline` 뒤에 두면 의미 색 유틸리티가 **하나도** 생성되지 않는다(§9 스모크 체크가 이 순서를 검사한다). **토큰을 추가할 때도 이 순서를 먼저 확인한다 — 새 블록은 항상 리셋 블록보다 뒤다.**
 2. **의미 색은 반드시 `@theme inline`이다.** 비-inline `@theme`은 `:root`에서 값이 한 번 치환되어 `.dark` 오버라이드가 유틸리티에 반영되지 않는다. **facet 토큰(`--color-tag-*`)에도 그대로 적용된다.**
-
-```css
-/* Tailwind CSS v4 — CSS-first config. Imported from src/main.tsx. */
-@import "tailwindcss";
-
-@custom-variant dark (&:where(.dark, .dark *));
-
-/* ── 0. 리셋 — 반드시 모든 정의 블록(@theme inline 포함)보다 먼저 ──────
-   v4는 @theme 을 소스 순서대로 병합하고 `--네임스페이스-*: initial` 은
-   그 시점까지 등록된 키를 전부 지운다. 이 블록이 아래로 내려가면
-   의미 색 유틸(bg-canvas / text-fg-1 / bg-accent …)이 0개 생성된다. */
-@theme {
-  --color-*: initial;
-  --spacing-*: initial;
-  --spacing: initial;
-  --radius-*: initial;
-  --text-*: initial;
-  --font-*: initial;
-  --ease-*: initial;
-  --container-*: initial;
-  --breakpoint-*: initial;
-}
-
-/* ── 1. 원시 팔레트 + 의미 토큰 (라이트/다크) ─────────────────────────
-   중성 램프는 2026-07-25에 hue 225~257(파랑 편향) → **hue 170**으로 옮겼다.
-   각 단계의 L은 그대로 두고 C만 0.62배로 줄였으므로 명도 대비는 사실상
-   불변이고(§10 7.1), 바뀐 것은 색조뿐이다.
-
-   대가를 측정하고 받아들였다: neutral 칩 ink와 facet ink의 최소 분리가
-   deutan 1차 근사 ΔE 9.69 → 8.67(라이트) / 10.14 → 9.17(다크)로 줄어든다.
-   둘 다 §5.1 목표선 8을 넘으므로 허용 범위지만, 여유가 준 것은 사실이다.
-   **C를 여기서 더 올리면 목표선을 깬다** — 램프 채도를 만지려면 §10 5.1을
-   먼저 다시 측정할 것.
-
-   facet 6색과 accent/danger/warn은 §10 2.1.2·§5의 실측값 그대로다.
-   hue lock(craft 168 / media 112 / life 318)과 채도 상한은 CVD 분리 근거가
-   붙어 있는 하드 제약이라 이 개정에서 건드리지 않았다. */
-@layer base {
-  :root {
-    color-scheme: light dark;      /* 인라인 스크립트가 클래스를 심기 전의 기본값 */
-
-    /* ink scale — 의미 토큰 정의부에서만 참조. hue 170, C = 원본 × 0.62 */
-    --ink-0:#FCFDFD;   --ink-50:#F4F6F5;  --ink-100:#EAEEEC; --ink-200:#DBE0DE;
-    --ink-300:#C2CAC7; --ink-400:#919B97; --ink-500:#6B7672; --ink-600:#515C58;
-    --ink-700:#3A4440; --ink-800:#262F2B; --ink-900:#171D1B; --ink-950:#0D1210;
-
-    /* semantic — light */
-    --bg-canvas:var(--ink-50); --bg-surface:var(--ink-0); --bg-hover:var(--ink-100);
-    --bg-elevated:var(--ink-0); --bg-selected:#E1F9EF;
-    --fg-1:var(--ink-900); --fg-2:var(--ink-600); --fg-3:var(--ink-400); --fg-inverse:var(--ink-0);
-    --line-1:rgb(13 18 16 / .08); --line-2:rgb(13 18 16 / .14);
-    --line-control:#77817D;           /* 컨트롤 경계 전용 — 배경 전 조합 3:1 이상 */
-    --rail-progress:var(--ink-600);   /* 진행 레일 (펄스 하한에서도 3:1) */
-    --accent:#197459; --accent-hover:#096149; --accent-tint:#E1F9EF; --on-accent:var(--ink-0);
-    --danger:#B4232B; --danger-tint:#FCEBEA;
-    --warn:#8E6400;   --warn-tint:#FDF3E2;
-
-    /* tag facet — hue lock 168 / 112 / 318. neutral 은 토큰을 만들지 않는다(fg-2 + bg-hover) */
-    --tag-craft-ink:#004E39; --tag-craft-tint:#E1F9EF;
-    --tag-media-ink:#54570B; --tag-media-tint:#F2F5E0;
-    --tag-life-ink:#4B2656;  --tag-life-tint:#FBEDFF;
-
-    /* elevation — 카드가 화면의 기본 단위가 되면서 그림자가 2단으로 늘었다.
-       rest(sh-card) → hover(sh-lift)로만 움직이고 그 사이 단계는 없다. */
-    --ring: 0 0 0 1px var(--line-1);
-    --sh-card: 0 1px 2px rgb(13 18 16 / .05), 0 8px 24px -12px rgb(13 18 16 / .16);
-    --sh-lift: 0 2px 4px rgb(13 18 16 / .06), 0 18px 40px -16px rgb(13 18 16 / .22);
-    --sh-panel: var(--ring), 0 8px 24px -8px rgb(13 18 16 / .18),
-                             0 2px 6px  -2px rgb(13 18 16 / .10);
-    --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(13 18 16 / .22);
-  }
-
-  /* 3-state 테마: <html>에는 해결된 결과 클래스가 항상 하나 붙는다.
-     .light 규칙이 없으면 OS 다크 + 사용자가 라이트를 고른 경로에서
-     스크롤바·폼 컨트롤만 다크로 남는다. */
-  .light { color-scheme: light; }
-
-  .dark {
-    color-scheme: dark;
-    --bg-canvas:var(--ink-950); --bg-surface:#141A18; --bg-hover:#1A221F;
-    --bg-elevated:#1C2320; --bg-selected:#0F2C22;
-    --fg-1:#E9EDEB; --fg-2:#A9B3AF; --fg-3:#6E7B76; --fg-inverse:#06120E;
-    --line-1:rgb(233 237 235 / .08); --line-2:rgb(233 237 235 / .14);
-    --line-control:#77817D;           /* 라이트와 동일 값으로 양쪽 3:1을 만족한다 */
-    --rail-progress:var(--ink-400);
-    --accent:#2EB88F; --accent-hover:#37CFA1; --accent-tint:#0F2C22; --on-accent:#06120E;
-    --danger:#F2706B; --danger-tint:#2A1518;
-    --warn:#B28738;   --warn-tint:#292113;
-
-    /* tag facet — hue 고정, L·C만 슬롯별. "다크에서 채도 −20%" 전역 공식을 쓰지 않는다 */
-    --tag-craft-ink:#84E4C1; --tag-craft-tint:#0F2C22;
-    --tag-media-ink:#BFC573; --tag-media-tint:#262810;
-    --tag-life-ink:#EEBBFE;  --tag-life-tint:#2E2033;
-
-    --sh-card: 0 1px 2px rgb(0 0 0 / .40), 0 8px 24px -12px rgb(0 0 0 / .60);
-    --sh-lift: 0 2px 4px rgb(0 0 0 / .45), 0 18px 40px -16px rgb(0 0 0 / .70);
-    --sh-panel: var(--ring), 0 8px 24px -8px rgb(0 0 0 / .55),
-                             0 2px 6px  -2px rgb(0 0 0 / .35);
-    --sh-sheet: var(--ring), 0 -8px 32px -12px rgb(0 0 0 / .55);
-  }
-}
-
-/* ── 2. 유틸리티 매핑 ──────────────────────────────────────────────── */
-@theme inline {
-  /* color: inline이어야 .dark 오버라이드가 유틸리티에 전달된다 */
-  --color-canvas:      var(--bg-canvas);
-  --color-surface:     var(--bg-surface);
-  --color-hover:       var(--bg-hover);
-  --color-elevated:    var(--bg-elevated);
-  --color-selected:    var(--bg-selected);
-  --color-fg-1:        var(--fg-1);
-  --color-fg-2:        var(--fg-2);
-  --color-fg-3:        var(--fg-3);
-  --color-fg-inverse:  var(--fg-inverse);
-  --color-line-1:      var(--line-1);
-  --color-line-2:      var(--line-2);
-  --color-line-control:var(--line-control);
-  --color-rail-progress:var(--rail-progress);
-  --color-accent:      var(--accent);
-  --color-accent-hover:var(--accent-hover);
-  --color-accent-tint: var(--accent-tint);
-  --color-on-accent:   var(--on-accent);
-  --color-danger:      var(--danger);
-  --color-danger-tint: var(--danger-tint);
-  --color-warn:        var(--warn);
-  --color-warn-tint:   var(--warn-tint);
-
-  /* tag facet — 여기도 inline 이어야 .dark 오버라이드가 유틸리티에 전달된다.
-     neutral 은 매핑하지 않는다 — 클라이언트가 fg-2 / hover 를 그대로 쓴다(§5.2) */
-  --color-tag-craft-ink: var(--tag-craft-ink);   --color-tag-craft-tint: var(--tag-craft-tint);
-  --color-tag-media-ink: var(--tag-media-ink);   --color-tag-media-tint: var(--tag-media-tint);
-  --color-tag-life-ink:  var(--tag-life-ink);    --color-tag-life-tint:  var(--tag-life-tint);
-
-  --shadow-card:  var(--sh-card);
-  --shadow-lift:  var(--sh-lift);
-  --shadow-panel: var(--sh-panel);
-  --shadow-sheet: var(--sh-sheet);
-  --shadow-ring:  var(--ring);
-}
-
-/* ── 3. 모드 무관 스케일 ───────────────────────────────────────────── */
-/* static: v4는 참조되지 않은 theme 변수를 :root에서 제거한다. 레이아웃 상수와
-   duration·z 토큰은 lint와 JS가 읽어야 하므로 항상 방출시킨다. */
-@theme static {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo",
-               "Pretendard Variable", Pretendard, system-ui, "Segoe UI",
-               "Malgun Gothic", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-  /* serif 는 시간 척추 머리글 전용이다(§10 2.2.5). Latin은 Charter/Iowan,
-     한글은 AppleMyungjo로 떨어지도록 순서를 잡는다 — 본문·라벨·컨트롤에는 쓰지 않는다. */
-  --font-serif: Charter, "Iowan Old Style", Georgia, AppleMyungjo, "Nanum Myeongjo",
-                "Apple SD Gothic Neo", serif;
-
-  /* type scale (8단). 이 개정이 추가한 것은 `card`와 `spine` 둘뿐이고 기존 6단의
-     크기·굵기·트래킹은 한 값도 바꾸지 않았다 — 트래킹은 SF의 광학 곡선을 따르고
-     (§10 2.2.2), 굵기는 400/500/600 세 개뿐이다(§10 2.2.3). */
-  --text-label: 12px;
-  --text-label--line-height: 16px;
-  --text-label--font-weight: 500;
-  --text-label--letter-spacing: -0.006em;
-
-  --text-meta: 13px;
-  --text-meta--line-height: 18px;
-  --text-meta--font-weight: 400;
-  --text-meta--letter-spacing: -0.012em;
-
-  /* 카드 본문 — description 2줄 클램프 전용. body(15/24)를 쓰면 카드가 8px 높아지고
-     meta(13/18)를 쓰면 한글 두 줄이 붙는다. 그 사이의 한 단계다. */
-  --text-card: 13px;
-  --text-card--line-height: 20px;
-  --text-card--font-weight: 400;
-  --text-card--letter-spacing: -0.010em;
-
-  --text-body: 15px;
-  --text-body--line-height: 24px;
-  --text-body--font-weight: 400;
-  --text-body--letter-spacing: -0.010em;
-
-  --text-title: 15px;
-  --text-title--line-height: 20px;
-  --text-title--font-weight: 600;
-  --text-title--letter-spacing: -0.016em;
-
-  /* 시간 척추 머리글 — serif 를 쓰는 유일한 슬롯. SF 광학 트래킹 곡선은 SF에만
-     해당하므로 여기서는 0이다(serif는 그 곡선을 따르지 않는다). */
-  --text-spine: 21px;
-  --text-spine--line-height: 28px;
-  --text-spine--font-weight: 600;
-  --text-spine--letter-spacing: 0em;
-
-  --text-head: 20px;
-  --text-head--line-height: 26px;
-  --text-head--font-weight: 600;
-  --text-head--letter-spacing: -0.002em;
-
-  --text-display: 32px;
-  --text-display--line-height: 36px;
-  --text-display--font-weight: 600;
-  --text-display--letter-spacing: 0.004em;
-
-  /* spacing — 12스텝. 유틸리티 숫자 == px (p-16 = 16px) */
-  --spacing-2:2px;   --spacing-4:4px;   --spacing-6:6px;   --spacing-8:8px;
-  --spacing-12:12px; --spacing-16:16px; --spacing-20:20px; --spacing-24:24px;
-  --spacing-32:32px; --spacing-40:40px; --spacing-56:56px; --spacing-80:80px;
-
-  /* radius — semantic only */
-  --radius-chip:999px; --radius-control:10px; --radius-thumb:8px;
-  --radius-bar:3px;    /* 리듬/요일 막대 — iOS Chart의 cornerRadius와 같은 값 */
-  --radius-card:16px;  --radius-panel:16px;   --radius-sheet:20px;
-
-  /* easing */
-  --ease-ui:    cubic-bezier(0.4, 0, 0.6, 1);
-  --ease-enter: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-
-  /* motion — 허용 duration 집합의 유일한 선언부(§2.6) */
-  --dur-out:120ms; --dur-1:160ms; --dur-2:180ms; --dur-close:200ms;
-  --dur-flip:220ms; --dur-3:260ms; --dur-fill:340ms; --dur-pulse:2400ms;
-
-  /* 브레이크포인트 3개(= 구간 4개). 기본 스케일을 지웠으므로 md:(768px)는 존재하지 않는다 */
-  --breakpoint-sm:  560px;
-  --breakpoint-lg: 1024px;
-  --breakpoint-xl: 1280px;
-
-  /* containers — 보드가 인스펙터 개폐로 폭이 바뀌므로 열 수는 뷰포트가 아니라
-     보드 컨테이너가 정한다(§10 2.3) */
-  --container-board-sm: 460px;
-  --container-board-md: 760px;
-
-  /* 레이아웃 상수 — 12스텝 밖의 고정 치수. h-(--size-header) 형태로만 참조한다 */
-  /* 카드 슬롯 높이 — 값이 아직 없어도 자리를 비워두게 하는 상수다(CLS 0).
-     title 은 2줄 × text-title 20px, desc 는 2줄 × text-card 20px. */
-  --size-card-title:40px; --size-card-desc:40px;
-  --size-thumb:56px; --size-thumb-sm:44px;
-  --size-header:56px; --size-toolbar:44px; --size-rail:2px; --size-spark-min:3px;
-  /* 리듬 섹션 차트 높이 — iOS StatsView의 frame(height:)와 같은 값으로 둔다.
-     12스텝 밖이라 여기 상수로 있어야 한다(h-32는 32px이라 차트로 못 쓴다). */
-  --size-rhythm:110px; --size-weekday:76px;
-  --w-page:1200px; --w-content:768px; --w-inspector:400px; --w-list-min:480px;
-  --w-search-input:480px; --w-form:560px;
-  --gutter: max(env(safe-area-inset-left), clamp(16px, 2.5vw, 32px));
-
-  /* z ladder — 이 7개 밖의 z-index 금지 */
-  --z-header:100; --z-popover:600; --z-palette:650;
-  --z-overlay:699; --z-sheet:700; --z-toast:800; --z-tooltip:1100;
-}
-
-/* ── 4. 베이스 ────────────────────────────────────────────────────── */
-@layer base {
-  html, body, #root { height: 100%; }
-  body {
-    font-family: var(--font-sans);
-    background: var(--bg-canvas);
-    color: var(--fg-1);
-    font-variant-numeric: tabular-nums;
-    /* -webkit-font-smoothing 은 의도적으로 선언하지 않는다 */
-  }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  :focus:not(:focus-visible) { outline: none; }
-
-  /* 로드 봉인 + reduced-motion */
-  [data-loading] *, [data-reduce-motion] * {
-    transition-duration: 1ms !important;
-    transition-delay: 0ms !important;
-    animation: none !important;
-    animation-delay: 0ms !important;
-  }
-  /* 무한 루프는 감소가 아니라 제거 — 정적 불투명 */
-  [data-reduce-motion] .rail-pulse { opacity: 1; }
-  /* 채우기 안무(S2)도 감소가 아니라 제거 — 최종 상태로 바로 간다 */
-  [data-reduce-motion] .fill-step { opacity: 1 !important; transform: none !important; }
-}
-
-@layer utilities {
-  .glass {
-    background: color-mix(in oklab, var(--bg-surface) 72%, transparent);
-    backdrop-filter: blur(12px) saturate(1.6);
-  }
-  @supports not (backdrop-filter: blur(1px)) {
-    .glass { background: var(--bg-surface); }   /* 블러가 없으면 더 불투명하게 */
-  }
-  .thumb-img { filter: none; }
-  .dark .thumb-img {
-    filter: brightness(.92);
-    box-shadow: inset 0 0 0 1px var(--line-1);
-  }
-  /* 진행 레일 펄스 — 하한 .7에서도 3:1을 유지한다(§10 2.1.3) */
-  @keyframes rail-pulse { from { opacity: .7 } to { opacity: 1 } }
-  .rail-pulse {
-    animation: rail-pulse var(--dur-pulse) var(--ease-ui) infinite alternate;
-  }
-
-  /* S2 채우기 — 워커가 끝나는 순서대로 제자리에서 켜지는 단계. 카드의 최종 치수는
-     0ms에 이미 확정돼 있으므로 이 클래스는 opacity/transform만 건드린다(CLS 0). */
-  .fill-step {
-    opacity: 0;
-    transform: translateY(4px);
-    transition:
-      opacity var(--dur-fill) var(--ease-enter),
-      transform var(--dur-fill) var(--ease-enter);
-  }
-  .fill-step[data-in="true"] { opacity: 1; transform: none; }
-
-  /* 2줄 클램프 — 카드 제목과 본문의 높이를 고정해 보드 격자를 흔들지 않는다 */
-  .clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  /* 히트 영역 2단계(§7.5 / §4 공통 규칙). 클릭·탭 영역만 넓히고 아이콘 크기는
-     그대로 둔다. 마우스(pointer:fine)에서는 요소 자체를 최소 24×24(WCAG 2.5.8
-     Target Size Minimum)로 키우고, 터치(pointer:coarse)에서는 시각 크기를
-     건드리지 않고 ::before로 44×44 히트 영역을 중앙 정렬로 확장한다.
-     ::before는 요소를 기준으로 앵커되므로 정적 배치 요소에는 `relative`를 함께
-     준다(이미 absolute인 요소는 그 자체가 앵커라 추가하지 않는다). */
-  @media (hover: hover) and (pointer: fine) {
-    .hit-target { min-width: 24px; min-height: 24px; }
-  }
-  @media (pointer: coarse) {
-    .hit-target::before {
-      content: "";
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 44px;
-      height: 44px;
-      transform: translate(-50%, -50%);
-    }
-  }
-}
-```
-
-**토큰 참조 문법.** Tailwind에 duration 네임스페이스가 없고 레이아웃 상수도 유틸리티 스케일이 아니므로, 둘 다 CSS 변수 축약 문법으로 참조한다: `duration-(--dur-2)`, `duration-(--dur-fill)`, `min-h-(--size-card-desc)`, `w-(--w-inspector)`, `max-w-(--w-page)`, `z-(--z-toast)`. **익명 임의값(`h-[76px]`, `duration-[220ms]`)은 lint 실패다** — 값이 아니라 이름을 참조한다.
-
-**`@theme static`인 이유.** v4는 어떤 유틸리티도 참조하지 않는 theme 변수를 `:root`에서 제거한다(실측 확인: `static` 없이 빌드하면 `--z-toast`·`--size-thumb-sm`·`--container-row-sm`이 출력에서 사라진다). 레이아웃 상수·duration·z 사다리는 lint와 일부 JS(FLIP 계산)가 읽어야 하므로 항상 방출시킨다.
-
-**브레이크포인트.** 기본 스케일을 지우고 `sm/lg/xl` 3개만 남겼으므로 `md:`(768px)는 **컴파일 단계에서 존재하지 않는다**. 빌드 출력의 미디어 쿼리는 정확히 `(width>=560px)` / `(width>=1024px)` / `(width>=1280px)` 세 개다(§2.3의 4구간과 1:1).
-
-부트스트랩 스크립트(전이 봉인 + reduced-motion 실시간 반영) — `main.tsx` 최상단:
-
-```ts
-const mql = matchMedia('(prefers-reduced-motion: reduce)')
-const apply = () => document.documentElement.toggleAttribute('data-reduce-motion', mql.matches)
-mql.addEventListener('change', apply); apply()   // MQL을 보관해 설정 변경에 실시간 반응
-
-document.documentElement.setAttribute('data-loading', '')
-requestAnimationFrame(() => requestAnimationFrame(() =>
-  document.documentElement.removeAttribute('data-loading')))
-```
-
-`data-loading`이 없으면 SPA 첫 렌더에서 목록 전체가 한 번 번쩍인다.
-
-테마 플래시 방지 스크립트 — `index.html`의 `<head>`, **모듈 스크립트보다 먼저, 렌더 차단으로** 둔다(§2.1.6). 이 스크립트가 없으면 다크 사용자에게 첫 프레임이 흰 화면으로 나오고, `data-loading` 봉인은 전이만 막을 뿐 이 플래시를 막지 못한다.
-
-```html
-<script>
-  // 3-state 테마의 해결 결과를 첫 페인트 전에 심는다.
-  // 선택값은 localStorage, <html>에 붙는 것은 항상 .light 또는 .dark 하나다.
-  (function () {
-    var pref = null
-    try { pref = localStorage.getItem('pushpoint.theme') } catch (e) {}
-    var dark = pref === 'dark' ||
-      (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
-    document.documentElement.classList.add(dark ? 'dark' : 'light')
-  })()
-</script>
-```
-
-`frontend/src/lib/theme.ts`는 같은 규칙을 런타임에서 유지한다: `setThemePref()`는 `.light`/`.dark`를 **교체**하고(둘 다 지운 상태를 만들지 않는다), `system`일 때만 `change` 이벤트를 따라 다시 계산한다.
 
 ## 4. 컴포넌트 인벤토리
 
@@ -1099,7 +738,7 @@ requestAnimationFrame(() => requestAnimationFrame(() =>
 커버는 원래 칩의 `--tag-*-tint`를 바탕으로 썼다. **두 요구가 다르다는 것이 화면에서 드러났다.**
 
 - 칩 tint는 **12px ink 텍스트가 그 위에서 읽히도록** 잡은 값이라 아주 밝다.
-- 커버는 카드의 **약 40%를 차지하는 3:1 면**이고 그 위에 오는 글자는 도메인 워드마크 하나뿐이다.
+- 커버는 카드의 큰 면(웹 16:9 / iOS 3:1 — §8.5)이고 그 위에 오는 글자는 도메인 워드마크 하나뿐이다.
 
 같은 값을 쓰니 커버가 카드에서 **1.08:1**로 떠올라 — 사실상 흰 사각형이었다. 실기기
 화면에서 "밋밋하다"로 보였고, 원인을 재보니 배경색이 아니라 여기였다
@@ -1489,15 +1128,16 @@ function chipStyle(i: ChipInput) {
 | `neutral` facet | asset 없음 — `Color("fg2")` / `Color("hover")` 재사용 | 새 토큰을 만들지 않는다(§5.2 `FACET_TOKENS`) |
 | `--danger` / `--warn` | `Color("danger")` / `Color("warn")` | |
 | `--danger-tint` / `--warn-tint` | `Color("dangerTint")` / `Color("warnTint")` | 실패·경고 배너 배경 |
-| `--font-sans` | 시스템 폰트(SF). **커스텀 폰트 미탑재** | 자동으로 웹과 같은 인상 |
+| `--font-sans` | **Wanted Sans**(`UIAppFonts`, ttf). `Font.custom(_:size:relativeTo:)`로 Dynamic Type 유지 | 웹과 **같은 폰트 파일**을 쓴다(§2.2.1). PostScript 인스턴스 이름으로 불러야 하고, `.weight()`는 가변 축을 안 움직인다 |
 | `--font-mono` | `.monospaced()` / `.font(.system(.footnote, design: .monospaced))` | R2 대상 필드 동일 |
 | `tabular-nums` | `.monospacedDigit()` | |
 | type scale | **크기가 아니라 역할로 대응** (§8.3) | Dynamic Type 필수 |
 | spacing 12스텝 | `enum Space { static let s2: CGFloat = 2 ... }` + `@ScaledMetric` | 큰 글자에서 간격도 함께 늘어난다 |
 | `radius-chip` | `Capsule()` | |
-| `radius-control` / `thumb` | `.clipShape(.rect(cornerRadius: 6, style: .continuous))` | **`.continuous` 필수** |
-| `radius-row` | 8 (`.continuous`) | |
-| `radius-panel` | 12 (`.continuous`) | |
+| `radius-control` | `10` (`.continuous`) | **`.continuous` 필수** |
+| `radius-thumb` | `8` (`.continuous`) | |
+| `radius-card` | `16` (`.continuous`) | 행이 카드가 되면서 `row`를 대체했다(§4.4) |
+| `radius-panel` | `16` (`.continuous`) | 인스펙터는 카드를 확대한 것이라 같은 값이다(§2.4) |
 | `radius-sheet` | 시스템 시트가 자동 | 직접 그리지 않는다 |
 | `--ring` / `--sh-panel` | `@Environment(\.displayScale) private var displayScale` → `.overlay(shape.strokeBorder(Color("line1"), lineWidth: 1 / displayScale))` | 그림자는 시스템 시트에 위임. **`UIScreen.main`은 iOS 16부터 deprecated**(멀티 씬·Catalyst에서 틀린 값) |
 | z-index 사다리 | `.zIndex` 대신 표현 계층(sheet/alert/overlay)로 해결 | 값 이식 불필요 |
@@ -1555,11 +1195,11 @@ enum DS {
 | `label` | `.caption` (500 → `.weight(.medium)`) | 12/16 | 칩, 카운트 |
 | `meta` | `.footnote` | 13/18 | 도메인·시각. mono 변형은 `design: .monospaced` |
 | `body` | `.subheadline` | 15/20 | 설명·메모 |
-| `title` | `.headline` | 17/22 | **웹 15px → iOS 17pt.** 터치 스케일이므로 의도적으로 다르다 |
+| `title` | `.subheadline` (600) | 15/20 | **웹과 같은 15pt.** 예전에는 "터치 스케일이라 17pt로 의도적으로 다르다"였는데, 커스텀 폰트를 양쪽에 같이 넣으면서(§2.2.1) 그 divergence를 유지할 이유가 사라졌다 — 두 클라이언트가 같은 제품으로 보이는 쪽이 더 중요하다 |
 | `head` | `.title3` | 20/25 | 화면 제목 |
 | `display` | `.largeTitle` 또는 `.title` | 34/41 | 통계 숫자 |
 
-- **letter-spacing을 이식하지 않는다.** SF는 iOS에서 크기별 광학 트래킹을 자동 적용한다. `.tracking()`을 손으로 넣으면 그 자동 보정을 깨뜨린다(웹은 브라우저가 해주지 않아서 값을 명시할 뿐이다).
+- **자간은 웹과 같은 값을 이식한다**(2026-07-29 개정). 예전에는 "SF가 광학 트래킹을 자동 적용하므로 `.tracking()`을 넣지 않는다"였는데, 지금 폰트가 SF가 아니다. 기본값은 0이고 예외는 `display` 하나뿐이라(§2.2.2) `PP.Tracking`이 그 표를 그대로 옮긴다.
 - 크기는 Dynamic Type을 따라 변한다. **행 높이 76px을 고정 이식하지 않는다** — `@ScaledMetric` 기반 최소 높이로 두고 내용이 늘면 늘어나게 한다.
 
 ### 8.4 컴포넌트 대응
@@ -1586,6 +1226,12 @@ enum DS {
 | Tooltip | **없음** | 아이콘 옆에 라벨을 쓰거나 `.contextMenu`로 대체 |
 
 ### 8.5 플랫폼 관용을 따르는 것 (의도적으로 다르다)
+
+**커버 종횡비 — 웹 16:9 / iOS 3:1.** 보드가 웹에서는 2~3열이라 카드 하나가 화면의 1/3이지만
+아이폰은 1열이라 같은 종횡비면 화면당 카드 2장이 된다. 커버의 역할은 "무엇이었는지 알아보는"
+것이므로 그 역할에 화면 절반을 쓰지 않는다. **해시가 정하는 기하와 facet이 정하는 색은 같고,
+비율만 다르다** — 2026-07-29에 이 편차를 명세에 맞춘다며 iOS를 16:9로 바꿨다가 되돌렸다.
+코드 주석에는 근거가 있었는데 이 표에 없어서 "명세 위반"으로 읽혔다.
 
 | 관심사 | 웹 | iOS |
 |---|---|---|
