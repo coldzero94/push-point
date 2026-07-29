@@ -6,6 +6,7 @@ package api
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -114,15 +115,38 @@ func truncate200(s string) string {
 // 때문에 전부 비었던 것) 그때도 원인만 고치고 탐지 가능성은 0으로 남겼다. 2026-07-29에
 // 사용자가 먼저 알아챘다.
 //
-// 비용은 목록 한 장(최대 50건)당 os.Stat 50회다. 로컬 파일시스템이고 디렉터리 엔트리가
-// 캐시에 있으므로 실측 가능한 수준이 아니며, save API p99 게이트와도 무관한 경로다.
+// **"없다"와 "모르겠다"를 가른다.** stat 오류를 종류 없이 삼키면 이 커밋이 고치려던
+// 바로 그 형태가 한 층 아래에서 되살아난다 — DATA_DIR이 안 붙은 볼륨을 가리키거나,
+// 한 번 root로 돌려 샤드 디렉터리 권한이 틀어졌거나, thumbs/를 뺀 백업에서 복구했을 때,
+// 파일은 있는데 **API가 "원래 없다"고 단언하게 된다.** 그러면 클라이언트는 URL을 못 받아
+// 요청조차 하지 않으므로 같은 커밋이 넣은 `PPLog.thumbFailed`도 영영 안 울린다.
+//
+// 이 저장소는 이미 답을 알고 있다 — 이 파일들을 **쓰는** 쪽(`thumbs/disk.go`)이
+// `errors.Is(err, os.ErrNotExist)`가 아닌 오류를 하드 실패로 올리고, 같은 파일의
+// `GetThumb`도 `os.IsNotExist`로 갈라 404와 500을 구분한다. 읽는 쪽만 안 갈랐다.
+//
+// ENOENT가 아니면 URL을 그대로 광고한다. 죽은 URL을 주는 것보다 나빠 보이지만, 여기서는
+// 반대다: 스토리지가 고장 났다는 사실이 **클라이언트의 실패 로그와 GetThumb의 500**이라는
+// 사람이 볼 수 있는 자리로 돌아온다. 조용히 nil을 주면 그 사실은 어디에도 남지 않는다.
+//
+// 비용은 응답 한 장당 최대 **100회**(`clampLimit` 상한 = 스펙 `maximum: 100`)이고,
+// 목록과 검색이 같은 경로다 — 50은 iOS 클라이언트의 페이지 크기이지 서버 상한이 아니다.
+// 실측: 캐시가 따뜻하든 차갑든 100회에 **약 110µs**(1회 ~1.1µs). 이 경로에는 p99 게이트가
+// 없고(`bench-http`는 저장 경로 전용) 관련된 목표는 "링크 10만 건 목록 < 50ms"이므로,
+// 110µs는 그 예산의 0.2%다.
 func (s *Server) thumbURL(p *string) *string {
 	if p == nil || *p == "" {
 		return nil
 	}
 	rel := strings.TrimPrefix(*p, "/")
+	// 경로 탈출은 GetThumb가 막는다(같은 파일의 prefix 검사). 여기서 Join하는 값은
+	// 해시에서 기계가 만든 것이라 탈출이 닿지 않지만, 판정 지점이 저기라는 것은 적어 둔다.
 	if _, err := os.Stat(filepath.Join(s.thumbsDir, filepath.FromSlash(rel))); err != nil {
-		return nil
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		s.logger.Error("thumb 존재 확인 실패 — 없음으로 처리하지 않는다",
+			"thumb_path", rel, "err", err)
 	}
 	u := "/thumbs/" + rel
 	return &u

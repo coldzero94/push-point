@@ -17,7 +17,7 @@ struct PlainRow: ViewModifier {
     }
 }
 
-/// 구간 머리글용. `PlainRow`와 같되 **행 배경이 불투명하다.**
+/// 구간 머리글용. `PlainRow`와 같되 **콘텐츠가 불투명 배경을 직접 칠한다.**
 ///
 /// `List`의 `Section` 헤더는 스크롤하는 동안 상단에 **고정된다.** 그래서 카드가 그 밑으로
 /// 흘러가는데, 헤더 배경이 투명하면 카드의 제목이 머리글 글자 뒤로 비쳐 **두 글자가 같은
@@ -40,6 +40,8 @@ struct PlainHeaderRow: ViewModifier {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(PP.Palette.canvas)
             .listRowSeparator(.hidden)
+            // `Color.clear`는 시스템 기본 행 채움을 지우는 용도로 남긴다 — 여기에
+            // **불투명 색을 넣는 것**이 안 되는 것이지 이 호출이 무의미한 것은 아니다.
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets())
     }

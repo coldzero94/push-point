@@ -93,7 +93,9 @@ targets:
   PushPointUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [PushPointUITests]
+    # 실행 인자 문자열은 앱과 공유한다 — 양쪽에 따로 적으면 한쪽만 고쳤을 때
+    # 플래그가 조용히 안 먹고, 그 실패는 "기능이 없다"와 구분되지 않는다.
+    sources: [PushPointUITests, Shared/UITestModeFlags.swift]
     dependencies:
       - target: PushPoint
     settings:

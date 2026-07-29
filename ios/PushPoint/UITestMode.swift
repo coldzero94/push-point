@@ -34,6 +34,35 @@ enum UITestMode {
     /// 페이지 경계를 넘기는 건수. limit=50이므로 60이면 두 번째 장이 반드시 생긴다.
     static let manyCount = 60
 
+    /// 공유 defaults에서 **테스트가 읽는 값들**을 실행 상태로 되돌린다.
+    ///
+    /// `dataDirectory()`가 임시 디렉터리를 비우므로 링크는 격리되는데, **공유
+    /// `UserDefaults`는 격리되지 않았다.** `-uitest`로 띄워도 App Group entitlement는
+    /// 그대로라 `UserDefaults(suiteName:)`가 **진짜 스위트**를 돌려주고, 그 안의
+    /// `droppedNotices`가 0보다 크면 화면 맨 위에 알림 배너가 뜬다 — 모든 테스트의
+    /// 레이아웃이 그만큼 밀린다.
+    ///
+    /// 그래서 `BoardUITests`가 스스로 적어 둔 "임시 디렉터리 + 자체 픽스처라 시뮬레이터
+    /// 상태에 무관하다"가 이 값 하나에서 거짓이었다. 2026-07-29에 `ios-uitest`가 한 번
+    /// 실패하고 이후 연속 통과했는데, 그때 이 값이 3이었다 — 손으로 배너를 시험하며
+    /// 남긴 값이다. 원인으로 확정하지는 못했지만, 확정할 수 없다는 것 자체가 문제다.
+    ///
+    /// `seedDroppedFlag`가 있으면 그 값을 심는다 — 배너 자체를 검증하려면 필요하다.
+    static func resetSharedDefaults() {
+        guard let d = AppGroup.defaults else { return }
+        let seeded = ProcessInfo.processInfo.arguments
+            .firstIndex(of: seedDroppedFlag)
+            .flatMap { i -> Int? in
+                let next = i + 1
+                return next < ProcessInfo.processInfo.arguments.count
+                    ? Int(ProcessInfo.processInfo.arguments[next]) : nil
+            }
+        d.set(seeded ?? 0, forKey: SaveNotifier.droppedKey)
+    }
+
+    /// `-uitest-dropped N` — 알림 배너를 띄운 상태를 만든다.
+    static let seedDroppedFlag = "-uitest-dropped"
+
     /// 테스트용 데이터 디렉터리. 매 실행 비운다 — 이전 실행이 남긴 링크가 보이면
     /// "N건이 보여야 한다"는 단언이 실행 순서에 따라 흔들린다.
     static func dataDirectory() -> URL {

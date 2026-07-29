@@ -191,6 +191,41 @@ final class BoardUITests: XCTestCase {
         field.typeText(text)
     }
 
+    /// 알림 배너가 **화면 폭을 가득 채우지 않아야** 한다.
+    ///
+    /// 2026-07-29에 이 배너의 `warnTint` 배경이 투명한 네비게이션 바 뒤로 번져 제목·검색
+    /// 필드·툴바까지 경고색으로 칠했다. 실측으로 갈랐고(배너 없는 통계 탭 헤더는 canvas,
+    /// 목록 탭은 warnTint), `safeAreaInset`으로 옮겨도 그대로였다 — **원인은 위치가 아니라
+    /// 가장자리를 무는 것**이었다.
+    ///
+    /// 그래서 이 테스트는 색이 아니라 **기하**를 본다. 색은 접근성 트리에 없지만 원인은
+    /// 있다: 전면이면 회귀, 들여쓰면 정상. 픽셀을 읽는 테스트는 팔레트를 한 번만 손봐도
+    /// 썩고 기기 크기·다크 모드·바 머티리얼에 흔들리는데, 이 단언은 그중 어느 것도 안 탄다.
+    ///
+    /// **한계를 적어 둔다**: 이건 원인을 고정하는 것이지 증상을 고정하는 게 아니다. 다른
+    /// 경로로 헤더가 물드는 회귀는 이 테스트를 통과한다. 그래도 값이 있는 이유는, 리팩토링이
+    /// 되돌릴 가능성이 가장 높은 것이 정확히 이 형태이기 때문이다.
+    func testNotificationBannerDoesNotSpanTheFullWidth() {
+        app.launchArguments = ["-uitest", UITestModeFlags.dropped, "3"]
+        app.launch()
+
+        let banner = app.buttons["notice.notifications"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 8),
+                      "배너가 없다 — 시드 플래그가 안 먹었거나 공유 defaults가 격리되지 않았다")
+
+        let screen = app.windows.firstMatch.frame
+        let f = banner.frame
+        XCTAssertGreaterThan(f.minX, 0,
+                             "배너가 왼쪽 가장자리를 물고 있다 — 전면이면 그 배경이 " +
+                             "투명한 네비 바 뒤로 번져 헤더 전체를 경고색으로 칠한다")
+        XCTAssertLessThan(f.maxX, screen.maxX,
+                          "배너가 오른쪽 가장자리를 물고 있다")
+
+        // 그리고 여백은 버튼 밖이어야 한다 — 안에 있으면 그 투명 영역까지 탭 타깃이 되어
+        // 카드를 노린 손가락이 알림 설정을 연다.
+        XCTAssertLessThan(f.height, 120, "배너 히트 영역이 그려진 것보다 훨씬 크다")
+    }
+
     /// 목록이 길어 화면 밖에 있는 요소를 찾을 때까지 스크롤한다.
     /// 못 찾으면 false — 무한히 밀면 실패가 타임아웃으로 위장된다.
     private func scrollToFind(_ element: XCUIElement, maxSwipes: Int = 8) -> Bool {
