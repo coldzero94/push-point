@@ -65,10 +65,23 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                notificationBanner
-                content
-            }
+            // **배너는 `safeAreaInset`으로 붙인다 — `VStack`의 형제로 두면 안 된다.**
+            //
+            // `.searchable`의 검색 필드는 네비게이션 바 **안**에 살고, 그 바는 스크롤
+            // 최상단에서 투명해진다. 배너를 스크롤 뷰의 형제로 두면 두 가지가 동시에 깨진다:
+            //
+            // 1. **배너의 `warnTint` 배경이 투명한 바 뒤로 번져 헤더 전체를 칠했다.**
+            //    제목·검색 필드·툴바까지 경고색이 되어, 한 줄짜리 알림 때문에 화면 전체가
+            //    경고 상태로 읽혔다 — hue는 정체성만 인코딩한다는 R1의 정면 위반이다.
+            //    실측으로 갈랐다: 배너가 없는 통계 탭은 헤더가 `canvas`(#DEF0E8)인데
+            //    목록 탭은 `warnTint`(#FDF3E2)였다.
+            // 2. **당겨서 새로고침할 때 글자가 겹쳤다.** 바가 늘어나도 형제인 배너는
+            //    따라 움직이지 않아 검색 필드와 같은 자리를 차지했다.
+            //
+            // `safeAreaInset`은 배너를 바 **아래**에 명시적으로 놓고 그만큼 안전 영역을
+            // 줄이므로, 번짐과 겹침이 같이 사라진다. 배너가 없을 때는 EmptyView라 0높이다.
+            content
+                .safeAreaInset(edge: .top, spacing: 0) { notificationBanner }
                 .background(PP.Palette.canvas)
                 .navigationTitle("Push-Point")
                 .toolbar {
@@ -183,7 +196,22 @@ struct ContentView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(PP.Palette.warnTint)
+                // **화면 끝까지 채우지 않는다.** 전면 밴드였을 때 두 가지가 깨졌다.
+                //
+                // 하나는 색이다. 네비게이션 바는 최상단에서 투명해지며 **바로 아래 콘텐츠의
+                // 배경을 위로 확장한다.** 배너가 전면이면 그 `warnTint`가 제목·검색 필드·
+                // 툴바까지 칠해서, 한 줄짜리 알림 때문에 화면 전체가 경고 상태로 읽혔다.
+                // 실측으로 갈랐다 — 배너 없는 통계 탭의 헤더는 `canvas`(#DEF0E8)인데
+                // 목록 탭은 `warnTint`(#FDF3E2)였다. `safeAreaInset`으로 옮겨도 전면인
+                // 한 그대로였다: 원인은 위치가 아니라 **가장자리를 물고 있는 것**이다.
+                //
+                // 다른 하나는 양이다. R1은 채움을 "개입"에 배정하는데, 알림 설정을
+                // 알려 주는 한 줄에 화면 폭 전부를 칠하는 것은 그 예산을 넘는다.
+                // 카드로 들이면 canvas가 가장자리를 되찾아 색이 제자리로 가고,
+                // 경고 면적도 링크 카드와 같은 단위로 줄어든다.
+                .background(PP.Palette.warnTint, in: .rect(cornerRadius: PP.Radius.card))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
             }
             .buttonStyle(.plain)
         }
@@ -339,7 +367,8 @@ struct ContentView: View {
                             }
                     }
                 } header: {
-                    spine(section).plainRow(top: 14, bottom: 6)
+                    // **불투명 행이어야 한다** — 헤더는 고정되고 카드가 그 밑으로 흐른다.
+                    spine(section).plainHeaderRow(top: 14, bottom: 6)
                 }
             }
         }
