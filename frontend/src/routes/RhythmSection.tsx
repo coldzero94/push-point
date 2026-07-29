@@ -15,6 +15,7 @@ import { Link } from '@tanstack/react-router'
 import { useStats } from '../hooks/useStats'
 import { useTags } from '../hooks/useTags'
 import { isUnauthorized } from '../lib/api/client'
+import { EmptyState } from '../components/ui'
 import { activeDays, cappedStreak, daysSinceLastSave, groupedTags, streak } from '../lib/rhythm'
 import { FACET_LABELS } from '../lib/tags/facet'
 import type { Stats, TagFacet } from '../lib/api/types'
@@ -89,10 +90,12 @@ export function RhythmSection() {
  * 태그 이름 → facet.
  *
  * `Stats.by_tag`는 id 없이 이름만 준다(집계 결과라 그렇다). 사전을 아직 못 받았거나
- * 실패했으면 전부 neutral이 되고, 그러면 `dominantFacet`이 null을 내서 관심사 문장이
- * **통째로 사라진다** — 색이 빠지는 정도가 아니다. 그래서 호출부가 tags.isPending을
- * 기다린다. 실패한 경우에는 문장 하나가 빠진 채로 나머지가 그려지는데, 그것이 섹션
- * 전체를 죽이는 것보다 낫다(연속·리듬·태그 목록은 사전 없이도 전부 정확하다).
+ * 실패했으면 전부 neutral이 되어 **묶음이 하나로 뭉치고 색이 전부 회색이 된다.**
+ * 그래서 호출부가 `tags.isPending`을 기다린다.
+ *
+ * 예전에는 이 실패가 관심사 문장을 **통째로 사라지게** 만들었다 — 네트워크 오류가
+ * "말할 것이 없음"으로 위장됐다. 그 문장은 14 §D4로 삭제됐으므로 지금 남는 피해는
+ * 묶음과 색뿐이고, 연속·리듬·태그 목록은 사전 없이도 정확하다.
  */
 function facetLookup(list: ReturnType<typeof useTags>['data']): (name: string) => TagFacet {
   const byName = new Map((list ?? []).map((t) => [t.name, t.facet]))
@@ -100,6 +103,24 @@ function facetLookup(list: ReturnType<typeof useTags>['data']): (name: string) =
 }
 
 function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet }) {
+  // **빈 아카이브에 계기판을 그리지 않는다.** 총계가 0이면 여기서 끝낸다 — 그러지 않으면
+  // 0막대 30개와 빈 묶음과 "전체 0"이 그려진다. iOS는 `ContentUnavailableView`로 이미
+  // 가로채고 있었고 웹만 안 하고 있어서, **같은 상태를 두 화면이 다르게 그렸다.**
+  //
+  // 이건 취향이 아니라 이 화면의 교리다 — "빈 상태에서 0을 세 개 보여주는 것은 정보가
+  // 아니라 소음"(11 §8)이고, 14의 재설계가 지적한 세 문제 중 하나가 **화면이 데이터
+  // 부족을 인정하지 않는 것**이었다.
+  //
+  // 문구는 iOS와 같다(13 §3). 형태만 플랫폼 관용을 따른다.
+  if (s.total_links === 0) {
+    return (
+      <EmptyState
+        title="아직 볼 통계가 없습니다"
+        description="링크를 저장하면 여기에 리듬이 쌓입니다."
+      />
+    )
+  }
+
   const days = streak(s.by_day)
   const active = activeDays(s.by_day)
   const groups = groupedTags(s.by_tag, facetOf)
@@ -198,8 +219,7 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
  * 어느 쪽이 맞는지 사용자가 판단해야 한다.
  */
 function narrative(s: Stats): string {
-  if (s.total_links === 0) return '아직 아무것도 저장하지 않았어요.'
-
+  // total_links === 0은 여기 안 온다 — 호출부가 EmptyState로 먼저 가로챈다.
   const active = activeDays(s.by_day)
   const days = streak(s.by_day)
   const capped = cappedStreak(s.by_day, days)
