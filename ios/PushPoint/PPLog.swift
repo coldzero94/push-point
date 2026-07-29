@@ -17,7 +17,22 @@ enum PPLog {
     private static let ui = Logger(subsystem: "com.pushpoint.app", category: "ui")
 
     /// 서버가 준 썸네일 URL을 못 받았다. 화면은 생성 커버라 겉으로는 정상이다.
-    static func thumbFailed(_ url: URL, linkID: Int) {
-        ui.error("thumb load failed link=\(linkID, privacy: .public) url=\(url.absoluteString, privacy: .public)")
+    ///
+    /// **스크롤할 때마다 다시 찍힌다.** 보드는 셀을 재활용하는 `List`라 실패한 카드가
+    /// 화면 밖으로 나갔다 돌아오면 `.task`가 다시 돈다. 그래서 **줄 수는 실패 횟수가
+    /// 아니라 스크롤 횟수다** — 심각도를 세는 데 쓰지 말 것.
+    static func thumbFailed(_ url: URL, linkID: Int, error: Error) {
+        ui.error("""
+            thumb load failed link=\(linkID, privacy: .public)             url=\(url.absoluteString, privacy: .public)             err=\(String(describing: error), privacy: .public)
+            """)
+    }
+
+    /// 서버는 `thumb_url`을 줬는데 클라이언트가 절대 URL을 만들지 못했다.
+    ///
+    /// **이 프로젝트가 실제로 출하한 썸네일 사고의 갈래다.** 네트워크 요청이 아예 나가지
+    /// 않으므로 `.failure`도 안 뜨고, 화면은 생성 커버라 정상으로 보인다 — 이 줄이 없으면
+    /// 어디에도 흔적이 남지 않는다.
+    static func thumbUnresolvable(_ raw: String, linkID: Int) {
+        ui.error("thumb url unresolvable link=\(linkID, privacy: .public) raw=\(raw, privacy: .public)")
     }
 }

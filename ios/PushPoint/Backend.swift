@@ -51,6 +51,8 @@ final class Backend: ObservableObject {
         // 아카이브를 건드리는 일이 구조적으로 불가능해야 한다(UITestMode 주석).
         let container: URL?
         if UITestMode.isActive {
+            // 데이터만으로는 격리가 안 된다 — 공유 defaults도 되돌려야 한다.
+            UITestMode.resetSharedDefaults()
             container = UITestMode.dataDirectory()
         } else {
             container = AppGroup.dataDirectory()

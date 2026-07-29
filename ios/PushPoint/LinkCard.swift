@@ -84,13 +84,31 @@ struct LinkCard: View {
                         switch phase {
                         case let .success(image):
                             image.resizable().scaledToFill()
-                        case .failure:
+                        case let .failure(error):
+                            // **오류를 버리지 않는다.** 404(서버가 없는 파일을 광고),
+                            // 연결 거부(내장 서버가 아직 바인딩 중), 디코드 실패(0바이트
+                            // JPEG), 타임아웃은 서로 다른 대응을 요구하는데, URL만 남기면
+                            // 넷 다 같은 줄이 된다.
                             GeneratedCover(domain: link.domain, facet: dominantFacet)
-                                .task { PPLog.thumbFailed(url, linkID: link.id) }
-                        default:
+                                .task { PPLog.thumbFailed(url, linkID: link.id, error: error) }
+                        case .empty:
+                            GeneratedCover(domain: link.domain, facet: dominantFacet)
+                        @unknown default:
                             GeneratedCover(domain: link.domain, facet: dominantFacet)
                         }
                     }
+                } else if let thumb = link.thumb_url {
+                    // **서버는 주소를 줬는데 우리가 URL을 못 만든 갈래다.**
+                    //
+                    // 이 프로젝트가 실제로 출하한 썸네일 사고가 바로 여기였다 —
+                    // `Backend.absoluteURL` 주석이 그대로 적어 두고 있다: "그대로
+                    // `URL(string:)`에 넣으면 host 없는 URL이 되어 **조용히 아무것도 안
+                    // 그린다** — 실제로 그렇게 썸네일이 전부 비어 보였다."
+                    //
+                    // 그런데 계측을 붙일 때 이 갈래를 빼먹었다. `.failure`는 어차피
+                    // 네트워크 오류를 내는 쪽이고, **역사적으로 조용했던 쪽은 이쪽이다.**
+                    GeneratedCover(domain: link.domain, facet: dominantFacet)
+                        .task { PPLog.thumbUnresolvable(thumb, linkID: link.id) }
                 } else {
                     GeneratedCover(domain: link.domain, facet: dominantFacet)
                 }
