@@ -352,7 +352,38 @@ ios-bind:
     # 캡처 규칙은 extension/src/extract.js 하나가 원본이다 — 사파리 공유용으로 복사만 한다.
     # 복사가 아니라 각자 관리하면 브라우저와 iOS의 저장 결과가 조용히 갈라진다.
     cp extension/src/extract.js ios/PushPointShare/extract.js
+    # 무엇으로 만들었는지 남긴다 — ios-bind-check가 이 값을 다시 계산해 비교한다.
+    bash scripts/bind_stamp.sh > ios/Frameworks/.bind.sha256
     @echo "ios-bind: PPCore/PPShare.xcframework + extract.js 준비 완료"
+
+# 프레임워크가 백엔드보다 낡았는지 검사한다. ios-build가 이걸 먼저 돌린다.
+#
+# 이 게이트가 없던 동안 **이틀 낡은 프레임워크**로 앱이 돌았고, 그 결과 앱 안의 태그
+# 사전이 42개가 아니라 30개였다(마이그레이션 0008~0011 누락). 화면에서는 "왜 이 링크만
+# 태그가 없지"로 보였고 원인을 찾는 데 한참 걸렸다.
+#
+# CI에는 macOS도 gomobile도 없으므로 이건 **로컬 게이트**다 — ios-api-gen-check와 같다.
+ios-bind-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    f=ios/Frameworks/.bind.sha256
+    if [ ! -d ios/Frameworks/PPCore.xcframework ]; then
+        echo "프레임워크가 없습니다 — just ios-bind 를 먼저 실행하세요"; exit 1
+    fi
+    if [ ! -f "$f" ]; then
+        echo "바인드 스탬프가 없습니다(이 게이트 이전에 만든 프레임워크입니다)."
+        echo "just ios-bind 로 다시 만드세요 — 낡았는지 확인할 방법이 없습니다."; exit 1
+    fi
+    want=$(bash scripts/bind_stamp.sh)
+    got=$(cat "$f")
+    if [ "$want" != "$got" ]; then
+        echo "프레임워크가 백엔드보다 낡았습니다."
+        echo "  스탬프: $got"
+        echo "  현재  : $want"
+        echo "backend/ 또는 migrations/ 가 바뀌었는데 재바인드하지 않았습니다 — just ios-bind"
+        exit 1
+    fi
+    echo "ios-bind-check OK"
 
 # api/openapi.yaml → ios/PushPoint/Generated/ (swift-openapi-generator)
 #
@@ -532,7 +563,7 @@ ios-gen:
 # ad-hoc이면 Apple 계정 없이도 시뮬레이터에서 entitlement가 살아 있다.
 
 # 시뮬레이터용 앱 + 확장 빌드 (ad-hoc 서명 — 계정 불요, App Group 동작)
-ios-build device="iPhone 17": ios-gen
+ios-build device="iPhone 17": ios-bind-check ios-gen
     cd ios && xcodebuild -project PushPoint.xcodeproj -scheme PushPoint \
         -destination 'platform=iOS Simulator,name={{device}}' \
         -derivedDataPath .build \

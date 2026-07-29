@@ -13,6 +13,12 @@ struct LinkCard: View {
     let activeTag: String?
     /// 상대 `thumb_url`을 절대 URL로 푼다(Backend가 서버 주소를 안다).
     let resolveThumb: (String) -> URL?
+    /// 실패한 링크의 잡을 다시 넣는다. nil이면 재시도 줄을 그리지 않는다.
+    var onRetry: (() -> Void)? = nil
+
+    /// 펄스를 감소가 아니라 **제거**로 처리하기 위한 것(§7.4).
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulsing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -25,7 +31,7 @@ struct LinkCard: View {
             RoundedRectangle(cornerRadius: PP.Radius.card, style: .continuous)
                 .strokeBorder(PP.Palette.line1, lineWidth: 1)
         )
-        // S1 — 상태는 배지가 아니라 획. 카드의 leading edge에 3px.
+        // S1 — 상태는 배지가 아니라 획. 카드의 leading edge에 `PP.Size.rail`(2px).
         // **완료 상태는 아무 표시도 없다** — 화면에 남은 획은 전부 "지금 뭔가 일어나고
         // 있거나 잘못됐다"는 뜻이어야 한다.
         .overlay(alignment: .leading) { rail }
@@ -91,6 +97,8 @@ struct LinkCard: View {
                 .padding(.top, 2)
             }
 
+            failureRow
+
             // 기계 데이터는 고정폭(R2) — 사람이 쓴 줄(제목·설명)과 나란히 놓여 대비가 산다.
             HStack(spacing: 6) {
                 Text(link.domain)
@@ -107,15 +115,74 @@ struct LinkCard: View {
         .padding(.bottom, 14)
     }
 
+    /// 상태 레일(§4.7). 두께는 `PP.Size.rail` 하나이고 위계는 굵기가 아니라 위치로 만든다.
+    ///
+    /// 진행 중에는 `.7↔1`로 펄스한다 — 앱에서 **유일한 무한 루프**이고, 워커가 살아 있다는
+    /// 실제 시스템 상태다. 하한이 `.35`가 아니라 `.7`인 이유는 대비다: 배지를 폐기했으므로
+    /// 이 획이 진행 상태의 유일한 시각 신호이고 WCAG 1.4.11(비텍스트 3:1) 대상이 된다.
+    ///
+    /// 색만으로 뜻을 지지 않도록 상태 문구를 접근성 라벨로 항상 동반한다.
     @ViewBuilder
     private var rail: some View {
         switch link.status {
         case .failed:
-            Rectangle().fill(PP.Palette.danger).frame(width: 3)
+            Rectangle().fill(PP.Palette.danger)
+                .frame(width: PP.Size.rail)
+                .accessibilityLabel("실패")
         case .pending, .scraping, .tagging:
-            Rectangle().fill(PP.Palette.railProgress).frame(width: 3)
+            Rectangle().fill(PP.Palette.railProgress)
+                .frame(width: PP.Size.rail)
+                .opacity(pulsing ? 1 : 0.7)
+                .animation(reduceMotion ? nil
+                           : .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                           value: pulsing)
+                .onAppear { if !reduceMotion { pulsing = true } }
+                .accessibilityLabel(statusLabel)
         case .done:
             EmptyView() // 완료에는 획이 없다
+        }
+    }
+
+    /// 웹 `StatusRail`의 STATUS_LABEL과 **같은 단어**를 쓴다(§8.1).
+    private var statusLabel: String {
+        switch link.status {
+        case .pending: "대기"
+        case .scraping: "수집 중"
+        case .tagging: "태깅 중"
+        case .done: "완료"
+        case .failed: "실패"
+        }
+    }
+
+    /// 실패는 레일만으로 끝내지 않는다 — §4.7이 "레일 + 텍스트 + 아이콘" 3중을 요구한다.
+    ///
+    /// 재시도가 **스와이프에만** 있던 것이 문제였다. 이 파일의 스와이프 주석이 스스로
+    /// "빠르지만 발견되지 않는다"고 적어 두었는데, 실패 복구는 발견되지 않으면 안 되는
+    /// 동작이다 — 그 링크는 영원히 실패로 남는다.
+    @ViewBuilder
+    private var failureRow: some View {
+        if link.status == .failed {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(PP.Typo.label)
+                    .foregroundStyle(PP.Palette.danger)
+                // **사유를 못 보여준다.** 목록 항목 `Link`에는 `error`가 없다(상세에만 있다).
+                // 계약을 넓히는 건 별건이라, 여기서는 "실패했고 여기를 누르면 다시 한다"까지만
+                // 말한다 — 그것만으로도 스와이프에 숨어 있던 것보다 낫다.
+                Text("수집에 실패했습니다")
+                    .font(PP.Typo.label)
+                    .tracking(PP.Tracking.label)
+                    .foregroundStyle(PP.Palette.fg2)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let onRetry {
+                    Button("재시도", action: onRetry)
+                        .font(PP.Typo.label)
+                        .foregroundStyle(PP.Palette.accent)
+                        .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 4)
         }
     }
 
