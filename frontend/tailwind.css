@@ -67,7 +67,11 @@
     --ink-700:#3A4440; --ink-800:#262F2B; --ink-900:#171D1B; --ink-950:#0D1210;
 
     /* semantic — light */
-    --bg-canvas:var(--ink-50); --bg-surface:var(--ink-0); --bg-hover:var(--ink-100);
+    /* canvas는 중성 램프에서 떼어 **브랜드 hue(168) 저채도**로 둔다(§10 2.1.4).
+       아이콘이 딥 에버그린인데 앱을 열면 무채색이라 둘이 같은 물건으로 안 보였다.
+       L을 내려야 초록이 된다 — L 0.97에서는 채도를 6배 올려도 흰색이다(게멋 천장).
+       craft 커버(가장 흔한 facet)가 배경에 묻히기 직전이 하한이다. */
+    --bg-canvas:#DEF0E8; --bg-surface:var(--ink-0); --bg-hover:var(--ink-100);
     --bg-elevated:var(--ink-0); --bg-selected:#E1F9EF;
     --fg-1:var(--ink-900); --fg-2:var(--ink-600); --fg-3:var(--ink-400); --fg-inverse:var(--ink-0);
     --line-1:rgb(13 18 16 / .08); --line-2:rgb(13 18 16 / .14);
@@ -104,7 +108,7 @@
 
   .dark {
     color-scheme: dark;
-    --bg-canvas:var(--ink-950); --bg-surface:#141A18; --bg-hover:#1A221F;
+    --bg-canvas:#07140F; --bg-surface:#141A18; --bg-hover:#1A221F;
     --bg-elevated:#1C2320; --bg-selected:#0F2C22;
     --fg-1:#E9EDEB; --fg-2:#A9B3AF; --fg-3:#6E7B76; --fg-inverse:#06120E;
     --line-1:rgb(233 237 235 / .08); --line-2:rgb(233 237 235 / .14);

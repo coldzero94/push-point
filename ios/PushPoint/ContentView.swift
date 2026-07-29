@@ -42,12 +42,26 @@ struct ContentView: View {
     /// 다음 장을 이미 받고 있는지. 없으면 마지막 카드가 화면에 머무는 동안 같은 요청이
     /// 여러 번 나간다 — onAppear는 스크롤 중 여러 번 불린다.
     @State private var loadingMore = false
+    /// 목록 밀도. 기기에 남는다 — 매번 고르게 하면 그건 선택지가 아니라 잡일이다.
+    @AppStorage("pushpoint.density") private var density: ListDensity = .card
 
     var body: some View {
         NavigationStack {
             content
                 .background(PP.Palette.canvas)
                 .navigationTitle("Push-Point")
+                .toolbar {
+                    // 밀도 전환. 아이콘 하나로 토글한다 — 상태가 둘뿐인데 메뉴를
+                    // 열게 하면 두 번 눌러야 한다.
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            density = density.next
+                        } label: {
+                            Image(systemName: density.next.symbol)
+                        }
+                        .accessibilityLabel("\(density.next.label)로 보기")
+                    }
+                }
             .navigationDestination(item: $opening) { target in
                 LinkDetailView(linkID: target.id,
                                facetOf: { facets[$0] ?? .neutral },
@@ -241,7 +255,8 @@ struct ContentView: View {
                      resolveThumb: backend.absoluteURL,
                      // 실패 복구를 스와이프에만 두지 않는다 — 발견되지 않는 동작이라
                      // 그 링크가 영원히 실패로 남는다(§4.7).
-                     onRetry: { Task { await retry(link) } })
+                     onRetry: { Task { await retry(link) } },
+                     density: density)
         }
         .buttonStyle(.plain)
         // 스와이프와 길게 누르기 둘 다 둔다(§8.4). 스와이프는 빠르지만 발견되지 않고,
