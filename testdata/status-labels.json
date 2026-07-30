@@ -1,0 +1,11 @@
+{
+  "_comment": "상태 라벨 — 웹 src/lib/statusAnnounce.ts와 iOS LinkCard.statusLabel이 같이 읽는다(§8.1). 두 화면이 같은 상태를 다르게 부르면 사용자가 둘을 다른 일로 읽는다. retryWaiting은 status보다 우선한다.",
+  "labels": {
+    "pending": "대기",
+    "scraping": "수집 중",
+    "tagging": "태깅 중",
+    "done": "완료",
+    "failed": "실패"
+  },
+  "retryWaiting": "재시도 대기 중"
+}
