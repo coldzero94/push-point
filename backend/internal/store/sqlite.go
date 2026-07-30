@@ -17,7 +17,24 @@ import (
 )
 
 // linkCols는 목록/검색이 공유하는 links 컬럼 목록 (scanLink와 순서 일치).
-const linkCols = `l.id, l.url, l.domain, l.title, l.description, l.content_type, l.thumb_path, l.status, l.note, l.created_at`
+// linkCols는 목록·검색·상세가 공유하는 프로젝션이다.
+//
+// `retry_state`가 파생 컬럼인 이유: 이 값은 링크에 저장돼 있지 않고 **잡의 상태에서만**
+// 알 수 있다. `links.status='failed'`은 시도를 다 쓴 뒤에만 붙으므로(queue.Fail), 백오프로
+// 누워 있는 링크는 여전히 `pending`이고 화면에서는 **진행 레일이 돈다** — 일하는 것처럼
+// 보이지만 실제로는 최대 30×attempts초를 기다리는 중이다. 그 둘을 가르는 것이 12 §4.3이
+// "이 제안이 발견한 유일하게 참인 관찰"이라고 적은 것이다.
+const linkCols = `l.id, l.url, l.domain, l.title, l.description, l.content_type, l.thumb_path,
+	l.status, l.note, l.created_at, l.error,
+	CASE
+		WHEN l.status = 'failed' THEN 'exhausted'
+		WHEN EXISTS (
+			SELECT 1 FROM jobs j
+			WHERE j.link_id = l.id AND j.status = 'pending'
+			  AND j.attempts > 0 AND j.run_after > unixepoch()
+		) THEN 'waiting'
+		ELSE 'none'
+	END AS retry_state`
 
 type sqliteStore struct {
 	db *DB
@@ -266,13 +283,26 @@ func (s *sqliteStore) GetLink(ctx context.Context, id int64) (*LinkDetail, error
 		openedAt    sql.NullInt64
 	)
 	err := s.db.Reader.QueryRowContext(ctx, `
-		SELECT id, url, domain, title, description, author, content_type, lang,
-		       published_at, duration_sec, word_count, thumb_path, note, status, error,
-		       created_at, updated_at, summary, opened_at
-		FROM links WHERE id = ? AND deleted_at IS NULL`, id,
+		SELECT l.id, l.url, l.domain, l.title, l.description, l.author, l.content_type, l.lang,
+		       l.published_at, l.duration_sec, l.word_count, l.thumb_path, l.note, l.status,
+		       l.error, l.created_at, l.updated_at, l.summary, l.opened_at,
+		       -- linkCols와 같은 식이다. 상세는 자기 컬럼 목록을 갖기 때문에 목록에
+		       -- 파생 컬럼을 더해도 여기는 안 따라온다 -- 2026-07-30에 그래서 상세 응답이
+		       -- 빈 retry_state를 내고 iOS가 디코드에서 터졌다. 두 경로가 같은 값을
+		       -- 내는지는 store 테스트가 고정한다.
+		       CASE
+		           WHEN l.status = 'failed' THEN 'exhausted'
+		           WHEN EXISTS (
+		               SELECT 1 FROM jobs j
+		               WHERE j.link_id = l.id AND j.status = 'pending'
+		                 AND j.attempts > 0 AND j.run_after > unixepoch()
+		           ) THEN 'waiting'
+		           ELSE 'none'
+		       END AS retry_state
+		FROM links l WHERE l.id = ? AND l.deleted_at IS NULL`, id,
 	).Scan(&d.ID, &d.URL, &d.Domain, &d.Title, &d.Description, &d.Author, &d.ContentType, &d.Lang,
 		&publishedAt, &durationSec, &wordCount, &thumb, &d.Note, &d.Status, &d.Error,
-		&d.CreatedAt, &d.UpdatedAt, &d.Summary, &openedAt)
+		&d.CreatedAt, &d.UpdatedAt, &d.Summary, &openedAt, &d.RetryState)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -423,7 +453,7 @@ func scanLink(rows *sql.Rows) (Link, error) {
 		thumb sql.NullString
 	)
 	if err := rows.Scan(&l.ID, &l.URL, &l.Domain, &l.Title, &l.Description, &l.ContentType,
-		&thumb, &l.Status, &l.Note, &l.CreatedAt); err != nil {
+		&thumb, &l.Status, &l.Note, &l.CreatedAt, &l.Error, &l.RetryState); err != nil {
 		return Link{}, fmt.Errorf("store: 링크 행 스캔 실패: %w", err)
 	}
 	if thumb.Valid {

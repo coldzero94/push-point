@@ -153,7 +153,7 @@ func (s *sqliteStore) searchFTS(ctx context.Context, match, tag string, from, to
 			rank  float64
 		)
 		if err := rows.Scan(&r.ID, &r.URL, &r.Domain, &r.Title, &r.Description, &r.ContentType,
-			&thumb, &r.Status, &r.Note, &r.CreatedAt, &rank); err != nil {
+			&thumb, &r.Status, &r.Note, &r.CreatedAt, &r.Error, &r.RetryState, &rank); err != nil {
 			return nil, "", fmt.Errorf("store: FTS 결과 스캔 실패: %w", err)
 		}
 		r.ThumbPath = thumb
@@ -309,6 +309,15 @@ func (s *sqliteStore) Stats(ctx context.Context) (*Stats, error) {
 	if err := s.db.Reader.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM links WHERE deleted_at IS NULL`).Scan(&st.TotalLinks); err != nil {
 		return nil, fmt.Errorf("store: total_links 조회 실패: %w", err)
+	}
+
+	// **한 쿼리를 더 쓰는 이유.** iOS는 이 수를 얻으려고 `GET /links?status=failed`를 따로
+	// 보내고 있었고 웹에는 그 수단이 없었다 — 같은 화면이 한쪽에만 있었다(13 §2). 실패한
+	// 링크는 통계가 아니라 **할 일**이라, 이 수는 개수 표시가 아니라 그 목록으로 가는 입구다.
+	if err := s.db.Reader.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM links WHERE deleted_at IS NULL AND status = 'failed'`,
+	).Scan(&st.FailedLinks); err != nil {
+		return nil, fmt.Errorf("store: failed_links 조회 실패: %w", err)
 	}
 
 	rows, err := s.db.Reader.QueryContext(ctx, `

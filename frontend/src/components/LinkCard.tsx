@@ -110,7 +110,11 @@ export function LinkCard({
 
         {/* S1 rail — leading edge, full card height, 2px (§10 4.7). */}
         <span className="pointer-events-none absolute inset-y-0 left-0 z-10 flex">
-          <StatusRail status={link.status} selected={selected} />
+          <StatusRail
+            status={link.status}
+            selected={selected}
+            retryWaiting={link.retry_state === 'waiting'}
+          />
         </span>
 
         {/* Cover. aspect-ratio (not a pixel height) is what keeps the slot
@@ -202,7 +206,12 @@ export function LinkCard({
             data-in={descFilled}
             inert={descFilled ? undefined : true}
           >
-            {failed && !hasDesc ? '수집하지 못했습니다.' : link.description}
+            {/* 실패 사유를 여기 쓴다 — 예전에는 모든 실패가 "수집하지 못했습니다." 한 문장
+                이었고, 무엇이 잘못됐는지 보려면 링크마다 상세를 열어야 했다. 계약이 사유를
+                목록으로 올렸다(`Link.error`). iOS의 failureLabel과 같은 폴백을 쓴다. */}
+            {failed && !hasDesc
+              ? link.error || '수집하지 못했습니다.'
+              : link.description}
           </p>
 
           {/* Chips — no container query any more: the column count already sets

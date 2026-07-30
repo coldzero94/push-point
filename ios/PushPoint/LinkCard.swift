@@ -288,14 +288,28 @@ struct LinkCard: View {
     }
 
     /// 웹 `StatusRail`의 STATUS_LABEL과 **같은 단어**를 쓴다(§8.1).
+    ///
+    /// `waiting`이 여기서 갈린다. **백오프로 누워 있는 링크는 `status`가 여전히 `pending`**
+    /// 이라 진행 레일이 돌고, 화면은 일하는 중이라고 말한다 — 실제로는 최대 30×attempts초를
+    /// 기다리는 중이다. 12 §4.3이 "이 제안이 발견한 유일하게 참인 관찰"이라고 적은 것이
+    /// 그것이고, 계약의 `retry_state`가 이제 그 사실을 싣는다.
     private var statusLabel: String {
+        if link.retry_state == .waiting { return "재시도 대기 중" }
         switch link.status {
-        case .pending: "대기"
-        case .scraping: "수집 중"
-        case .tagging: "태깅 중"
-        case .done: "완료"
-        case .failed: "실패"
+        case .pending: return "대기"
+        case .scraping: return "수집 중"
+        case .tagging: return "태깅 중"
+        case .done: return "완료"
+        case .failed: return "실패"
         }
+    }
+
+    /// 실패 문구. 사유가 있으면 사유를, 없으면 예전 문장을 쓴다.
+    ///
+    /// **`waiting`은 여기 오지 않는다** — 그 링크의 `status`는 아직 `failed`가 아니라
+    /// `pending`이고, 진행 레일이 도는 쪽(`statusLabel`)에서 다뤄야 한다.
+    private var failureLabel: String {
+        link.error.isEmpty ? "수집에 실패했습니다" : link.error
     }
 
     /// 실패는 레일만으로 끝내지 않는다 — §4.7이 "레일 + 텍스트 + 아이콘" 3중을 요구한다.
@@ -310,10 +324,10 @@ struct LinkCard: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(PP.Typo.label)
                     .foregroundStyle(PP.Palette.danger)
-                // **사유를 못 보여준다.** 목록 항목 `Link`에는 `error`가 없다(상세에만 있다).
-                // 계약을 넓히는 건 별건이라, 여기서는 "실패했고 여기를 누르면 다시 한다"까지만
-                // 말한다 — 그것만으로도 스와이프에 숨어 있던 것보다 낫다.
-                Text("수집에 실패했습니다")
+                // **사유를 보여준다.** 예전에는 `Link`에 `error`가 없어서 모든 실패가
+                // "수집에 실패했습니다" 한 문장이었고, 무엇이 잘못됐는지 보려면 링크마다
+                // 상세를 열어야 했다. 계약이 사유를 목록으로 올렸다.
+                Text(failureLabel)
                     .font(PP.Typo.label)
                     .tracking(PP.Tracking.label)
                     .foregroundStyle(PP.Palette.fg2)

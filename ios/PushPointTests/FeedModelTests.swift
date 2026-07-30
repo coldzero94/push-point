@@ -54,7 +54,9 @@ final class FeedModelTests: XCTestCase {
         -> Components.Schemas.Link {
         .init(id: id, url: "https://e.com/\(id)", domain: "e.com", title: "제목 \(id)",
               description: "", content_type: .article, thumb_url: nil, status: status,
-              tags: [], note: "", created_at: 1_700_000_000)
+              tags: [], note: "", created_at: 1_700_000_000,
+              // 이 테스트는 목록·커서·폴링 규칙만 본다 — 실패 이력은 그 규칙과 무관하다.
+              error: "", retry_state: .none)
     }
 
     private nonisolated static func page(_ ids: [Int], next: String?,

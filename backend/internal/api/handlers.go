@@ -178,6 +178,8 @@ func (s *Server) toAPILink(l store.Link) gen.Link {
 		Tags:        toAPITags(l.Tags),
 		Note:        l.Note,
 		CreatedAt:   int(l.CreatedAt),
+		Error:       l.Error,
+		RetryState:  gen.RetryState(l.RetryState),
 	}
 }
 
@@ -202,6 +204,11 @@ func (s *Server) toAPIDetail(d *store.LinkDetail) gen.LinkDetail {
 		Summary:     d.Summary,            // 상세 전용 — 목록·검색 매핑에는 없다(계약이 그렇게 좁다)
 		OpenedAt:    intPtr64(d.OpenedAt), // 상세 전용 — 카드에는 표시할 자리가 없다
 		Error:       d.Error,
+		// **세 번째 프로젝션이고 세 번째로 빠뜨렸다.** 목록·검색·상세가 각각 필드를 손으로
+		// 옮기므로 하나를 더하면 세 곳을 고쳐야 하는데, 빠뜨려도 컴파일이 되고(구조체 필드가
+		// 제로값을 갖는다) 그 제로값이 enum 밖이라 **클라이언트에서만 터진다.**
+		// 상세가 안 뜨는 것으로 나타났고, 목록만 보고 있었으면 못 봤다.
+		RetryState: gen.RetryState(d.RetryState),
 	}
 	// 잡이 아직 없는 kind는 store가 빈 문자열을 준다 → 계약상 필드 생략(nil).
 	// scrape 잡은 저장 트랜잭션에서 항상 생성되므로 필수 필드.
@@ -237,7 +244,19 @@ func toAPITag(t *store.Tag) gen.Tag {
 		Aliases:   aliases,
 		Facet:     facet,
 		LinkCount: int(t.LinkCount),
+		// nil이면 붙은 링크가 없다는 뜻이고, 그건 0이 아니라 **모른다**다 —
+		// 0으로 접으면 1970년에 저장한 것처럼 보인다.
+		LastSavedAt: epochPtr(t.LastSavedAt),
 	}
+}
+
+// epochPtr는 store의 *int64를 계약의 *EpochSeconds로 옮긴다. nil은 nil로 남긴다.
+func epochPtr(v *int64) *gen.EpochSeconds {
+	if v == nil {
+		return nil
+	}
+	e := gen.EpochSeconds(*v)
+	return &e
 }
 
 // facetPtr는 요청 바디의 optional facet을 store 인자(*string)로 바꾼다.
@@ -453,7 +472,13 @@ func (s *Server) Search(ctx context.Context, request gen.SearchRequestObject) (g
 			Tags:        l.Tags,
 			Note:        l.Note,
 			CreatedAt:   l.CreatedAt,
-			Rank:        f32Ptr(it.Rank),
+			// **손으로 옮기는 세 번째 프로젝션이다.** 필드를 더할 때 여기를 빼먹으면
+			// 목록·상세는 통과하고 검색만 조용히 빈다 — 2026-07-30에 실제로 그랬고,
+			// `retry_state: ""`가 enum 밖 값이라 iOS 클라이언트의 디코드가 터졌다.
+			// 목록 응답만 보고 있었으면 못 봤을 것이다.
+			Error:      l.Error,
+			RetryState: l.RetryState,
+			Rank:       f32Ptr(it.Rank),
 		})
 	}
 	return gen.Search200JSONResponse(gen.SearchPage{
@@ -472,6 +497,7 @@ func (s *Server) GetStats(ctx context.Context, request gen.GetStatsRequestObject
 	out := gen.Stats{
 		TotalLinks:    int(st.TotalLinks),
 		LinksThisWeek: int(st.LinksThisWeek),
+		FailedLinks:   int(st.FailedLinks),
 	}
 	out.ByTag = make([]struct {
 		Count int    `json:"count"`

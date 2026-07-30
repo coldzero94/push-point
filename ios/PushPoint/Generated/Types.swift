@@ -536,6 +536,12 @@ internal enum Components {
             internal var note: Swift.String
             /// - Remark: Generated from `#/components/schemas/Link/created_at`.
             internal var created_at: Components.Schemas.EpochSeconds
+            /// 최종 실패 사유. 실패가 없으면 빈 문자열. **`LinkDetail`에만 있던 것을 목록으로 올린 것이다** — `status=failed` 목록의 행이 "수집하지 못했습니다"라는 같은 문장만 반복하고 있어서, 무엇이 잘못됐는지 보려면 링크마다 상세를 열어야 했다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/Link/error`.
+            internal var error: Swift.String
+            /// - Remark: Generated from `#/components/schemas/Link/retry_state`.
+            internal var retry_state: Components.Schemas.RetryState
             /// Creates a new `Link`.
             ///
             /// - Parameters:
@@ -550,6 +556,8 @@ internal enum Components {
             ///   - tags:
             ///   - note: 개인 메모
             ///   - created_at:
+            ///   - error: 최종 실패 사유. 실패가 없으면 빈 문자열. **`LinkDetail`에만 있던 것을 목록으로 올린 것이다** — `status=failed` 목록의 행이 "수집하지 못했습니다"라는 같은 문장만 반복하고 있어서, 무엇이 잘못됐는지 보려면 링크마다 상세를 열어야 했다.
+            ///   - retry_state:
             internal init(
                 id: Swift.Int,
                 url: Swift.String,
@@ -561,7 +569,9 @@ internal enum Components {
                 status: Components.Schemas.LinkStatus,
                 tags: [Components.Schemas.LinkTag],
                 note: Swift.String,
-                created_at: Components.Schemas.EpochSeconds
+                created_at: Components.Schemas.EpochSeconds,
+                error: Swift.String,
+                retry_state: Components.Schemas.RetryState
             ) {
                 self.id = id
                 self.url = url
@@ -574,6 +584,8 @@ internal enum Components {
                 self.tags = tags
                 self.note = note
                 self.created_at = created_at
+                self.error = error
+                self.retry_state = retry_state
             }
             internal enum CodingKeys: String, CodingKey {
                 case id
@@ -587,7 +599,18 @@ internal enum Components {
                 case tags
                 case note
                 case created_at
+                case error
+                case retry_state
             }
+        }
+        /// 실패한 링크가 **아직 다시 시도되는가**. 실패가 아니면 `none`.
+        /// `waiting`은 백오프로 잠깐 누워 있는 것(`run_after`가 미래)이고 `exhausted`는 시도를 다 쓴 것(`attempts >= max_attempts`)이다. **지금까지 화면에서 이 둘이 똑같이 생겼다** — 곧 다시 붙을 링크와 영영 죽은 링크가 구분되지 않아서, 기다리면 되는 것에 사람이 재시도를 누르고 죽은 것은 그대로 남았다.
+        ///
+        /// - Remark: Generated from `#/components/schemas/RetryState`.
+        internal enum RetryState: String, Codable, Hashable, Sendable, CaseIterable {
+            case none = "none"
+            case waiting = "waiting"
+            case exhausted = "exhausted"
         }
         /// 링크 상세 — 목록 항목 전체 필드 + 메타·에러·잡 요약
         ///
@@ -611,6 +634,11 @@ internal enum Components {
                 internal var word_count: Swift.Int?
                 /// - Remark: Generated from `#/components/schemas/LinkDetail/value2/lang`.
                 internal var lang: Swift.String
+                /// 마지막으로 이 링크를 연 시각. 한 번도 안 열었으면 null. **목록 항목(`Link`)에는 넣지 않는다** — 카드에 표시할 자리가 없으므로(상태는 2px 레일뿐) 목록 페이로드를 키울 이유가 없다.
+                /// **`oneOf: [EpochSeconds, "null"]`을 쓰지 않는다.** swift-openapi-generator가 `type: "null"` 갈래를 지원하지 않아 *"Schema "null" is not supported … skipping"* 경고와 함께 **그 프로퍼티를 통째로 뺀다.** 생성은 성공으로 끝나므로, oapi-codegen과 openapi-typescript는 필드를 만들고 Swift만 없는 상태가 되고 아무 게이트도 그걸 잡지 않는다 — 2026-07-30에 `last_saved_at`을 같은 형태로 썼다가 발견했고, 이 필드는 그때까지 **iOS에 없는 채로 있었다.** `type: [integer, "null"]`인 `EpochSecondsNullable`은 세 생성기가 모두 낸다.
+                ///
+                /// - Remark: Generated from `#/components/schemas/LinkDetail/value2/opened_at`.
+                internal var opened_at: Components.Schemas.EpochSecondsNullable?
                 /// 최종 실패 사유. 실패 없으면 빈 문자열
                 ///
                 /// - Remark: Generated from `#/components/schemas/LinkDetail/value2/error`.
@@ -659,6 +687,7 @@ internal enum Components {
                 ///   - duration_sec:
                 ///   - word_count:
                 ///   - lang:
+                ///   - opened_at: 마지막으로 이 링크를 연 시각. 한 번도 안 열었으면 null. **목록 항목(`Link`)에는 넣지 않는다** — 카드에 표시할 자리가 없으므로(상태는 2px 레일뿐) 목록 페이로드를 키울 이유가 없다.
                 ///   - error: 최종 실패 사유. 실패 없으면 빈 문자열
                 ///   - jobs: 이 링크에 연결된 잡 상태 요약. 해당 kind의 잡이 아직 없으면 필드 생략 (scrape 잡은 저장 트랜잭션에서 항상 생성되므로 필수). thumb은 best-effort — failed여도 링크 status에 영향 없음
                 internal init(
@@ -668,6 +697,7 @@ internal enum Components {
                     duration_sec: Swift.Int? = nil,
                     word_count: Swift.Int? = nil,
                     lang: Swift.String,
+                    opened_at: Components.Schemas.EpochSecondsNullable? = nil,
                     error: Swift.String,
                     jobs: Components.Schemas.LinkDetail.Value2Payload.jobsPayload
                 ) {
@@ -677,6 +707,7 @@ internal enum Components {
                     self.duration_sec = duration_sec
                     self.word_count = word_count
                     self.lang = lang
+                    self.opened_at = opened_at
                     self.error = error
                     self.jobs = jobs
                 }
@@ -687,6 +718,7 @@ internal enum Components {
                     case duration_sec
                     case word_count
                     case lang
+                    case opened_at
                     case error
                     case jobs
                 }
@@ -988,6 +1020,12 @@ internal enum Components {
             internal var link_count: Swift.Int
             /// - Remark: Generated from `#/components/schemas/Tag/facet`.
             internal var facet: Components.Schemas.TagFacet
+            /// 이 태그가 붙은 링크 중 가장 최근 저장 시각. 붙은 링크가 없으면 null.
+            /// **추세가 아니라 신선도다.** 두 달 전에 끊긴 주제와 이번 주 주제가 태그 목록에서 같은 자리에 섞여 있는 것이 실제 통증이었고, 그건 비교가 아니라 **태그당 날짜 하나**로 답해진다(12 §4.2). 증감·화살표·상승/하락은 여기서 파생하지 않는다.
+            /// 타입이 `oneOf`가 아닌 이유는 아래 `opened_at` 주석과 같다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/Tag/last_saved_at`.
+            internal var last_saved_at: Components.Schemas.EpochSecondsNullable?
             /// Creates a new `Tag`.
             ///
             /// - Parameters:
@@ -996,18 +1034,21 @@ internal enum Components {
             ///   - aliases: 동의어·영문/한글 표기 — Phase A 문자열 매칭의 재료
             ///   - link_count: 이 태그가 붙은 (삭제되지 않은) 링크 수
             ///   - facet:
+            ///   - last_saved_at: 이 태그가 붙은 링크 중 가장 최근 저장 시각. 붙은 링크가 없으면 null.
             internal init(
                 id: Swift.Int,
                 name: Swift.String,
                 aliases: [Swift.String],
                 link_count: Swift.Int,
-                facet: Components.Schemas.TagFacet
+                facet: Components.Schemas.TagFacet,
+                last_saved_at: Components.Schemas.EpochSecondsNullable? = nil
             ) {
                 self.id = id
                 self.name = name
                 self.aliases = aliases
                 self.link_count = link_count
                 self.facet = facet
+                self.last_saved_at = last_saved_at
             }
             internal enum CodingKeys: String, CodingKey {
                 case id
@@ -1015,6 +1056,7 @@ internal enum Components {
                 case aliases
                 case link_count
                 case facet
+                case last_saved_at
             }
         }
         /// 태그 생성/수정 요청 (생성 시 name 필수)
@@ -1062,6 +1104,10 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/Stats/links_this_week`.
             internal var links_this_week: Swift.Int
+            /// `status=failed`인 (삭제되지 않은) 링크 수. **실패한 링크는 통계가 아니라 할 일이라** 이 수는 그 목록으로 가는 입구다 — iOS는 이미 별도 요청으로 세고 있었고 웹에는 그 수단이 없어서, 같은 화면이 한쪽에만 있었다(13 §2).
+            ///
+            /// - Remark: Generated from `#/components/schemas/Stats/failed_links`.
+            internal var failed_links: Swift.Int
             /// - Remark: Generated from `#/components/schemas/Stats/by_tagPayload`.
             internal struct by_tagPayloadPayload: Codable, Hashable, Sendable {
                 /// - Remark: Generated from `#/components/schemas/Stats/by_tagPayload/name`.
@@ -1147,22 +1193,26 @@ internal enum Components {
             /// - Parameters:
             ///   - total_links:
             ///   - links_this_week: by_day 창의 **마지막 7칸 합** — 오늘 포함 최근 7일.
+            ///   - failed_links: `status=failed`인 (삭제되지 않은) 링크 수. **실패한 링크는 통계가 아니라 할 일이라** 이 수는 그 목록으로 가는 입구다 — iOS는 이미 별도 요청으로 세고 있었고 웹에는 그 수단이 없어서, 같은 화면이 한쪽에만 있었다(13 §2).
             ///   - by_tag:
             ///   - by_day: 최근 30일 일별 저장 수. **세 가지를 보장한다**:
             internal init(
                 total_links: Swift.Int,
                 links_this_week: Swift.Int,
+                failed_links: Swift.Int,
                 by_tag: Components.Schemas.Stats.by_tagPayload,
                 by_day: Components.Schemas.Stats.by_dayPayload
             ) {
                 self.total_links = total_links
                 self.links_this_week = links_this_week
+                self.failed_links = failed_links
                 self.by_tag = by_tag
                 self.by_day = by_day
             }
             internal enum CodingKeys: String, CodingKey {
                 case total_links
                 case links_this_week
+                case failed_links
                 case by_tag
                 case by_day
             }

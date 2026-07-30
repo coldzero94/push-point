@@ -57,6 +57,10 @@ type Link struct {
 	Note        string
 	Tags        []LinkTag
 	CreatedAt   int64
+	// Error는 최종 실패 사유. 실패가 없으면 빈 문자열.
+	Error string
+	// RetryState는 'none' | 'waiting' | 'exhausted' — 잡에서 파생한다(linkCols 주석).
+	RetryState string
 }
 
 // JobSummary는 링크별 잡 상태 요약. 해당 kind의 잡이 없으면 빈 문자열.
@@ -74,9 +78,11 @@ type LinkDetail struct {
 	DurationSec *int64
 	WordCount   *int64
 	Lang        string
-	Error       string
-	UpdatedAt   int64
-	Jobs        JobSummary
+	// Error는 **Link가 갖는다**(2026-07-30에 목록으로 올렸다). 여기 또 두면 임베드된
+	// 것을 가려서, `d.Error`가 어느 쪽인지 읽는 사람이 알 수 없다 — 실제로 픽스처가
+	// 바깥쪽을 셋하고 테스트가 안쪽을 읽어 조용히 어긋났다.
+	UpdatedAt int64
+	Jobs      JobSummary
 	// Summary는 추출식 요약(M5). 목록(Link)이 아니라 **상세에만** 있다 — 목록·검색 경로가
 	// summary를 모르게 두는 것이 linkCols·scanLink·sqlite_search.go 무변경의 근거다.
 	Summary string
@@ -101,7 +107,10 @@ type Tag struct {
 	Aliases   []string
 	Facet     string // FacetCraft | FacetMedia | FacetLife | FacetNeutral
 	LinkCount int64  // 부착된 (미삭제) 링크 수 — ListTags/CreateTag 응답용
-	CreatedAt int64
+	// LastSavedAt은 이 태그가 붙은 링크 중 가장 최근 저장 시각. 붙은 링크가 없으면 nil.
+	// **추세가 아니라 신선도다** — 끊긴 주제와 이번 주 주제를 같은 자리에서 가른다(12 §4.2).
+	LastSavedAt *int64
+	CreatedAt   int64
 }
 
 // ScrapeResult는 scrape 잡 핸들러가 links에 반영하는 스크랩 결과다.
@@ -211,7 +220,9 @@ type DayCount struct {
 type Stats struct {
 	TotalLinks    int64
 	LinksThisWeek int64
-	ByTag         []TagCount
+	// FailedLinks는 status='failed'인 미삭제 링크 수 — 통계에서 목록으로 가는 입구다.
+	FailedLinks int64
+	ByTag       []TagCount
 	// ByDay는 **항상 정확히 30개**이고, 오름차순이며, 마지막 원소가 서버 로컬타임 기준
 	// 오늘이다. 저장이 없는 날도 Count 0으로 들어 있다 — 자세한 이유는 Stats() 주석.
 	ByDay []DayCount
