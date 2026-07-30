@@ -53,6 +53,38 @@ Two things to know before using it:
 - **Coordinates are points, not screenshot pixels.** The screenshot is 1206×2622; the coordinate space is 402×874 (3× scale). AXe reports "Tap completed successfully" for an off-screen coordinate, so a wrong-space tap looks like a working tap that changed nothing.
 - **`axe describe-ui` returns an empty tree** for this app on Xcode 26.5 / iOS 26.5 (root frame `{{0,0},{0,0}}`, no children), which also disables `--label` and `--id` targeting since both resolve through it. Verified 2026-07-26 against a running app with a matching pid, after a clean terminate/relaunch and with Simulator.app frontmost. Use `maestro hierarchy` for semantic inspection instead; AXe's screenshot and coordinate input both work.
 
+## Driving the share sheet (the M4 timing verdict)
+
+`just save-timing` reads `save-timing.jsonl`, which **only the Share Extension
+writes** — `SaveTiming.begin()` sits in `ShareViewController.viewDidLoad`, so the
+measured span is extension-launch to save-complete and no unit test can produce
+it. The verdict needs a real share, and the simulator can do it. Working recipe,
+all coordinates in **points**:
+
+```
+xcrun simctl openurl booted "https://example.com/article"
+axe tap -x 200 -y 842   # the collapsed address pill → expands the toolbar
+axe tap -x 342 -y 816   # ··· (more)
+axe tap -x 203 -y 541   # Share
+axe tap -x 244 -y 653   # Push-Point in the share sheet
+just save-timing
+```
+
+Two things that cost time on 2026-07-30:
+
+- **The coordinate-space warning above is the one that bites here.** A tap at the
+  pill's *screenshot pixel* y (2527) landed off-screen in the 874-point space and
+  Safari went to the home screen — AXe reported success. Divide screenshot pixels
+  by 3.
+- **Maestro cannot see Safari's collapsed toolbar.** `id: ShareButton` is not in
+  the tree and the hierarchy returns only page content, so semantic targeting is
+  not an option until the toolbar is already expanded. AXe coordinates are the
+  way in. I concluded "this cannot be driven" before checking my own arithmetic —
+  the failure was the point conversion, not the tooling.
+
+The first successful run recorded 91.8 ms against the 2000 ms budget, with all
+four tags attached, so the whole scrape-and-tag pipeline finished inside it.
+
 ## XCUITest
 
 `just ios-uitest`. The app launches with `-uitest`, which points it at a temp directory instead of the App Group and seeds fixtures through `POST /api/v1/links` (`ios/PushPoint/UITestMode.swift`). Three consequences worth keeping:
