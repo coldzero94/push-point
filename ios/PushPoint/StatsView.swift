@@ -19,9 +19,13 @@ struct StatsView: View {
     let onFilter: (ListFilter) -> Void
 
     @State private var stats: Components.Schemas.Stats?
-    @State private var failedCount: Int?
-    /// 실패 개수가 조회 상한에 걸렸는가. 걸렸으면 "100개"가 아니라 "100개 이상"이다.
-    @State private var failedCountSaturated = false
+    /// 실패 개수는 이제 `stats.failed_links`가 준다 — **따로 세지 않는다.**
+    ///
+    /// 예전에는 `GET /links?status=failed&limit=100`을 한 번 더 보내서 배열 길이를 셌다.
+    /// 그래서 100에서 포화됐고("100개 이상"), 그 요청이 실패하면 개수를 모르는 상태가 되고,
+    /// **웹에는 애초에 그 수단이 없어 같은 섹션이 한쪽에만 있었다**(13 §2). 계약에 수를
+    /// 넣으니 셋 다 사라진다.
+    private var failedCount: Int? { stats.map { $0.failed_links } }
     @State private var loadError: String?
 
     var body: some View {
@@ -324,7 +328,8 @@ struct StatsView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(PP.Palette.danger)
-                    Text("수집에 실패한 링크 \(failedCount)개\(failedCountSaturated ? " 이상" : "")")
+                    // **"이상"이 사라졌다.** 계약이 정확한 수를 주므로 상한 표기가 필요 없다.
+                    Text("수집에 실패한 링크 \(failedCount)개")
                         .font(PP.Typo.body)
                         .foregroundStyle(PP.Palette.fg1)
                     Spacer()
@@ -371,26 +376,5 @@ struct StatsView: View {
             loadError = error.localizedDescription
             return
         }
-        // **실패 개수는 따로 받고 따로 실패한다.**
-        //
-        // 예전에는 같은 do 블록 안에 있었는데, stats를 먼저 대입하므로 이 호출이 던지면
-        // loadError가 채워져도 화면은 `if let stats` 가지로 들어가 **오류를 못 보여준다.**
-        // 그리고 failedCount가 nil로 남아 "손이 필요한 것" 섹션이 통째로 사라진다 —
-        // 실패한 링크 12개를 가진 사용자가 완벽해 보이는 통계 화면을 보고, 그것을 찾아
-        // 재시도할 유일한 통로는 없어진 상태가 된다.
-        let query = Operations.listLinks.Input.Query(limit: failedProbeLimit, status: .failed)
-        if let out = try? await client.listLinks(.init(query: query)),
-           let body = try? out.ok.body.json {
-            failedCount = body.links.count
-            failedCountSaturated = body.links.count >= failedProbeLimit
-        } else {
-            // 못 셌으면 **0인 척하지 않는다.** 섹션은 사라지지만 그건 "실패가 없다"가
-            // 아니라 "모른다"이고, 다음 갱신에서 다시 시도된다.
-            failedCount = nil
-            failedCountSaturated = false
-        }
     }
-
-    /// 실패 개수를 세려고 받아 오는 최대 건수. 개수만 필요하므로 최소로 받는다.
-    private var failedProbeLimit: Int { 100 }
 }

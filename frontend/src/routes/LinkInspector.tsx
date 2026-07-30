@@ -344,7 +344,9 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
         >
           {/* leading status rail (S1) — 2px, same thickness as the row */}
           <div className="flex min-h-0 flex-1">
-            {link ? <StatusRail status={link.status} /> : <span className="w-(--size-rail)" aria-hidden />}
+            {link ? (
+              <StatusRail status={link.status} retryWaiting={link.retry_state === 'waiting'} />
+            ) : <span className="w-(--size-rail)" aria-hidden />}
 
             <div className="min-w-0 flex-1 p-20">
               {/* Cover header (R4) — full-bleed to the panel edges. Unlike the

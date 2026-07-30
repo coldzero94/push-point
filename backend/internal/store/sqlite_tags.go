@@ -49,7 +49,8 @@ func normalizeFacet(facet string) string {
 // ListTags는 태그 사전 전체 + 부착된 미삭제 링크 수 (link_count 내림차순).
 func (s *sqliteStore) ListTags(ctx context.Context) ([]Tag, error) {
 	rows, err := s.db.Reader.QueryContext(ctx, `
-		SELECT t.id, t.name, t.aliases, t.facet, t.created_at, COUNT(l.id) AS link_count
+		SELECT t.id, t.name, t.aliases, t.facet, t.created_at, COUNT(l.id) AS link_count,
+		       MAX(l.created_at) AS last_saved_at
 		FROM tags t
 		LEFT JOIN link_tags lt ON lt.tag_id = t.id
 		LEFT JOIN links l      ON l.id = lt.link_id AND l.deleted_at IS NULL
@@ -62,11 +63,16 @@ func (s *sqliteStore) ListTags(ctx context.Context) ([]Tag, error) {
 	var tags []Tag
 	for rows.Next() {
 		var (
-			t   Tag
-			raw string
+			t    Tag
+			raw  string
+			last sql.NullInt64 // 붙은 링크가 없으면 MAX가 NULL이다
 		)
-		if err := rows.Scan(&t.ID, &t.Name, &raw, &t.Facet, &t.CreatedAt, &t.LinkCount); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &raw, &t.Facet, &t.CreatedAt, &t.LinkCount,
+			&last); err != nil {
 			return nil, fmt.Errorf("store: 태그 스캔 실패: %w", err)
+		}
+		if last.Valid {
+			t.LastSavedAt = &last.Int64
 		}
 		if t.Aliases, err = decodeAliases(raw); err != nil {
 			return nil, err

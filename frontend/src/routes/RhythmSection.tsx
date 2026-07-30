@@ -190,6 +190,19 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
         </div>
       )}
 
+      {/* **실패한 링크는 통계가 아니라 할 일이다.** 개수만 알려주고 끝내면 그 링크는 영원히
+          실패로 남는다 — 눌러서 그 목록으로 갈 수 있어야 한다. iOS에는 이 섹션이 처음부터
+          있었고 웹에는 계약에 수가 없어서 없었다(13 §2). 이제 있다. */}
+      {s.failed_links > 0 ? (
+        <Link
+          to="/"
+          search={{ status: 'failed' }}
+          className="flex items-center gap-6 text-body text-danger underline underline-offset-4"
+        >
+          수집에 실패한 링크 <span className="font-mono">{s.failed_links}</span>개 — 다시 시도하기
+        </Link>
+      ) : null}
+
       <p className="text-meta text-fg-3">
         전체 <span className="font-mono">{s.total_links.toLocaleString('ko-KR')}</span>
       </p>

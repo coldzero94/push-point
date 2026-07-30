@@ -64,6 +64,10 @@ func (f *fakeStore) addLink(url, status string, createdAt int64) int64 {
 		Link: store.Link{
 			ID: id, URL: url, Domain: "example.com", Title: "title " + url,
 			Status: status, CreatedAt: createdAt, Tags: []store.LinkTag{},
+			// 실제 스토어의 CASE는 **항상** 세 값 중 하나를 주므로(linkCols) 페이크도
+			// 그 불변식을 지킨다. 빈 문자열로 두면 enum 밖 값이 계약을 타고 나가고,
+			// 생성된 클라이언트가 디코드에서 터진다.
+			RetryState: "none",
 		},
 		Jobs: store.JobSummary{Scrape: "pending"},
 	}
@@ -72,6 +76,19 @@ func (f *fakeStore) addLink(url, status string, createdAt int64) int64 {
 }
 
 // setThumb은 thumb_path를 주입한다 (Store 계약 밖 픽스처).
+// setError·setRetryState는 계약이 2026-07-30에 받은 두 필드의 픽스처다 (Store 계약 밖).
+func (f *fakeStore) setError(id int64, msg string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.links[id].Error = msg
+}
+
+func (f *fakeStore) setRetryState(id int64, st string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.links[id].RetryState = st
+}
+
 func (f *fakeStore) setThumb(id int64, path string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -237,6 +254,14 @@ func (f *fakeStore) RetryLink(ctx context.Context, id int64) error {
 	return nil
 }
 
+// setTagLastSaved는 신선도 픽스처다 (Store 계약 밖).
+func (f *fakeStore) setTagLastSaved(id int64, at int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tags[id].LinkCount = 1
+	f.tags[id].LastSavedAt = &at
+}
+
 func (f *fakeStore) ListTags(ctx context.Context) ([]store.Tag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -331,7 +356,16 @@ func (f *fakeStore) Search(ctx context.Context, q, tag string, from, to *int64, 
 func (f *fakeStore) Stats(ctx context.Context) (*store.Stats, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return &store.Stats{TotalLinks: int64(len(f.links) - len(f.deleted))}, nil
+	var failed int64
+	for id, l := range f.links {
+		if !f.deleted[id] && l.Status == "failed" {
+			failed++
+		}
+	}
+	return &store.Stats{
+		TotalLinks:  int64(len(f.links) - len(f.deleted)),
+		FailedLinks: failed,
+	}, nil
 }
 
 // scrape/thumb 잡 핸들러용 메서드 — API 핸들러 테스트 경로에서는 호출되지 않아 최소 구현.

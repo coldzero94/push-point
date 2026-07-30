@@ -688,7 +688,8 @@ components:
       type: object
       description: 링크 목록 항목
       required:
-        [id, url, domain, title, description, content_type, thumb_url, status, tags, note, created_at]
+        [id, url, domain, title, description, content_type, thumb_url, status, tags, note,
+         created_at, error, retry_state]
       properties:
         id:
           type: integer
@@ -717,6 +718,25 @@ components:
           description: 개인 메모
         created_at:
           $ref: "#/components/schemas/EpochSeconds"
+        error:
+          type: string
+          description: >-
+            최종 실패 사유. 실패가 없으면 빈 문자열. **`LinkDetail`에만 있던 것을 목록으로
+            올린 것이다** — `status=failed` 목록의 행이 "수집하지 못했습니다"라는 같은 문장만
+            반복하고 있어서, 무엇이 잘못됐는지 보려면 링크마다 상세를 열어야 했다.
+        retry_state:
+          $ref: "#/components/schemas/RetryState"
+
+    RetryState:
+      type: string
+      enum: [none, waiting, exhausted]
+      description: >-
+        실패한 링크가 **아직 다시 시도되는가**. 실패가 아니면 `none`.
+
+        `waiting`은 백오프로 잠깐 누워 있는 것(`run_after`가 미래)이고 `exhausted`는 시도를
+        다 쓴 것(`attempts >= max_attempts`)이다. **지금까지 화면에서 이 둘이 똑같이 생겼다** —
+        곧 다시 붙을 링크와 영영 죽은 링크가 구분되지 않아서, 기다리면 되는 것에 사람이
+        재시도를 누르고 죽은 것은 그대로 남았다.
 
     LinkDetail:
       description: 링크 상세 — 목록 항목 전체 필드 + 메타·에러·잡 요약
@@ -748,9 +768,15 @@ components:
                 마지막으로 이 링크를 연 시각. 한 번도 안 열었으면 null. **목록 항목(`Link`)에는
                 넣지 않는다** — 카드에 표시할 자리가 없으므로(상태는 2px 레일뿐) 목록
                 페이로드를 키울 이유가 없다.
-              oneOf:
-                - $ref: "#/components/schemas/EpochSeconds"
-                - type: "null"
+
+                **`oneOf: [EpochSeconds, "null"]`을 쓰지 않는다.** swift-openapi-generator가
+                `type: "null"` 갈래를 지원하지 않아 *"Schema "null" is not supported … skipping"*
+                경고와 함께 **그 프로퍼티를 통째로 뺀다.** 생성은 성공으로 끝나므로,
+                oapi-codegen과 openapi-typescript는 필드를 만들고 Swift만 없는 상태가 되고
+                아무 게이트도 그걸 잡지 않는다 — 2026-07-30에 `last_saved_at`을 같은 형태로
+                썼다가 발견했고, 이 필드는 그때까지 **iOS에 없는 채로 있었다.**
+                `type: [integer, "null"]`인 `EpochSecondsNullable`은 세 생성기가 모두 낸다.
+              $ref: "#/components/schemas/EpochSecondsNullable"
             error:
               type: string
               description: 최종 실패 사유. 실패 없으면 빈 문자열
@@ -882,7 +908,7 @@ components:
     Tag:
       type: object
       description: 태그 사전 항목 + 사용 수
-      required: [id, name, aliases, link_count, facet]
+      required: [id, name, aliases, link_count, facet, last_saved_at]
       properties:
         id:
           type: integer
@@ -899,6 +925,16 @@ components:
           description: 이 태그가 붙은 (삭제되지 않은) 링크 수
         facet:
           $ref: "#/components/schemas/TagFacet"
+        last_saved_at:
+          description: >-
+            이 태그가 붙은 링크 중 가장 최근 저장 시각. 붙은 링크가 없으면 null.
+
+            **추세가 아니라 신선도다.** 두 달 전에 끊긴 주제와 이번 주 주제가 태그 목록에서
+            같은 자리에 섞여 있는 것이 실제 통증이었고, 그건 비교가 아니라 **태그당 날짜
+            하나**로 답해진다(12 §4.2). 증감·화살표·상승/하락은 여기서 파생하지 않는다.
+
+            타입이 `oneOf`가 아닌 이유는 아래 `opened_at` 주석과 같다.
+          $ref: "#/components/schemas/EpochSecondsNullable"
 
     TagInput:
       type: object
@@ -917,7 +953,7 @@ components:
       type: object
       description: |
         통계 응답. iOS 통계 탭·웹 설정의 리듬 섹션이 소비한다 (위젯 활용은 M6).
-      required: [total_links, links_this_week, by_tag, by_day]
+      required: [total_links, links_this_week, failed_links, by_tag, by_day]
       properties:
         total_links:
           type: integer
@@ -927,6 +963,12 @@ components:
             by_day 창의 **마지막 7칸 합** — 오늘 포함 최근 7일.
             화면이 이 값과 by_day에서 파생한 "지난주 대비"를 한 문장 안에 나란히
             놓으므로 기준이 같아야 한다.
+        failed_links:
+          type: integer
+          description: >-
+            `status=failed`인 (삭제되지 않은) 링크 수. **실패한 링크는 통계가 아니라 할 일이라**
+            이 수는 그 목록으로 가는 입구다 — iOS는 이미 별도 요청으로 세고 있었고 웹에는
+            그 수단이 없어서, 같은 화면이 한쪽에만 있었다(13 §2).
         by_tag:
           type: array
           items:

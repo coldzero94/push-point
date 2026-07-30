@@ -48,12 +48,18 @@ function optimisticLink(id: number, url: string, note: string): Link {
     tags: [],
     note,
     created_at: Math.floor(Date.now() / 1000),
+    // 방금 만든 항목이라 실패 이력이 없다. 빈 문자열과 'none'이 그 사실이고,
+    // 서버 응답이 오면 덮인다.
+    error: '',
+    retry_state: 'none',
   }
 }
 
 /** LinkDetail (poll response) narrowed to the list-row Link subset. */
 function toLink(d: LinkDetail): Link {
   return {
+    error: d.error,
+    retry_state: d.retry_state,
     id: d.id,
     url: d.url,
     domain: d.domain,

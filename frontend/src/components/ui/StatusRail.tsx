@@ -24,12 +24,25 @@ const PROGRESS: ReadonlySet<LinkStatus> = new Set(['pending', 'scraping', 'taggi
 
 export type StatusRailProps = {
   status: LinkStatus
+  /**
+   * 이 링크가 **백오프로 누워 있는가**(계약의 `retry_state === 'waiting'`).
+   *
+   * `status`는 여전히 `pending`이라 레일이 돌고 화면은 일하는 중이라고 말하는데, 실제로는
+   * 기다리는 중이다 — 그 둘이 지금까지 똑같이 생겼다(12 §4.3). 색과 펄스는 그대로 두고
+   * **말만 바꾼다**: 진행은 진행이고, 다른 것은 왜 멈춰 보이는지다.
+   */
+  retryWaiting?: boolean
   /** selection wins over failed — it is the user's current intent (§4.7) */
   selected?: boolean
   className?: string
 }
 
-export function StatusRail({ status, selected = false, className }: StatusRailProps) {
+export function StatusRail({
+  status,
+  selected = false,
+  retryWaiting = false,
+  className,
+}: StatusRailProps) {
   const inProgress = PROGRESS.has(status)
   const failed = status === 'failed'
 
@@ -43,7 +56,11 @@ export function StatusRail({ status, selected = false, className }: StatusRailPr
         : 'bg-transparent'
 
   // Announce non-done states in a channel that is not color (§4.7 / §7.1).
-  const announce = failed || inProgress ? STATUS_LABEL[status] : ''
+  const announce = retryWaiting
+    ? '재시도 대기 중' // iOS `statusLabel`과 같은 단어 (§8.1)
+    : failed || inProgress
+      ? STATUS_LABEL[status]
+      : ''
 
   return (
     <span
