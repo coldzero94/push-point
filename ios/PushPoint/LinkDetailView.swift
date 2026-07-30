@@ -207,6 +207,14 @@ struct LinkDetailView: View {
     private func meta(_ d: Components.Schemas.LinkDetail) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             row("저장", absoluteTime(d.value1.created_at))
+            // **웹 인스펙터에는 "마지막 열람"이 있고 여기엔 없었다.**
+            //
+            // 기록은 양쪽 다 한다 — iOS도 원문을 열 때 `recordOpen()`으로 `markOpened`를
+            // 부른다. 없던 것은 표시뿐이고, 그럴 만한 이유가 있었다: `opened_at`이 계약에
+            // `oneOf: [EpochSeconds, "null"]`로 적혀 있어 **swift-openapi-generator가
+            // 그 프로퍼티를 통째로 뺐다.** 생성이 성공으로 끝나므로 아무도 몰랐고,
+            // 2026-07-30에 `EpochSecondsNullable`로 바꾸면서 비로소 iOS에 생겼다.
+            if let opened = d.value2.opened_at { row("열람", absoluteTime(opened)) }
             if !d.value2.author.isEmpty { row("작성", d.value2.author) }
             // word_count는 계약상 nullable — 스크랩이 세지 못한 경우가 있다.
             if let words = d.value2.word_count, words > 0 { row("분량", "\(words)단어") }
