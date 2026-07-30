@@ -112,6 +112,13 @@ maestro: device_id "chromium", flow starts `url:` + `openLink:` (not appId/launc
 key entry: tapOn {id: "apikey", index: 1} → inputText → tapOn {text: "저장", below: "API 키"}
 ```
 
+**A failed Maestro text assertion on `chromium` is not proof of absence.**
+`extendedWaitUntil: { visible: "no such host" }` failed on 2026-07-30 against a card
+that a screenshot from the same flow showed rendering that exact sentence. Short
+strings like `오늘` matched fine. Whatever the cause, the screenshot is the
+adjudicator — take one before concluding the feature is broken, or a working
+change gets reverted on the tool's word.
+
 Chrome headless covers what Maestro does not — rasterizing an SVG at a fixed size, or
 screenshotting a URL without a driver session:
 
