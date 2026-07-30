@@ -108,9 +108,22 @@ func (q *SQLite) Complete(ctx context.Context, id int64) error {
 // (run_after = unixepoch() + 30*attempts), 초과면 failed 확정.
 // kind='thumb'이 아닌 잡의 확정 실패는 links.status='failed' + error도 기록한다.
 func (q *SQLite) Fail(ctx context.Context, id int64, jobErr error) error {
-	msg := ""
+	// **두 자리에 다른 것을 쓴다.**
+	//
+	// `jobs.error`는 진단이라 **감싼 사슬 전체**가 필요하다 — 어느 단계에서 터졌는지가
+	// 정보다. `links.error`는 카드에 그려지는 문장이라 **가장 안쪽 원인**만 쓴다.
+	//
+	// 사슬을 그대로 카드에 찍었더니 이렇게 나왔다(2026-07-30 화면 확인):
+	//
+	//     scraper: GET 실패 https://x.invalid/a: Get "https://x.invalid/a": lookup x.inv…
+	//
+	// 카드는 두 줄에서 자르므로 **정작 원인인 `no such host`가 잘려 나가고**, 남은 두 줄은
+	// 카드가 이미 커버·제목·메타에서 세 번 보여 준 URL이다. 백로그가 이 필드에 요구한 것은
+	// "'수집하지 못했습니다' 대신 실제 사유"인데, 사유가 아니라 주소가 자리를 먹고 있었다.
+	msg, cause := "", ""
 	if jobErr != nil {
 		msg = jobErr.Error()
+		cause = rootCause(jobErr)
 	}
 	tx, err := q.writer.BeginTx(ctx, nil)
 	if err != nil {
@@ -163,7 +176,7 @@ func (q *SQLite) Fail(ctx context.Context, id int64, jobErr error) error {
 					status = CASE WHEN body_source = 'client' THEN 'done' ELSE 'failed' END,
 					error = ?, updated_at = unixepoch()
 				WHERE id = ?`,
-				msg, linkID)
+				cause, linkID)
 			if err != nil {
 				return fmt.Errorf("queue: fail(job=%d) 링크 %d 상태 기록 실패: %w", id, linkID, err)
 			}
@@ -243,4 +256,19 @@ func scanJob(row *sql.Row) (*Job, error) {
 		j.FinishedAt = &finishedAt.Int64
 	}
 	return &j, nil
+}
+
+// rootCause는 감싼 사슬의 **가장 안쪽 오류 문구**를 돌려준다.
+//
+// 카드에 그릴 한 문장을 고르는 것이 목적이라, 래핑 접두사를 벗겨 원인만 남긴다.
+// `errors.Join`으로 묶인 다중 오류는 벗기지 않는다 — 그건 사슬이 아니라 목록이고,
+// 그중 하나만 고르면 나머지를 숨기는 것이 된다.
+func rootCause(err error) string {
+	for {
+		next := errors.Unwrap(err)
+		if next == nil {
+			return err.Error()
+		}
+		err = next
+	}
 }
