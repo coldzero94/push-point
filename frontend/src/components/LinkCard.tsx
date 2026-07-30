@@ -19,7 +19,7 @@
 // button covers it; the title anchor, chips and actions sit above it via
 // position:relative so they keep their own clicks.
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { ExternalLink, Play, StickyNote } from 'lucide-react'
 import { Button, Chip, GeneratedCover, Icon, Skeleton, StatusRail } from './ui'
 import { sortLinkTags } from '../lib/tags/facet'
@@ -77,6 +77,9 @@ export function LinkCard({
 
   // S2 gates. The cover is "settled" once the pipeline is terminal — a done link
   // with no thumb_url is not still waiting, it simply has a generated cover.
+  // 썸네일 전송이 실패했는가. 실패하면 생성 커버로 떨어진다 — 화면은 정상이고,
+  // 사실은 로그에 남는다.
+  const [thumbFailed, setThumbFailed] = useState(false)
   const hasTitle = link.title.trim().length > 0
   const hasDesc = link.description.trim().length > 0
   const coverSettled = link.status === 'done' || failed
@@ -118,13 +121,27 @@ export function LinkCard({
             except the interactive leaves, which re-enable pointer events. */}
         <div className="pointer-events-none relative aspect-[16/9] w-full shrink-0 overflow-hidden bg-hover">
           <div className="fill-step absolute inset-0" data-in={coverSettled}>
-            {link.thumb_url ? (
+            {link.thumb_url && !thumbFailed ? (
               <img
                 src={link.thumb_url}
                 alt=""
                 loading="lazy"
                 decoding="async"
                 className="thumb-img h-full w-full object-cover"
+                // **`onError`가 없으면 R4가 깨진다.** 실패한 `<img>`는 `alt=""`라 아무것도
+                // 그리지 않고 컨테이너의 `bg-hover`가 드러난다 — 회색 상자다. R4가 이름으로
+                // 금지한 것이고(§4.5), 로그도 없어서 아무도 모른다.
+                //
+                // iOS는 같은 커밋(#76)에서 폴백과 로그를 둘 다 얻었는데 웹은 둘 다 없었다.
+                // 서버가 없는 파일을 광고하지 않게 고쳤으니 파일 부재 경로는 줄었지만,
+                // 전송 실패·0바이트 JPEG·목록과 이미지 요청 사이의 삭제는 그대로 남는다.
+                onError={() => {
+                  setThumbFailed(true)
+                  // 화면은 바뀌지 않는다(생성 커버는 정상 표시다) — 대신 흔적을 남긴다.
+                  console.error(
+                    `[push-point] thumb load failed link=${link.id} url=${link.thumb_url}`,
+                  )
+                }}
               />
             ) : (
               <>

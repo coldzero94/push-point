@@ -55,6 +55,9 @@ struct ContentView: View {
     @State private var actionError: String?
     /// 확장이 알림을 못 띄우고 버린 횟수. 0보다 크면 배너로 알린다.
     @State private var droppedNotices = 0
+    /// 공유 저장 결과를 보고할 통로 자체가 없는 상태(App Group defaults가 nil).
+    /// **"버린 게 없다"와 구분해서 말해야 한다** — 조용하면 둘이 같아진다.
+    @State private var channelMissing = false
     /// 알림 권한 상태. **아직 안 물어봤는가 / 거부됐는가**로 배너의 동작이 갈린다.
     @State private var notifyStatus: UNAuthorizationStatus = .notDetermined
     /// 목록 밀도. 기기에 남는다 — 매번 고르게 하면 그건 선택지가 아니라 잡일이다.
@@ -163,7 +166,23 @@ struct ContentView: View {
     /// 구분할 수 없다는 뜻이고, 아카이브에서 가장 나쁜 실패 방식이다.
     @ViewBuilder
     private var notificationBanner: some View {
-        if droppedNotices > 0 {
+        if channelMissing {
+            // 이 경우 사용자가 설정에서 고칠 수 있는 것이 없다 — 프로비저닝 문제다.
+            // 그래서 버튼이 아니라 진술이다.
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").font(PP.Typo.label)
+                Text("공유 저장 결과를 알릴 통로가 없습니다 (App Group 미설정)")
+                    .font(PP.Typo.label)
+            }
+            .foregroundStyle(PP.Palette.fg1)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PP.Palette.dangerTint, in: .rect(cornerRadius: PP.Radius.card))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+            .background(PP.Palette.canvas)
+        } else if droppedNotices > 0 {
             Button {
                 Task {
                     // **아직 안 물어봤으면 여기서 물어본다.** 설정 앱으로 내보내는 것은
@@ -634,10 +653,24 @@ struct ContentView: View {
     /// 알림 권한 상태와 버려진 알림 수를 다시 읽는다.
     private func refreshNotifyState() async {
         notifyStatus = await SaveNotifier.status()
-        droppedNotices = AppGroup.defaults?.integer(forKey: SaveNotifier.droppedKey) ?? 0
+
+        // **`?? 0`으로 두면 안 된다.** defaults가 nil인 것은 "버린 게 없다"가 아니라
+        // **"보고 채널이 아예 없다"** 이고, 0으로 읽으면 그 둘이 화면에서 같아진다 —
+        // 배너가 안 뜨고, 사용자는 공유 저장이 조용히 실패하고 있어도 모른다.
+        //
+        // 무료 개인 팀에서는 App Group entitlement가 없을 수 있다(AppGroup.swift). 같은
+        // 파일의 `dataDirectory()`는 그 경우 폴백을 거부하고 화면에 오류를 띄우는데
+        // defaults 쪽만 조용했다 — 비대칭이 신호였다.
+        guard let d = AppGroup.defaults else {
+            channelMissing = true
+            droppedNotices = 0
+            return
+        }
+        channelMissing = false
+        droppedNotices = d.integer(forKey: SaveNotifier.droppedKey)
         // 권한이 다시 켜졌으면 배너를 치우고 카운트도 비운다.
         if droppedNotices > 0, await SaveNotifier.canNotify() {
-            AppGroup.defaults?.set(0, forKey: SaveNotifier.droppedKey)
+            d.set(0, forKey: SaveNotifier.droppedKey)
             droppedNotices = 0
         }
     }
