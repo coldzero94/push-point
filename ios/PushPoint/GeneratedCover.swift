@@ -12,6 +12,13 @@ import SwiftUI
 struct GeneratedCover: View {
     let domain: String
     let facet: PP.Facet
+    /// 도메인 워드마크를 그릴지. **조밀 행(44pt)에서는 끈다.**
+    ///
+    /// 그 크기에서 글자는 정보가 아니라 소음이다 — 실제로 `uitest.example`이
+    /// "uite st…"로 두 줄에 깨져 나왔다. 측정으로도 그렇다: 64px 이하 썸네일에서는
+    /// **색과 배치만** 정보를 나른다(Kaasten 2002, §4.4.1). 워드마크는 그 두 채널
+    /// 어디에도 없고 자리만 먹는다.
+    var showsWordmark: Bool = true
 
     var body: some View {
         let pattern = CoverPattern(domain: domain)
@@ -22,12 +29,14 @@ struct GeneratedCover: View {
         // R4의 "빈칸을 만들지 않는다"는 첫 프레임에도 적용된다.
         .background(facet.cover)
         .overlay(alignment: .bottomLeading) {
+            if showsWordmark {
             // 도메인 워드마크. 커버가 출처의 표식이 되려면 무늬만으로는 부족하다.
-            Text(domain)
-                .font(PP.Typo.metaMono)
-                .foregroundStyle(facet.ink)
-                .padding(.leading, 12)
-                .padding(.bottom, 9)
+                Text(domain)
+                    .font(PP.Typo.metaMono)
+                    .foregroundStyle(facet.ink)
+                    .padding(.leading, 12)
+                    .padding(.bottom, 9)
+            }
         }
     }
 

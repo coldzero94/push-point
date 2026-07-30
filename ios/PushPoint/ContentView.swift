@@ -89,6 +89,9 @@ struct ContentView: View {
                             Image(systemName: density.next.symbol)
                         }
                         .accessibilityLabel("\(density.next.label)로 보기")
+                        // 조밀 모드를 테스트가 누를 수 있어야 한다 — 없던 동안 그 모드에
+                        // 자동 게이트가 0이었다.
+                        .accessibilityIdentifier("density.toggle")
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { saving = true } label: { Image(systemName: "plus") }

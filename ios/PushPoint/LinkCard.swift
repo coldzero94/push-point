@@ -37,12 +37,23 @@ struct LinkCard: View {
 
     /// 펄스를 감소가 아니라 **제거**로 처리하기 위한 것(§7.4).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// 커버 한 변(§4.4.1). `@ScaledMetric`인 이유는 §8.3이 행 높이 고정을 금지하기 때문이다 —
+    /// 글자만 커지고 앵커가 그대로면 큰 글자에서 균형이 무너진다.
+    @ScaledMetric(relativeTo: .body) private var scaledCover: CGFloat = 44
     @State private var pulsing = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if density == .card { cover }
-            content
+        Group {
+            switch density {
+            case .card:
+                VStack(alignment: .leading, spacing: 0) {
+                    cover
+                    content
+                }
+            case .compact:
+                compactRow
+            }
         }
         .background(PP.Palette.surface)
         .clipShape(RoundedRectangle(cornerRadius: PP.Radius.card, style: .continuous))
@@ -56,6 +67,94 @@ struct LinkCard: View {
         .overlay(alignment: .leading) { rail }
         .clipShape(RoundedRectangle(cornerRadius: PP.Radius.card, style: .continuous))
     }
+
+    // MARK: - 조밀 행
+
+    /// 제목·도메인·시각 + trailing 44pt 커버. **본문과 칩은 없다**(§4.4.1).
+    ///
+    /// 첫 판의 조밀은 반대였다 — 커버를 빼고 본문·칩을 남겼다. 2026-07-30에 뒤집었고 근거는
+    /// §4.4.1에 있다. 요약하면: 이 목록의 목적은 **되찾기**이고 그 조건에서 이미지를 빼는 것이
+    /// 가장 비싼 제거(Teevan 2009)인데, 반대로 본문 텍스트는 줄이는 편이 위치 정보에 시선을
+    /// 남긴다(Cutrell & Guan 2007). 지표는 화면당 4행에서 11행이 된다 — 그런데 첫 판이 노린
+    /// 것도 그 지표였고 **주석이 "6~7행"이라 적어 둔 값은 실측 4행이었다.**
+    ///
+    /// 접근성 크기에서는 세로로 갈라진다. 클램프가 아니라 **다른 레이아웃**이다 — 본문이
+    /// AX5에서 3배가 되므로 44pt 한 줄 행은 그 크기에 존재할 수 없다.
+    @ViewBuilder
+    private var compactRow: some View {
+        if isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                compactCover
+                compactText
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        } else {
+            HStack(alignment: .top, spacing: 12) {
+                compactText
+                compactCover
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private var compactText: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(displayTitle)
+                .font(PP.Typo.title)
+                .tracking(PP.Tracking.title)
+                .foregroundStyle(PP.Palette.fg1)
+                // **줄 예산.** 제목이 먼저 가져간다(§4.4.1). 조밀에는 본문이 없으므로 지금은
+                // 상한으로만 작동하는데, 예산 형태로 두는 이유는 행 높이가 거의 일정해야
+                // 훑기가 되기 때문이다 — 가변 높이 셀은 스캔성을 이유로 기각된 형태다.
+                .lineLimit(Self.compactLineBudget)
+            metaLine
+            failureRow
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 조밀 행의 커버. 없는 링크도 생성 커버를 받는다 — R4는 밀도와 무관하다.
+    private var compactCover: some View {
+        Group {
+            if let thumb = link.thumb_url, let url = resolveThumb(thumb) {
+                AsyncImage(url: url) { phase in
+                    if case let .success(image) = phase {
+                        image.resizable().scaledToFill()
+                    } else {
+                        GeneratedCover(domain: link.domain, facet: dominantFacet,
+                                       showsWordmark: false)
+                    }
+                }
+            } else {
+                GeneratedCover(domain: link.domain, facet: dominantFacet,
+                               showsWordmark: false)
+            }
+        }
+        .frame(width: coverSide, height: coverSide)
+        .clipShape(RoundedRectangle(cornerRadius: PP.Radius.thumb, style: .continuous))
+    }
+
+    static let compactLineBudget = 2
+
+    /// 도메인 · 시각. **두 밀도가 같은 줄을 쓴다** — 따로 두면 갈라진다.
+    ///
+    /// 기계 데이터는 고정폭(R2) — 사람이 쓴 줄과 나란히 놓여 대비가 산다.
+    private var metaLine: some View {
+        HStack(spacing: 6) {
+            Text(link.domain)
+            Text("·")
+            Text(relativeTime)
+        }
+        .font(PP.Typo.metaMono)
+        .foregroundStyle(PP.Palette.fg3)
+    }
+
+    /// 큰 글자에서 커버도 같이 커진다(§8.2) — 고정 pt로 두면 글자만 커지고 앵커는 남는다.
+    private var coverSide: CGFloat { scaledCover }
+
+    private var isAccessibilitySize: Bool { dynamicTypeSize.isAccessibilitySize }
 
     // MARK: - 커버
 
@@ -152,15 +251,7 @@ struct LinkCard: View {
 
             failureRow
 
-            // 기계 데이터는 고정폭(R2) — 사람이 쓴 줄(제목·설명)과 나란히 놓여 대비가 산다.
-            HStack(spacing: 6) {
-                Text(link.domain)
-                Text("·")
-                Text(relativeTime)
-            }
-            .font(PP.Typo.metaMono)
-            .foregroundStyle(PP.Palette.fg3)
-            .padding(.top, 3)
+            metaLine.padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
