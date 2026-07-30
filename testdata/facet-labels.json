@@ -1,0 +1,9 @@
+{
+  "_comment": "facet 한글 라벨 — 웹 frontend/src/lib/tags/facet.ts와 iOS PP.Facet.label이 같이 읽는다(10 §5.5 · §8.1). 13 §3 판정표에서 마지막까지 '일치 검사: 없음'으로 남아 있던 항목이다. 라벨을 바꿀 때는 이 파일과 두 구현을 같은 변경 집합에서 고친다.",
+  "labels": {
+    "craft": "만드는 것",
+    "media": "형식",
+    "life": "세상과 일상",
+    "neutral": "분류 없음"
+  }
+}
