@@ -307,21 +307,10 @@ struct LinkCard: View {
         }
     }
 
-    /// 웹 `StatusRail`의 STATUS_LABEL과 **같은 단어**를 쓴다(§8.1).
-    ///
-    /// `waiting`이 여기서 갈린다. **백오프로 누워 있는 링크는 `status`가 여전히 `pending`**
-    /// 이라 진행 레일이 돌고, 화면은 일하는 중이라고 말한다 — 실제로는 최대 30×attempts초를
-    /// 기다리는 중이다. 12 §4.3이 "이 제안이 발견한 유일하게 참인 관찰"이라고 적은 것이
-    /// 그것이고, 계약의 `retry_state`가 이제 그 사실을 싣는다.
+    /// 규칙은 `StatusAnnounce.swift`에 있다 — 뷰 안에 두면 테스트가 못 부르고,
+    /// `accessibilityLabel`은 스크린샷에도 안 찍혀서 눈으로도 못 본다.
     private var statusLabel: String {
-        if link.retry_state == .waiting { return "재시도 대기 중" }
-        switch link.status {
-        case .pending: return "대기"
-        case .scraping: return "수집 중"
-        case .tagging: return "태깅 중"
-        case .done: return "완료"
-        case .failed: return "실패"
-        }
+        StatusAnnounce.announcement(link.status, retryWaiting: link.retry_state == .waiting)
     }
 
     /// 실패 문구. 사유가 있으면 사유를, 없으면 예전 문장을 쓴다.
