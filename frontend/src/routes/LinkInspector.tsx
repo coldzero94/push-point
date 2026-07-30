@@ -105,6 +105,10 @@ const PRIMARY_ANCHOR =
 export type InspectorPanelProps = { id: number | null; onClose: () => void }
 
 export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
+  // 썸네일 전송 실패. 링크가 바뀌면 초기화해야 하므로 id를 키로 쓴다.
+  const [failedFor, setFailedFor] = useState<number | null>(null)
+  const thumbFailed = failedFor === id
+  const setThumbFailed = (v: boolean) => setFailedFor(v ? id : null)
   const isDesktop = useMediaQuery('(min-width: 1024px)') // ≥1024 → non-modal side panel
   const isTablet = useMediaQuery('(min-width: 560px)') // 560–1023 → sheet, <560 → fullscreen
   const online = useOnline()
@@ -349,7 +353,7 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                   same anchor every time (§10 4.5). */}
               {link ? (
                 <div className="relative -mx-20 -mt-20 mb-16 aspect-[16/9] overflow-hidden bg-hover">
-                  {link.thumb_url ? (
+                  {link.thumb_url && !thumbFailed ? (
                     <img
                       src={link.thumb_url}
                       alt=""
@@ -357,6 +361,14 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                       loading="lazy"
                       decoding="async"
                       className="thumb-img h-full w-full object-cover"
+                      // 카드와 같은 이유다 — 실패한 img는 `bg-hover` 회색 상자를 남기고
+                      // 그건 R4가 이름으로 금지한 것이다(LinkCard의 같은 주석 참조).
+                      onError={() => {
+                        setThumbFailed(true)
+                        console.error(
+                          `[push-point] thumb load failed link=${link.id} url=${link.thumb_url}`,
+                        )
+                      }}
                     />
                   ) : (
                     <>
