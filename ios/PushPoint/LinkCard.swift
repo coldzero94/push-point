@@ -276,11 +276,31 @@ struct LinkCard: View {
         case .pending, .scraping, .tagging:
             Rectangle().fill(PP.Palette.railProgress)
                 .frame(width: PP.Size.rail)
-                .opacity(pulsing ? 1 : 0.7)
+                // **reduced-motion은 정적 `1`이다** — 감소가 아니라 제거다(§4.7 · §7.4 ·
+                // §8.2가 세 곳에서 같은 말을 한다). 예전에는 `pulsing ? 1 : 0.7`이라
+                // 애니메이션만 끄고 값은 `0.7`에 남았는데, 그건 **펄스의 하한**이고
+                // 명세가 피하려던 값이다. 대비 수치 5.94/5.57도 `1` 기준으로 계산돼 있다.
+                .opacity(reduceMotion ? 1 : (pulsing ? 1 : 0.7))
                 .animation(reduceMotion ? nil
                            : .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
                            value: pulsing)
-                .onAppear { if !reduceMotion { pulsing = true } }
+                // **`.task(id: link.status)`로 돌린다.**
+                //
+                // `onAppear`는 `pulsing`을 한 번만 뒤집는다. 그래서 **뷰가 다시 나타나지
+                // 않는 전이**에서는 애니메이션이 재시작되지 않는다 — 실패한 링크를
+                // 재시도하면 카드는 화면에 그대로 있고 `status`만 failed → pending으로
+                // 바뀌는데, `onAppear`는 안 불리고 `pulsing`은 이미 true라 값도 안 변한다.
+                // §1.4 S2가 "폴러가 갱신하면 슬롯이 켜진다"고 규정한 그 순간이다.
+                //
+                // **정직하게 적어 둔다**: 원래 이 변경은 "셀 재사용 시 펄스가 멎는다"를
+                // 근거로 제안됐는데, 2026-07-30에 스크롤로 재현을 시도했더니 옛 코드도
+                // 계속 돌았다(진폭 43.9). 그 기전은 확인하지 못했다. 남는 근거는 위의
+                // 상태 전이 하나이고, 그건 `onAppear`의 정의상 확실하다.
+                .task(id: link.status) {
+                    guard !reduceMotion else { return }
+                    pulsing = false
+                    pulsing = true
+                }
                 .accessibilityLabel(statusLabel)
         case .done:
             EmptyView() // 완료에는 획이 없다
