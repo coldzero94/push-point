@@ -9,6 +9,8 @@
 // (default) or name.
 
 import { useMemo, useState } from 'react'
+import { formatRelativeTime } from '../lib/time'
+import { sortTags, type TagSortKey } from '../lib/tagSort'
 import { Link } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -32,23 +34,18 @@ import { errorMessage, isErrorCode } from '../lib/api/client'
 import { useOnline } from '../hooks/useOnline'
 import type { Tag, TagFacet } from '../lib/api/types'
 
-type SortKey = 'count' | 'name'
+
 
 export function TagsScreen() {
   const tagsQuery = useTags()
   const stats = useStats()
   const online = useOnline()
 
-  const [sort, setSort] = useState<SortKey>('count')
+  const [sort, setSort] = useState<TagSortKey>('count')
   const [creating, setCreating] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
 
-  const sorted = useMemo(() => {
-    const list = tagsQuery.data ? [...tagsQuery.data] : []
-    return list.sort((a, b) =>
-      sort === 'count' ? b.link_count - a.link_count || a.name.localeCompare(b.name) : a.name.localeCompare(b.name),
-    )
-  }, [tagsQuery.data, sort])
+  const sorted = useMemo(() => sortTags(tagsQuery.data ?? [], sort), [tagsQuery.data, sort])
 
   if (tagsQuery.isPending) return <TagsSkeleton />
 
@@ -138,8 +135,8 @@ export function TagsScreen() {
   )
 }
 
-function SortToggle({ value, onChange }: { value: SortKey; onChange: (k: SortKey) => void }) {
-  const opt = (k: SortKey, label: string) => (
+function SortToggle({ value, onChange }: { value: TagSortKey; onChange: (k: TagSortKey) => void }) {
+  const opt = (k: TagSortKey, label: string) => (
     <button
       type="button"
       aria-pressed={value === k}
@@ -155,6 +152,7 @@ function SortToggle({ value, onChange }: { value: SortKey; onChange: (k: SortKey
   return (
     <div className="flex items-center gap-2">
       {opt('count', '링크 수')}
+      {opt('recent', '최근 저장순')}
       {opt('name', '이름')}
     </div>
   )
@@ -196,6 +194,13 @@ function TagRow({
           </span>
         ))}
       </div>
+      {/* **신선도 한 조각.** 두 달 전에 끊긴 주제와 이번 주 주제가 같은 자리에 섞여 있는
+          것이 통증이었고, 그건 추세가 아니라 태그당 날짜 하나로 답해진다(12 §4.2).
+          화살표·상승/하락·카운트업 없음 — 그 셋을 붙이면 백로그가 "요즘 관심"을 기각한
+          자리로 되돌아간다. */}
+      <span className="shrink-0 font-mono text-meta tabular-nums text-fg-3">
+        {tag.last_saved_at ? formatRelativeTime(tag.last_saved_at) : ''}
+      </span>
       <span className="shrink-0 font-mono text-meta tabular-nums text-fg-2">{tag.link_count}</span>
       <Button size="sm" variant="ghost" disabled={!online} onClick={onEdit}>
         편집
