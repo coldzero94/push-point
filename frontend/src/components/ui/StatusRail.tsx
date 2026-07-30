@@ -9,18 +9,11 @@
 // meaning, a visually-hidden status label accompanies every non-done state.
 
 import type { LinkStatus } from '../../lib/api/types'
+import { isProgress, statusAnnouncement } from '../../lib/statusAnnounce'
 import { cn } from './cn'
 
-// Korean status labels — shared verbatim with iOS (§8.1).
-const STATUS_LABEL: Record<LinkStatus, string> = {
-  pending: '대기',
-  scraping: '수집 중',
-  tagging: '태깅 중',
-  done: '완료',
-  failed: '실패',
-}
-
-const PROGRESS: ReadonlySet<LinkStatus> = new Set(['pending', 'scraping', 'tagging'])
+// 라벨 규칙은 `lib/statusAnnounce.ts`에 있다 — 컴포넌트 안에 두면 검증할 수 없고,
+// `aria-label`은 스크린샷에도 안 찍혀서 눈으로도 못 본다.
 
 export type StatusRailProps = {
   status: LinkStatus
@@ -43,7 +36,7 @@ export function StatusRail({
   retryWaiting = false,
   className,
 }: StatusRailProps) {
-  const inProgress = PROGRESS.has(status)
+  const inProgress = isProgress(status)
   const failed = status === 'failed'
 
   // Branch order = priority: selected > failed > progress > done(transparent).
@@ -55,12 +48,8 @@ export function StatusRail({
         ? 'bg-rail-progress rail-pulse'
         : 'bg-transparent'
 
-  // Announce non-done states in a channel that is not color (§4.7 / §7.1).
-  const announce = retryWaiting
-    ? '재시도 대기 중' // iOS `statusLabel`과 같은 단어 (§8.1)
-    : failed || inProgress
-      ? STATUS_LABEL[status]
-      : ''
+  // 색 단독 표현 금지 — 숨은 텍스트가 따라붙는다 (§4.7 / §7.1).
+  const announce = statusAnnouncement(status, retryWaiting)
 
   return (
     <span

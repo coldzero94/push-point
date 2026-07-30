@@ -132,9 +132,10 @@ iOS 통계 탭에는 `수집에 실패한 링크 N개`를 눌러 그 목록으�
 | 규칙 | 구현 위치 | 일치 검사 |
 |---|---|---|
 | **연속 저장(streak)** | `ios/PushPoint/StatsView.swift` · `scripts/streak.sh` · `frontend/src/lib/rhythm.ts` | `testdata/streak-cases.json`을 웹·셸이 같이 읽는다 (iOS는 아직) |
-| 지난주 대비 · 지배 관심사 | `StatsView.swift` · `frontend/src/lib/rhythm.ts` | `rhythm.test.ts` (웹만) |
-| 상대 시간 표기 | `ios/Shared/RelativeTime.swift` · `frontend/src/lib/time.ts` | `RelativeTimeTests.swift` (iOS만, 웹 값을 정답으로 씀) |
-| facet 라벨 | `ios/PushPoint/DesignSystem.swift` · `frontend/src/lib/tags/facet.ts` | 없음 |
+| ~~지난주 대비 · 지배 관심사~~ | — | **삭제됨**(14 §D3·§D4) — 데이터가 받치지 못했다 |
+| 상대 시간 표기 | `ios/Shared/RelativeTime.swift` · `frontend/src/lib/time.ts` | `testdata/relative-time-cases.json`을 **양쪽이 같이 읽는다** (2026-07-30) |
+| 상태 라벨 | `ios/PushPoint/LinkCard.swift` · `frontend/src/lib/statusAnnounce.ts` | `testdata/status-labels.json`을 **양쪽이 같이 읽는다** (2026-07-30). iOS 쪽은 약한 검사다 — 라벨이 뷰의 `private var`라 부를 수 없어 **소스에 문자열이 실재하는지**만 본다. 한쪽만 고치면 빨개진다는 성질은 지킨다 |
+| facet 라벨 | `ios/PushPoint/DesignSystem.swift` · `frontend/src/lib/tags/facet.ts` | **없음** — 이 표에서 유일하게 남은 빈칸이다 |
 
 **규칙**: 이 표에 있는 것을 고칠 때는 **모든 구현을 같은 변경 집합에서** 고친다. 백엔드
 인터페이스 규칙(`.claude/rules/backend.md`)이 "인터페이스만 바꾸는 커밋은 없다"고 말하는

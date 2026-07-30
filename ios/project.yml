@@ -78,6 +78,9 @@ targets:
       # 정상으로 보이고, streak에서 그 문제를 이미 겪었다(13 §3).
       - path: ../testdata/relative-time-cases.json
         buildPhase: resources
+      # 상태 라벨 — 웹과 같은 파일. §8.1이 "같은 단어"를 요구하는데 검사가 없었다.
+      - path: ../testdata/status-labels.json
+        buildPhase: resources
     dependencies:
       # 생성 타입이 OpenAPIRuntime 타입(HTTPBody 등)을 참조하므로 Types.swift만 넣어도
       # 링크가 필요하다. 스텁은 APIProtocol만 구현하지만 타입 자체가 런타임에 묶여 있다.
