@@ -81,6 +81,11 @@ targets:
       # 상태 라벨 — 웹과 같은 파일. §8.1이 "같은 단어"를 요구하는데 검사가 없었다.
       - path: ../testdata/status-labels.json
         buildPhase: resources
+      - path: ../testdata/facet-labels.json
+        buildPhase: resources
+      # facet 라벨을 **직접 부르기 위해** 넣는다. 상태 라벨은 뷰의 private var라 소스를
+      # 훑는 약한 검사였는데, 이쪽은 열거형이라 실제 함수를 호출할 수 있다.
+      - path: PushPoint/DesignSystem.swift
     dependencies:
       # 생성 타입이 OpenAPIRuntime 타입(HTTPBody 등)을 참조하므로 Types.swift만 넣어도
       # 링크가 필요하다. 스텁은 APIProtocol만 구현하지만 타입 자체가 런타임에 묶여 있다.
