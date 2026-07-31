@@ -117,6 +117,12 @@ gen-check:
 enum-lint:
     scripts/lint_enums.sh
 
+# B1 착수 게이트 — 요약이 색인에 새 3-gram을 더하는 링크 비율 (30% 미만이면 exit 1)
+#
+# 12 §4가 코드 전에 요구한 숫자다. 결과는 nlu/golden/README.md에 기록돼 있다.
+b1-gate:
+    @cd backend && go run ./cmd/b1gate
+
 # nlu/dictionary/ 자산(tags.json·domains.json) ↔ 시드 마이그레이션 일치 검사 (불일치 시 exit 1)
 dict-lint:
     scripts/lint_dict.sh
