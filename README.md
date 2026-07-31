@@ -200,4 +200,8 @@ Project docs are written in Korean and live in `docs/v2/`, the single source of 
 
 ## License
 
-Not licensed yet — a single-user personal project. Open an issue if you need terms for reuse.
+[Apache-2.0](LICENSE).
+
+The bundled fonts are not covered by it: Wanted Sans and Geist Mono ship under
+[SIL OFL 1.1](design/fonts/), which is a separate grant with its own terms — reuse
+the code freely, but read that one before redistributing the font files.
