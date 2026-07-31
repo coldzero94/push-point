@@ -1,13 +1,35 @@
-# Push-Point
+<p align="center">
+  <img src="ios/PushPoint/Assets.xcassets/AppIcon.appiconset/icon-1024.png" width="112" alt="Push-Point">
+</p>
 
-[![ci](https://github.com/coldzero94/push-point/actions/workflows/ci.yml/badge.svg)](https://github.com/coldzero94/push-point/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![SQLite](https://img.shields.io/badge/SQLite-CGO--free-003B57?logo=sqlite&logoColor=white)](https://modernc.org/sqlite)
-[![no LLM API](https://img.shields.io/badge/tagging-no%20LLM%20API-2ea44f)](nlu/golden/README.md)
+<h1 align="center">Push-Point</h1>
 
-**Save a link in one tap. Find it again months later.** A self-hosted personal archive that reads what you save and tags it — one Go binary, one SQLite file, no external AI API and no per-item cost.
+<p align="center">
+  <em>Three identical shapes, one hue, filled 0 → 1 → 2.<br>
+  That is the whole design system: colour says what a thing is about, fill says who touched it —<br>
+  the machine's guess, a rule's tag, your choice.</em>
+</p>
 
-[Docs](docs/v2/00-README.md) · [API contract](api/openapi.yaml) · [Tagging evaluation](nlu/golden/README.md) · [Roadmap](docs/v2/08-DEVELOPMENT-PLAN.md) · [Contributing](CONTRIBUTING.md)
+<p align="center">
+  <a href="https://github.com/coldzero94/push-point/actions/workflows/ci.yml"><img src="https://github.com/coldzero94/push-point/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go 1.25"></a>
+  <a href="https://modernc.org/sqlite"><img src="https://img.shields.io/badge/SQLite-CGO--free-003B57?logo=sqlite&logoColor=white" alt="SQLite, CGO-free"></a>
+  <a href="nlu/golden/README.md"><img src="https://img.shields.io/badge/tagging-no%20LLM%20API-2ea44f" alt="no LLM API"></a>
+</p>
+
+<p align="center">
+  <b>Save a link in one tap. Find it again months later.</b><br>
+  A self-hosted personal archive that reads what you save and tags it —<br>
+  one Go binary, one SQLite file, no external AI API and no per-item cost.
+</p>
+
+<p align="center">
+  <a href="docs/v2/00-README.md">Docs</a> ·
+  <a href="api/openapi.yaml">API contract</a> ·
+  <a href="nlu/golden/README.md">Tagging evaluation</a> ·
+  <a href="docs/v2/08-DEVELOPMENT-PLAN.md">Roadmap</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
 ---
 
@@ -42,13 +64,14 @@ Everything runs in one process on your own machine. A backup is `cp -r data/`.
 
 Every number below has a command that reproduces it. No figure enters this README without one.
 
-| | Target | Measured (2026-07-27) | Command |
+| | Target | Measured (2026-07-31) | Command |
 |---|---|---|---|
-| Save API p99 | < 50 ms | **1.22 ms** (p50 0.27 / p95 0.36, n=2000) | `just bench-http` |
-| Save p99, client-capture path | < 50 ms | **4.41 ms** (n=500) | `just bench-http` |
-| Cold start → serving | < 1 s | **405 ms** | `scripts/coldstart.sh` |
+| Save API p99 | < 50 ms | **1.25 ms** (p50 0.26 / p95 0.37, n=2000) | `just bench-http` |
+| Save p99, client-capture path | < 50 ms | **4.42 ms** (p50 0.67 / p95 1.11, n=500) | `just bench-http` |
+| Cold start → serving | < 1 s | **401 ms** | `scripts/coldstart.sh` |
 | Tagging, frozen test set | — | **0.905** top-3 recall (84 links) | `just eval` |
 | Tagging, open-web set | — | **0.821** (28 links) | `just eval` |
+| Share-sheet save, end to end | < 2 s | **92 ms** — scrape, tag and all | `just save-timing` |
 
 That last row is the one that matters. A tagger evaluated only on developer blogs scores well and tells you nothing, so there is a second set built deliberately from the rest of the web — commerce, communities, app stores, video, wikis. It scores lower, on purpose: **it is the number that is allowed to be disappointing.**
 
@@ -121,7 +144,8 @@ The harness reports what a single recall number cannot: how many misses are reco
 
 Daily use works. Save from the iOS share sheet, the web app or the browser
 extension; scraping with per-site adapters; tagging; full-text search; thumbnails;
-bookmark import; export to a Google Sheet.
+bookmark import; export to a Google Sheet. **A share-sheet save finishes in 92 ms**,
+scraping and tagging included, against a 2-second budget.
 
 What is being worked on, and honestly:
 
@@ -134,14 +158,25 @@ experiment with kill criteria written down first. It cleared the bar on a 1 GB m
 and failed at a size that could actually ship, so it was cut. The rule engine is what
 ships, and the reasoning is written down rather than quietly abandoned.
 
+**The statistics screen was rebuilt around what one to three saves a day can support.**
+It used to claim a busiest weekday. Thirty days is four weeks plus two, so exactly two
+weekdays hold five slots and they are always today's and yesterday's, rotating each
+morning — meaning a user who saves precisely twice a day and never misses is told a
+different answer every day. Week-over-week was no better: with no change in behaviour
+at all the average swing is 2.4 links and the direction word reverses one day in three.
+Both are gone. What is left — active days and the current streak — are counts of facts
+rather than inferences, so when they move, something really happened.
+
 **Pages behind a login are only half-solved.** The browser extension captures them,
 and the server accepts and stores what it sends — but no such page has made it into
 the evaluation sets yet, so the tagging quality on exactly the pages that need this
 path the most is still unmeasured. The harness says so out loud rather than staying
 quiet about it.
 
-Not started: a widget, performance polish, and an evaluation harness for search
-quality to match the one tagging has.
+The one remaining bar for the iOS milestone is seven consecutive days of real use,
+which is calendar time and nothing else. Not started after that: a widget,
+performance polish, and an evaluation harness for search quality to match the one
+tagging has.
 
 The full plan, with completion criteria per stage, is in
 [the development plan](docs/v2/08-DEVELOPMENT-PLAN.md).
