@@ -457,6 +457,28 @@ func (s *Server) Search(ctx context.Context, request gen.SearchRequestObject) (g
 		}
 		return nil, err
 	}
+
+	// **테이블도 엔드포인트도 화면도 아니다 — 두 줄이다**(12 §4.4).
+	//
+	// 사려는 답은 첫 줄에 있다: **주당 검색 횟수.** 그게 한 자릿수면 검색 화면 투자
+	// 전체(묶음 B 포함)의 우선순위가 내려간다. 지금은 아무도 모르고, 안 넣으면 2주 뒤에도
+	// 모른다 — 10줄로 M 규모 작업의 순위를 사는 셈이다.
+	//
+	// **0건일 때만 `q`를 싣는다.** 매 검색의 질의를 남기면 그건 로그가 아니라 열람 이력이고,
+	// 이 제품이 외부에 아무것도 안 보내는 이유와 같은 종류의 것을 자기 디스크에 만든다.
+	// 0건은 그 자체가 관심 대상이라("아카이브에 없는 것을 찾았다") 예외로 둔다.
+	//
+	// 두 번째 질문: **0건 질의가 본문 문구에 몰리는가.** 몰린다면 답은 화면이 아니라
+	// 색인이고, 그게 B1이다. 2주 뒤 `grep` 두 번으로 읽는다.
+	//
+	// 커서가 있는 요청은 세지 않는다 — 같은 검색의 두 번째 장이지 새 검색이 아니다.
+	if request.Params.Cursor == nil {
+		if len(items) == 0 {
+			s.logger.Info("search", "mode", mode, "hits", 0, "q", q)
+		} else {
+			s.logger.Info("search", "mode", mode, "hits", len(items))
+		}
+	}
 	links := make([]gen.SearchResult, 0, len(items))
 	for _, it := range items {
 		l := s.toAPILink(it.Link)
