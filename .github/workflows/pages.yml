@@ -1,0 +1,43 @@
+# 랜딩 페이지(site/) 배포.
+#
+# 브랜치 소스를 쓰지 않는 이유: GitHub Pages는 브랜치 배포에서 `/` 아니면 `/docs`만
+# 받는데, 이 저장소의 `docs/`는 한국어 기획 문서(단일 진실 원천)라 내줄 수 없고 `/`는
+# 저장소 전체를 공개 서빙하게 된다. Actions 배포는 디렉터리를 고를 수 있다.
+#
+# 문구 정합 검사(just site-check)는 여기서 다시 돌리지 않는다 — ci.yml이 이미 PR마다
+# 돌리고, main에 들어온 것은 그것을 통과한 것이다.
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 하나만 돈다. 연달아 push해도 마지막 것이 이긴다 — 중간 것을 취소하지 않는 이유는
+# 취소된 배포가 페이지를 반쯤 갱신된 상태로 남길 수 있기 때문이다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
