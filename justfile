@@ -360,6 +360,10 @@ cover-ops:
 demo-record flow="scripts/demo-flows/share-ko.json" out="/tmp/demo.mp4":
     python3 scripts/demo_record.py {{flow}} {{out}}
 
+# 합성된 데모에서 커서가 실제로 누른 자리에 그려졌는지 (배포 전 필수)
+demo-check video out="/tmp/demo.mp4":
+    python3 scripts/demo_check.py {{video}} {{video}}.events.json
+
 # 랜딩 페이지를 로컬에서 띄운다 (http://localhost:8877)
 site:
     @echo "http://localhost:8877 — Ctrl+C로 종료"

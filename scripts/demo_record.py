@@ -64,6 +64,11 @@ def drive(flow, udid, out):
             run(["axe", "type", step["text"], "--udid", udid])
         elif kind == "open":
             run(["xcrun", "simctl", "openurl", "booted", step["url"]])
+            # **동기화 표식.** 영상 시계는 이벤트 시계와 같지 않다 — 2026-08-03에 한
+            # 녹화가 7초 뒤처져 있었고(다른 녹화는 0초였다), 그대로 합성하니 공유 시트가
+            # 떠 있는 화면에 7초 전 좌표의 손이 그려졌다. openurl은 화면을 통째로 바꾸므로
+            # 영상에서 찾을 수 있는 첫 큰 변화가 되고, 그 두 시각의 차가 지연이다.
+            events.append({"t": at, "kind": "sync"})
         elif kind == "launch":
             run(["xcrun", "simctl", "launch", "booted", step["bundle"]])
             events.append({"t": at, "kind": "hide"})
@@ -101,6 +106,39 @@ def locate_icon(udid, band, rgb):
     return (round(xs / n / SCALE), round(ys / n / SCALE))
 
 
+def measure_lag(video, events):
+    """영상 시계가 이벤트 시계보다 얼마나 뒤처졌는지 잰다.
+
+    **가정하지 않고 잰다.** `simctl io recordVideo`의 타임라인은 호스트 시계와 같을 때도
+    있고 7초 뒤처질 때도 있다(2026-08-03 실측, 같은 기계에서 녹화마다 달랐다). 어느 쪽인지
+    모르는 채로 합성하면 손이 화면보다 앞서거나 뒤서고, 그게 공유 시트 위에 주소창을 누르는
+    손을 그렸다.
+
+    `openurl`은 화면을 통째로 바꾸므로 영상에서 **첫 큰 변화**가 그 순간이다. 그 프레임
+    시각과 이벤트에 찍힌 시각의 차가 지연이다. 표식이 없으면 0으로 두되 조용히 넘어가지
+    않는다 — 틀린 커서보다 없는 커서가 낫다는 판단은 사람이 해야 한다.
+    """
+    sync = next((e["t"] for e in events if e["kind"] == "sync"), None)
+    if sync is None:
+        print("  경고: sync 표식이 없다 — 지연 보정 없이 합성한다")
+        return 0.0
+
+    import subprocess as sp
+    out = sp.run(["ffmpeg", "-v", "error", "-i", video, "-vf",
+                  "fps=10,scale=48:104,format=gray", "-f", "rawvideo", "-"],
+                 capture_output=True).stdout
+    n, size = 48 * 104, 48 * 104
+    frames = [out[i * size:(i + 1) * size] for i in range(len(out) // size)]
+    diffs = [sum(abs(a - b) for a, b in zip(frames[i], frames[i - 1])) / n
+             for i in range(1, len(frames))]
+    if not diffs:
+        return 0.0
+    peak = max(diffs)
+    # 첫 번째로 크게 흔들린 지점 = openurl로 화면이 갈린 순간
+    idx = next((i for i, d in enumerate(diffs) if d > peak * 0.35), 0)
+    return round(idx / 10.0 - sync, 2)
+
+
 def ease(p):
     """가감속. 등속으로 움직이면 로봇처럼 보이고, 사람이 손을 옮기는 리듬이 아니다."""
     return 3 * p * p - 2 * p * p * p
@@ -129,6 +167,20 @@ def overlay(video, events, out):
     acts = [e for e in events if e["kind"] in ("tap", "swipe", "hide")]
     MOVE = 0.7  # 다음 지점까지 옮겨 가는 시간(초)
 
+    PRESS = 0.28  # 눌림 표시 상한(초)
+
+    def span(e):
+        """동작이 화면에서 실제로 일어난 구간.
+
+        탭의 `dur`에는 `axe` 프로세스 시간이 통째로 들어 있다(실측 0.47~0.60초, find_tap은
+        0.72초). 그걸로 눌림을 늘이면 손이 화면 반응보다 먼저 눌렀다 떼는 것처럼 보인다.
+        스와이프의 `dur`은 요청한 제스처 길이라 그대로 쓴다.
+        """
+        d = e.get("dur", 0.2)
+        if e["kind"] != "swipe":
+            d = min(max(d, 0.12), PRESS)
+        return e["t"], e["t"] + max(d, 0.12)
+
     def rest(e):
         """그 동작이 끝났을 때 손가락이 놓인 자리."""
         return (e["x2"], e["y2"]) if e["kind"] == "swipe" else (e["x"], e["y"])
@@ -137,11 +189,12 @@ def overlay(video, events, out):
         origin = None  # 지금까지 **끝난** 동작의 마지막 자리
         for e in acts:
             if e["kind"] == "hide":
+                # 앱이 뜨는 동안 손을 뺀다. **여기서 return하면 안 된다** — 그러면
+                # 그 뒤 모든 탭이 영상 끝까지 보이지 않는다.
                 if t >= e["t"]:
-                    return None
+                    origin = None
                 continue
-            start = e["t"]
-            end = start + max(e.get("dur", 0.2), 0.2)
+            start, end = span(e)
             if t > end:
                 origin = rest(e)
                 continue
@@ -167,10 +220,14 @@ def overlay(video, events, out):
     for f in tmp.glob("*.png"):
         f.unlink()
 
+    lag = measure_lag(video, events)
+    print(f"  영상↔이벤트 지연 {lag:+.2f}s")
+
     r = CURSOR * SCALE // 2
+    FR = 7 * SCALE // 2   # 검증용 표식 반지름
     for i in range(frames):
         img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        st = state(i / fps)
+        st = state(i / fps + lag)
         if st:
             x, y, pulse = st
             px, py = x * SCALE, y * SCALE
@@ -190,6 +247,11 @@ def overlay(video, events, out):
                       fill=(255, 255, 255, 150), outline=(15, 15, 15, 210), width=SCALE)
             d.ellipse([px - r // 2, py - r // 2, px + r // 2, py + r // 2],
                       fill=(255, 255, 255, 225))
+            # **검증용 표식.** 불투명(alpha 255)이라 배경과 무관하게 정확히 이 색이 나온다 —
+            # 다른 층은 전부 알파 합성이라 사파리 흰 배경과 어두운 공유 시트에서 픽셀이
+            # 달라져 색으로 찾을 수 없다. `scripts/demo_check.py`가 이걸 찾아 이벤트
+            # 좌표와 대조한다.
+            d.ellipse([px - FR, py - FR, px + FR, py + FR], fill=(255, 0, 200, 255))
         img.save(tmp / f"c{i:05d}.png")
 
     subprocess.run([

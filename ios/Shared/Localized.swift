@@ -26,6 +26,20 @@ enum L {
     static func set(_ lang: Lang) {
         current = lang
         UserDefaults.standard.set(lang.rawValue, forKey: key)
+        // `set`은 어디서든 불릴 수 있지만(테스트가 setUp에서 부른다) Store는 화면용이라
+        // MainActor에 있다. 뷰가 없는 곳에서 부른 경우에도 안전하게 건너뛰도록 감싼다.
+        Task { @MainActor in Store.shared.lang = lang }
+    }
+
+    /// 화면이 언어 변경을 알아채는 통로.
+    ///
+    /// `current`는 `static var`라 바뀌어도 SwiftUI가 다시 그리지 않는다. 뷰가 이걸
+    /// 구독하고 루트에 `.id(lang)`을 걸어야 화면 전체가 새 언어로 다시 그려진다 —
+    /// 문자열은 뷰 본문에서 `t()`로 읽히므로 부분 갱신으로는 섞인 화면이 남는다.
+    @MainActor
+    final class Store: ObservableObject {
+        static let shared = Store()
+        @Published var lang: Lang = L.current
     }
 
     /// 문자열을 찾는다. `{이름}` 자리를 `params`로 채운다.

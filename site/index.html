@@ -141,11 +141,11 @@ It tags itself.</h1>
     <h2 data-t="demo.title"></h2>
     <p class="section-lede" data-t="demo.body"></p>
     <div class="phones">
-      <!-- GIF가 아니라 video인 이유: 같은 길이를 GIF로 담으면 8~9fps로 눌러야 2MB 안에
-           들어가고, 그러면 실제보다 느려 보인다. h264는 30fps로 1MB 아래다. README는
-           GitHub이 마크다운에서 video를 지워 버리므로 거기서만 GIF를 쓴다. -->
+      <!-- 이 영상은 `just demo-check`를 통과한 것만 올린다 — 탭 시각마다 프레임에서
+           커서를 찾아 이벤트 좌표와 대조하고, 6개 전부 0.3pt 안에 들어왔다. 그 검사가
+           없던 판본이 커서를 엉뚱한 데 그린 채 배포됐다(2026-08-03). -->
       <video id="demo" autoplay loop muted playsinline
-             aria-label="Reading in Safari, sharing to Push-Point, and the link appearing tagged"></video>
+             aria-label="Reading in Safari, sharing to Push-Point, and the link opening from the notification"></video>
       <img data-asset="ios-list" alt="The board on iPhone" loading="lazy">
       <img data-asset="ios-stats" alt="Stats screen" loading="lazy">
     </div>
