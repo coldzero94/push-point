@@ -333,6 +333,13 @@ streak-selftest:
 site-check:
     python3 scripts/site_copy_check.py
 
+# 데모 영상을 다시 찍는다 — 시뮬레이터를 몰면서 녹화하고 손가락 커서를 합성한다
+#
+# 커서를 합성하는 이유: 녹화만 하면 화면이 저절로 움직이는 것처럼 보인다. 시뮬레이터의
+# ShowSingleTouches는 Xcode 26에서 동작하지 않는다(2026-08-03 실측).
+demo-record flow="scripts/demo-flows/share-ko.json" out="/tmp/demo.mp4":
+    python3 scripts/demo_record.py {{flow}} {{out}}
+
 # 랜딩 페이지를 로컬에서 띄운다 (http://localhost:8877)
 site:
     @echo "http://localhost:8877 — Ctrl+C로 종료"
