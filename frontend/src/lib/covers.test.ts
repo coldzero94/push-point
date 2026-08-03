@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-import { coverPattern, hashDomain } from './covers'
+import { coverGeometry, coverPattern, hashDomain } from './covers'
 
 // The SAME file iOS reads (ios/PushPointTests/CoverPatternTests.swift). Before
 // 2026-08-03 the expected numbers lived only in the Swift test, under a comment
@@ -52,5 +52,37 @@ describe('coverPattern', () => {
       expect(p.variant, d).toBeGreaterThanOrEqual(0)
       expect(p.variant, d).toBeLessThanOrEqual(4)
     }
+  })
+})
+
+// 같은 파일을 iOS(`CoverGeometryTests`)도 읽는다. 여기서 이걸 확인하지 않으면 픽스처는
+// "웹이 만든 값"일 뿐 웹이 지키는 값이 아니고, 웹을 고쳤을 때 픽스처만 낡아 iOS가 옛
+// 그림을 지키는 쪽으로 뒤집힌다.
+const opsFixture = JSON.parse(
+  readFileSync(new URL('../../../testdata/cover-ops.json', import.meta.url), 'utf8'),
+) as { cases: Record<string, never>[] }
+
+describe('coverGeometry', () => {
+  it.each(opsFixture.cases)('matches the shared fixture: $domain $w×$h', (c: any) => {
+    const g = coverGeometry(coverPattern(c.domain), c.w, c.h)
+    expect(g.alpha).toBeCloseTo(c.alpha, 3)
+    expect(g.lineWidth).toBeCloseTo(c.lineWidth, 3)
+    expect(g.rotate).toBe(c.rotate)
+    expect(g.mode).toBe(c.mode)
+    expect(g.ops.length).toBe(c.ops.length)
+    g.ops.forEach((got: any, i: number) => {
+      const want = c.ops[i]
+      expect(got.op).toBe(want.op)
+      for (const k of Object.keys(want)) {
+        if (k === 'op') continue
+        expect(got[k]).toBeCloseTo(want[k], 2)
+      }
+    })
+  })
+
+  it('covers all four pattern kinds', () => {
+    expect(new Set(opsFixture.cases.map((c: any) => c.kind))).toEqual(
+      new Set(['hatch', 'lattice', 'contour', 'stack']),
+    )
   })
 })
