@@ -53,7 +53,7 @@ enum SaveNotifier {
     /// 완전 실패가 사용자에게 똑같이 보였다.
     static func notifySaved(title: String, host: String, tags: [String], duplicate: Bool) async {
         let content = UNMutableNotificationContent()
-        content.title = duplicate ? "이미 저장된 링크" : "저장했습니다"
+        content.title = duplicate ? t("notify.duplicate") : t("notify.saved")
         // 무엇이 저장됐는지 — 제목이 없으면 도메인이라도 보여준다(엉뚱한 링크를 저장했을 때
         // 알아챌 수 있는 유일한 단서다).
         content.subtitle = title.isEmpty ? host : title
@@ -67,7 +67,7 @@ enum SaveNotifier {
     /// 실패는 소리와 함께 남긴다 — 사용자가 놓치면 그 링크는 저장되지 않은 채 사라진다.
     static func notifyFailed(message: String) async {
         let content = UNMutableNotificationContent()
-        content.title = "저장하지 못했습니다"
+        content.title = t("notify.failed")
         content.body = message
         content.sound = .default
         await post(content)

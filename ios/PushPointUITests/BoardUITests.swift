@@ -11,12 +11,21 @@ import XCTest
 ///
 /// 앱은 `-uitest`로 띄운다 — 임시 디렉터리 + 자체 픽스처라 시뮬레이터 상태에 무관하다.
 final class BoardUITests: XCTestCase {
+
+    /// 이 스위트의 단정문과 시드 픽스처가 **한국어**라 앱도 한국어로 띄운다. 시뮬레이터의
+    /// 선호 언어는 영어이므로, 고정하지 않으면 앱이 영어로 뜨고 "저장"을 찾다 실패한다 —
+    /// 실제로 영문화 직후 네 케이스가 그렇게 깨졌다.
+    ///
+    /// 더 나은 해법은 표시 문구가 아니라 `accessibilityIdentifier`로 겨냥하는 것이고
+    /// (`.claude/rules/ui-verification.md`가 그렇게 적고 있다), 그 전환은 별도 작업으로
+    /// 남긴다. 여기서 언어를 고정하는 것은 그때까지의 다리다.
+    static let koLaunch = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
     private var app: XCUIApplication!
 
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-uitest"]
+        app.launchArguments = Self.koLaunch + ["-uitest"]
         app.launch()
     }
 
@@ -137,7 +146,7 @@ final class BoardUITests: XCTestCase {
     /// 보이는지로 판정한다. "많이 보인다"로는 두 번째 장이 왔는지 알 수 없다.
     func testListPagesPastTheFirstFifty() {
         app.terminate()
-        app.launchArguments = ["-uitest", "-uitest-many"]
+        app.launchArguments = Self.koLaunch + ["-uitest", "-uitest-many"]
         app.launch()
 
         // 최신순이므로 059가 맨 위, 000이 맨 끝이다. 000은 두 번째 장에만 있다.
@@ -206,7 +215,7 @@ final class BoardUITests: XCTestCase {
     /// 경로로 헤더가 물드는 회귀는 이 테스트를 통과한다. 그래도 값이 있는 이유는, 리팩토링이
     /// 되돌릴 가능성이 가장 높은 것이 정확히 이 형태이기 때문이다.
     func testNotificationBannerDoesNotSpanTheFullWidth() {
-        app.launchArguments = ["-uitest", UITestModeFlags.dropped, "3"]
+        app.launchArguments = Self.koLaunch + ["-uitest", UITestModeFlags.dropped, "3"]
         app.launch()
 
         let banner = app.buttons["notice.notifications"]

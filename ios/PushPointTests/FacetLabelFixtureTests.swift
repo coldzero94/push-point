@@ -10,6 +10,14 @@ import XCTest
 /// `PP.Facet.label`은 뷰가 아니라 열거형이라 테스트 타깃에서 보인다 — 그래서 "소스에
 /// 문자열이 있다"가 아니라 "이 입력에 이 출력을 낸다"를 검사한다.
 final class FacetLabelFixtureTests: XCTestCase {
+
+    /// 공용 픽스처(`testdata/*.json`)는 웹과 공유하는 **한국어** 기준값이다. 시뮬레이터의
+    /// 선호 언어는 영어라 고정하지 않으면 영어 문구와 비교하게 된다 — 웹의 vitest도
+    /// 같은 이유로 `setLang('ko')`를 부른다. 픽스처가 두 언어를 갖게 되면 그때 두 번 돈다.
+    override func setUp() {
+        super.setUp()
+        L.set(.ko)
+    }
     private struct Fixture: Decodable { let labels: [String: String] }
 
     func testMatchesTheSharedFixture() throws {

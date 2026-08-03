@@ -51,34 +51,34 @@ struct SaveSheet: View {
                             // 여기서 처음 읽는다. 붙여넣기 알림은 이 시점에만 뜬다.
                             if let s = UIPasteboard.general.string { url = s }
                         } label: {
-                            Label("클립보드에서 붙여넣기", systemImage: "doc.on.clipboard")
+                            Label(t("save.pasteFromClipboard"), systemImage: "doc.on.clipboard")
                                 .font(PP.Typo.body)
                         }
                     }
                 } header: {
-                    Text("주소")
+                    Text(t("save.urlSection"))
                 } footer: {
                     if let error {
                         Text(error).foregroundStyle(PP.Palette.danger)
                     } else {
-                        Text("제목·설명·태그는 저장한 뒤 자동으로 채워집니다.")
+                        Text(t("save.autofillHint"))
                     }
                 }
 
-                Section("메모") {
-                    TextField("나중에 이걸 왜 저장했는지", text: $note, axis: .vertical)
+                Section(t("common.note")) {
+                    TextField(t("save.notePlaceholder"), text: $note, axis: .vertical)
                         .font(PP.Typo.body)
                         .lineLimit(1 ... 4)
                 }
             }
-            .navigationTitle("링크 저장")
+            .navigationTitle(t("nav.saveLink"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("취소") { dismiss() }
+                    Button(t("common.cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("저장") { Task { await save() } }
+                    Button(t("common.save")) { Task { await save() } }
                         // 빈 입력으로 누를 수 있게 두면 "왜 안 되지"를 사용자가 풀어야 한다.
                         .disabled(url.trimmed.isEmpty || saving)
                 }

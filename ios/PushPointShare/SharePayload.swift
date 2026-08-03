@@ -123,9 +123,9 @@ enum ShareError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noInput: "공유된 항목이 없습니다"
-        case .noURL: "URL을 찾을 수 없습니다"
-        case .noAppGroup: "App Group 컨테이너를 열 수 없습니다"
+        case .noInput: t("share.noInput")
+        case .noURL: t("share.noURL")
+        case .noAppGroup: t("share.noAppGroup")
         }
     }
 }

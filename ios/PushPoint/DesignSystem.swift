@@ -115,10 +115,10 @@ extension PP {
         /// 한글 라벨은 두 클라이언트가 **같은 단어**를 써야 한다(§8.1).
         var label: String {
             switch self {
-            case .craft: "만드는 것"
-            case .media: "형식"
-            case .life: "세상과 일상"
-            case .neutral: "분류 없음"
+            case .craft: t("tags.facetCraft")
+            case .media: t("tags.facetMedia")
+            case .life: t("tags.facetLife")
+            case .neutral: t("tags.facetNeutral")
             }
         }
     }

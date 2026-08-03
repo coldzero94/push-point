@@ -91,14 +91,14 @@ struct ContentView: View {
                         } label: {
                             Image(systemName: density.next.symbol)
                         }
-                        .accessibilityLabel("\(density.next.label)로 보기")
+                        .accessibilityLabel(t("list.densityToggle", ["mode": density.next.label]))
                         // 조밀 모드를 테스트가 누를 수 있어야 한다 — 없던 동안 그 모드에
                         // 자동 게이트가 0이었다.
                         .accessibilityIdentifier("density.toggle")
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { saving = true } label: { Image(systemName: "plus") }
-                            .accessibilityLabel("링크 저장")
+                            .accessibilityLabel(t("nav.saveLink"))
                     }
                 }
             .sheet(isPresented: $saving) {
@@ -113,7 +113,7 @@ struct ContentView: View {
         // 검색은 목록 안에 있다 — 별도 탭으로 빼지 않았다. 찾는 대상이 바로 이 목록이고,
         // 탭을 나누면 "필터가 걸린 목록"과 "검색 결과"라는 거의 같은 두 화면을 사용자가
         // 구분해 가며 써야 한다. `.searchable`은 iOS가 이미 가르쳐 둔 자리이기도 하다.
-        .searchable(text: $query, prompt: "제목 · 메모 · 태그")
+        .searchable(text: $query, prompt: t("search.placeholderFields"))
         // **진행 중인 링크가 있는 동안만 폴링한다.**
         //
         // 이 앱의 핵심 주장은 "저장하면 3초 안에 분류된다"인데, iOS에는 폴러가 없어서
@@ -142,11 +142,11 @@ struct ContentView: View {
             // 되돌리기 토스트가 있으면 그것이 우선이다 — 되돌리기는 시간 제한이 있는
             // 동작이고, 오류 문구는 그 위에 겹치지 않아야 한다.
             if let link = justDeleted {
-                UndoToast(message: "삭제했습니다") { Task { await undo(link) } }
+                UndoToast(message: t("common.deleted")) { Task { await undo(link) } }
             } else if let actionError {
                 // **변경 실패는 여기서 말한다.** loadError로 보내면 화면 전체가
                 // "목록을 불러오지 못했습니다"가 되어 링크가 사라진 것처럼 보인다.
-                UndoToast(message: actionError, actionLabel: "닫기", isError: true) { self.actionError = nil }
+                UndoToast(message: actionError, actionLabel: t("common.close"), isError: true) { self.actionError = nil }
             }
         }
         .animation(.smooth(duration: 0.25), value: justDeleted?.id)
@@ -171,7 +171,7 @@ struct ContentView: View {
             // 그래서 버튼이 아니라 진술이다.
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill").font(PP.Typo.label)
-                Text("공유 저장 결과를 알릴 통로가 없습니다 (App Group 미설정)")
+                Text(t("notify.channelMissing"))
                     .font(PP.Typo.label)
             }
             .foregroundStyle(PP.Palette.fg1)
@@ -203,11 +203,11 @@ struct ContentView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "bell.slash.fill").font(PP.Typo.label)
-                    Text("알림이 꺼져 있어 공유 저장 결과를 알 수 없습니다 (\(droppedNotices)건)")
+                    Text(t("notify.dropped", ["n": droppedNotices]))
                         .font(PP.Typo.label)
                         .multilineTextAlignment(.leading)
                     Spacer(minLength: 4)
-                    Text("설정 열기").font(PP.Typo.label).underline()
+                    Text(t("common.openSettings")).font(PP.Typo.label).underline()
                 }
                 .foregroundStyle(PP.Palette.fg1)
                 .padding(.horizontal, 14)
@@ -253,9 +253,9 @@ struct ContentView: View {
     private var content: some View {
         switch backend.state {
         case .idle, .starting:
-            ProgressView("서버 시작 중…").padding(.top, 60)
+            ProgressView(t("status.serverStarting")).padding(.top, 60)
         case let .failed(message):
-            ContentUnavailableView("서버를 시작하지 못했습니다",
+            ContentUnavailableView(t("status.serverStartFailed"),
                                    systemImage: "exclamationmark.triangle",
                                    description: Text(message))
         case .running:
@@ -266,7 +266,7 @@ struct ContentView: View {
                 // 아니라서 그대로 두면 **바로 그때** — 다시 시도하고 싶은 순간 — 당겨서
                 // 새로고침이 안 된다.
                 refreshableState {
-                    ContentUnavailableView("목록을 불러오지 못했습니다",
+                    ContentUnavailableView(t("list.loadFailed"),
                                            systemImage: "wifi.exclamationmark",
                                            description: Text(loadError))
                 }
@@ -275,11 +275,11 @@ struct ContentView: View {
                     // **액션이 있는 빈 상태다.** 예전에는 "공유 시트로 보내면 쌓입니다"만
                     // 적혀 있어서, 읽고 나서 할 수 있는 일이 앱을 나가는 것뿐이었다.
                     ContentUnavailableView {
-                        Label("아직 저장한 링크가 없습니다", systemImage: "tray")
+                        Label(t("list.emptyTitle"), systemImage: "tray")
                     } description: {
-                        Text("다른 앱에서 공유 시트로 보내거나, 여기서 주소를 붙여넣어 저장하세요.")
+                        Text(t("list.emptyDescShare"))
                     } actions: {
-                        Button("링크 저장") { saving = true }
+                        Button(t("nav.saveLink")) { saving = true }
                             .buttonStyle(.borderedProminent)
                             .tint(PP.Palette.accent)
                     }
@@ -308,11 +308,11 @@ struct ContentView: View {
             // 거짓말이 된다 — 아카이브에서 가장 나쁜 실패 방식이다.
             refreshableState {
                 ContentUnavailableView {
-                    Label("검색하지 못했습니다", systemImage: "wifi.exclamationmark")
+                    Label(t("search.failed"), systemImage: "wifi.exclamationmark")
                 } description: {
                     Text(searchError)
                 } actions: {
-                    Button("다시 시도") { Task { await runSearch(debounce: false) } }
+                    Button(t("common.tryAgain")) { Task { await runSearch(debounce: false) } }
                 }
             }
         } else if results.isEmpty {
@@ -320,11 +320,11 @@ struct ContentView: View {
                 // 빈 결과에도 나갈 길을 준다. 검색어를 지우는 것이 유일하게 확실한
                 // 다음 동작인데, 그걸 사용자가 스스로 알아내게 두면 화면이 막힌다.
                 ContentUnavailableView {
-                    Label("결과가 없습니다", systemImage: "magnifyingglass")
+                    Label(t("search.noResults"), systemImage: "magnifyingglass")
                 } description: {
-                    Text("\u{201C}\(query)\u{201D}와 맞는 링크를 찾지 못했습니다.")
+                    Text(t("search.noMatch", ["q": query]))
                 } actions: {
-                    Button("검색어 지우기") { query = "" }
+                    Button(t("search.clear")) { query = "" }
                 }
             }
         } else {
@@ -332,7 +332,7 @@ struct ContentView: View {
                 if let mode = searchMode, mode == "like" {
                     // 세 글자 미만은 FTS가 아니라 LIKE로 간다(계약). 결과가 적을 때
                     // 사용자가 "없구나"가 아니라 "더 치면 되는구나"로 읽어야 한다.
-                    Text("두 글자 이하는 제목·메모만 훑습니다. 세 글자부터 전문 검색으로 바뀝니다.")
+                    Text(t("search.likeNotice"))
                         .font(PP.Typo.meta)
                         .foregroundStyle(PP.Palette.fg3)
                         .plainRow(top: 10, bottom: 2)
@@ -351,7 +351,7 @@ struct ContentView: View {
                         Text(searchMoreError)
                             .font(PP.Typo.meta)
                             .foregroundStyle(PP.Palette.danger)
-                        Button("다시 시도") { Task { await searchMore() } }
+                        Button(t("common.tryAgain")) { Task { await searchMore() } }
                             .font(PP.Typo.label)
                             .foregroundStyle(PP.Palette.accent)
                         Spacer()
@@ -446,7 +446,7 @@ struct ContentView: View {
         // 손이 이미 그렇게 배워 있다. 안전망은 아래 되돌리기 토스트다.
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) { Task { await delete(link) } } label: {
-                Label("삭제", systemImage: "trash")
+                Label(t("common.delete"), systemImage: "trash")
             }
         }
         // 방향으로 성격을 나눈다. **오른쪽 끝은 파괴적인 것만** — iOS 전반의 관용이고,
@@ -459,22 +459,22 @@ struct ContentView: View {
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             if link.status == .failed {
                 Button { Task { await retry(link) } } label: {
-                    Label("재시도", systemImage: "arrow.clockwise")
+                    Label(t("common.retry"), systemImage: "arrow.clockwise")
                 }
                 .tint(PP.Palette.warn)
             } else if let url = URL(string: link.url) {
-                ShareLink(item: url) { Label("공유", systemImage: "square.and.arrow.up") }
+                ShareLink(item: url) { Label(t("common.share"), systemImage: "square.and.arrow.up") }
                     .tint(PP.Palette.accent)
             }
         }
         .contextMenu {
             if let url = URL(string: link.url) {
-                Link(destination: url) { Label("원문 열기", systemImage: "safari") }
+                Link(destination: url) { Label(t("common.openOriginal"), systemImage: "safari") }
                     .simultaneousGesture(TapGesture().onEnded { recordOpen(link) })
-                ShareLink(item: url) { Label("공유", systemImage: "square.and.arrow.up") }
+                ShareLink(item: url) { Label(t("common.share"), systemImage: "square.and.arrow.up") }
             }
             Button(role: .destructive) { Task { await delete(link) } } label: {
-                Label("삭제", systemImage: "trash")
+                Label(t("common.delete"), systemImage: "trash")
             }
         }
     }
@@ -503,8 +503,8 @@ struct ContentView: View {
 
     private func label(for active: ListFilter) -> String {
         switch active {
-        case let .tag(name): "태그: \(name)"
-        case .failed: "수집 실패만"
+        case let .tag(name): t("list.filterTag", ["name": name])
+        case .failed: t("list.filterFailed")
         }
     }
 
@@ -545,7 +545,8 @@ struct ContentView: View {
         let cal = Calendar.current
         let now = Date()
         var buckets: [(String, [Components.Schemas.Link])] = [
-            ("오늘", []), ("어제", []), ("이번 주", []), ("이전", []),
+            (t("time.today"), []), (t("time.yesterday"), []),
+            (t("time.thisWeek"), []), (t("time.earlier"), []),
         ]
         for link in feed.links {
             let date = Date(timeIntervalSince1970: TimeInterval(link.created_at))
@@ -580,15 +581,15 @@ struct ContentView: View {
                 // 상태가 pending으로 돌아가면 레일이 다시 켜지므로 목록을 새로 받는다.
                 await load()
             case let .badRequest(r):
-                actionError = APIOutcome.message(try? r.body.json, fallback: "다시 시도할 수 없는 링크입니다.")
+                actionError = APIOutcome.message(try? r.body.json, fallback: t("list.retryNotAllowed"))
             case .notFound:
-                actionError = "링크를 찾을 수 없습니다."
+                actionError = t("common.linkNotFound")
             case .unauthorized:
-                actionError = "인증에 실패했습니다."
+                actionError = t("common.authFailed")
             case let .internalServerError(r):
-                actionError = APIOutcome.message(try? r.body.json, fallback: "다시 시도하지 못했습니다.")
+                actionError = APIOutcome.message(try? r.body.json, fallback: t("list.retryFailed"))
             case let .undocumented(statusCode, _):
-                actionError = "다시 시도하지 못했습니다 (HTTP \(statusCode))."
+                actionError = t("list.retryFailedHttp", ["status": statusCode])
             }
         } catch {
             actionError = error.localizedDescription
@@ -625,7 +626,7 @@ struct ContentView: View {
     /// 시트에서 온 저장. 실패하면 **문구를 돌려주고 시트를 열어 둔다** — 닫아 버리면
     /// 방금 친 주소를 잃는다.
     private func saveLink(_ url: String, _ note: String) async -> String? {
-        guard let client = backend.client else { return "서버가 아직 준비되지 않았습니다." }
+        guard let client = backend.client else { return t("status.serverNotReady") }
         do {
             // **Output을 반드시 분기한다.** `try`는 400·401·500에서 던지지 않는다
             // (APIOutcome 주석). 예전에는 여기서 바로 성공 처리해서, 잘못된 주소를
@@ -637,13 +638,13 @@ struct ContentView: View {
                 await load()
                 return nil
             case let .badRequest(r):
-                return APIOutcome.message(try? r.body.json, fallback: "주소를 확인해 주세요.")
+                return APIOutcome.message(try? r.body.json, fallback: t("save.checkUrl"))
             case .unauthorized:
-                return "인증에 실패했습니다."
+                return t("common.authFailed")
             case let .internalServerError(r):
-                return APIOutcome.message(try? r.body.json, fallback: "서버에서 저장하지 못했습니다.")
+                return APIOutcome.message(try? r.body.json, fallback: t("save.serverFailed"))
             case let .undocumented(statusCode, _):
-                return "저장하지 못했습니다 (HTTP \(statusCode))."
+                return t("save.failedHttp", ["status": statusCode])
             }
         } catch {
             return error.localizedDescription
@@ -669,7 +670,12 @@ struct ContentView: View {
         channelMissing = false
         droppedNotices = d.integer(forKey: SaveNotifier.droppedKey)
         // 권한이 다시 켜졌으면 배너를 치우고 카운트도 비운다.
-        if droppedNotices > 0, await SaveNotifier.canNotify() {
+        //
+        // **UI 테스트에서는 이 정리를 건너뛴다.** 테스트는 카운트를 심어 배너 레이아웃을
+        // 검사하는데, 시뮬레이터에 알림 권한이 켜져 있으면 여기서 카운트가 지워져 배너가
+        // 아예 안 뜬다 — 테스트가 통제하지 못하는 주변 상태에 결과가 달려 있었고, 실제로
+        // 2026-08-03에 권한을 켜자 그 케이스만 깨졌다. 시드된 상태를 그대로 보게 둔다.
+        if droppedNotices > 0, !UITestMode.isActive, await SaveNotifier.canNotify() {
             d.set(0, forKey: SaveNotifier.droppedKey)
             droppedNotices = 0
         }
@@ -719,7 +725,7 @@ struct ContentView: View {
 
     private func undo(_ link: Components.Schemas.Link) async {
         guard let client = backend.client else {
-            actionError = "서버가 아직 준비되지 않았습니다."
+            actionError = t("status.serverNotReady")
             return
         }
         undoTask?.cancel()
@@ -732,13 +738,13 @@ struct ContentView: View {
                 justDeleted = nil
                 await load()
             case let .badRequest(r):
-                actionError = APIOutcome.message(try? r.body.json, fallback: "되돌리지 못했습니다.")
+                actionError = APIOutcome.message(try? r.body.json, fallback: t("list.undoFailed"))
             case .unauthorized:
-                actionError = "인증에 실패했습니다."
+                actionError = t("common.authFailed")
             case let .internalServerError(r):
-                actionError = APIOutcome.message(try? r.body.json, fallback: "되돌리지 못했습니다.")
+                actionError = APIOutcome.message(try? r.body.json, fallback: t("list.undoFailed"))
             case let .undocumented(statusCode, _):
-                actionError = "되돌리지 못했습니다 (HTTP \(statusCode))."
+                actionError = t("list.undoFailedHttp", ["status": statusCode])
             }
         } catch {
             actionError = error.localizedDescription
@@ -827,7 +833,7 @@ struct ContentView: View {
         } catch {
             // 삼키면 "여기가 끝"과 구분되지 않는다 — 이 함수의 주석이 경고하는 바로 그
             // 오해를 만들게 된다. searchCursor를 그대로 두므로 재시도가 같은 자리에서 이어진다.
-            searchMoreError = "다음 결과를 불러오지 못했습니다"
+            searchMoreError = t("search.moreFailed")
         }
     }
 

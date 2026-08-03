@@ -47,7 +47,8 @@ final class ShareViewController: UIViewController {
             if let tagError = result.tagError, !tagError.isEmpty {
                 // 본문 없이 URL만 온 저장에는 재시도 잡이 없어 이 실패는 **영구적**이다.
                 Self.log.error("태깅 실패 id=\(result.id): \(tagError)")
-                await SaveNotifier.notifySaved(title: title, host: host, tags: ["태그 실패"], duplicate: result.duplicate)
+                await SaveNotifier.notifySaved(title: title, host: host, tags: [t("notify.tagFailed")],
+                                               duplicate: result.duplicate)
             } else {
                 await SaveNotifier.notifySaved(title: title, host: host,
                                                tags: result.tagNames, duplicate: result.duplicate)
