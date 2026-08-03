@@ -16,6 +16,10 @@ struct RootView: View {
     /// 통계에서 넘어온 필터. 목록이 이 값을 보고 좁혀 보여준다.
     @State private var filter: ListFilter?
 
+    /// 언어가 바뀌면 화면 전체를 다시 그린다 — 문자열은 뷰 본문에서 `t()`로 읽히므로
+    /// 부분 갱신으로는 두 언어가 섞인 화면이 남는다.
+    @ObservedObject private var langStore = L.Store.shared
+
     enum Tab { case list, stats }
 
     var body: some View {
@@ -32,6 +36,7 @@ struct RootView: View {
             .tabItem { Label(t("nav.stats"), systemImage: "chart.bar") }
             .tag(Tab.stats)
         }
+        .id(langStore.lang)
         .tint(PP.Palette.accent)
         .task(id: backend.state) { await loadFacets() }
     }

@@ -28,6 +28,7 @@ struct ContentView: View {
     /// 열어 볼 링크. NavigationLink 대신 이 값으로 이동한다 — 아래 row 주석 참조.
     @State private var opening: OpeningLink?
     @ObservedObject private var router = NotificationRouter.shared
+    @ObservedObject private var langStore = L.Store.shared
     /// 검색어. 비어 있으면 평소의 보드, 있으면 검색 결과가 그 자리를 대신한다.
     @State private var query = ""
     @State private var results: [Components.Schemas.Link] = []
@@ -100,6 +101,26 @@ struct ContentView: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { saving = true } label: { Image(systemName: "plus") }
                             .accessibilityLabel(t("nav.saveLink"))
+                    }
+                    // 언어. **앱 안에 둔다** — iOS 설정에서 바꾸는 것이 관례라 처음에는
+                    // 넣지 않았는데, 그러면 기기 전체를 바꿔야 이 앱 하나의 언어가 바뀐다.
+                    // 웹에는 토글이 있는데 iOS에만 없는 것도 두 클라이언트가 갈라지는
+                    // 자리다. 라벨은 **바뀔 언어를 그 언어로** 쓴다(웹 LangToggle과 같은
+                    // 규칙) — 지금 화면을 못 읽는 사람도 자기 언어를 알아본다.
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Picker(t("settings.switchLanguage"), selection: Binding(
+                                get: { langStore.lang },
+                                set: { L.set($0) }
+                            )) {
+                                Text("한국어").tag(L.Lang.ko)
+                                Text("English").tag(L.Lang.en)
+                            }
+                        } label: {
+                            Image(systemName: "globe")
+                        }
+                        .accessibilityLabel(t("settings.switchLanguage"))
+                        .accessibilityIdentifier("lang.menu")
                     }
                 }
             .sheet(isPresented: $saving) {

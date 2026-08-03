@@ -45,8 +45,7 @@ Everything runs in one process on your own machine. A backup is `cp -r data/`.
 ## What it looks like
 
 <p align="center">
-  <video src="https://raw.githubusercontent.com/coldzero94/push-point/main/site/assets/demo-en.mp4"
-         poster="site/assets/demo-en-poster.jpg" width="240" muted></video>
+  <img src="site/assets/ios-list-en.png" width="240" alt="The board on iPhone">
 </p>
 
 <p align="center">
