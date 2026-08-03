@@ -144,11 +144,10 @@ It tags itself.</h1>
       <!-- GIF가 아니라 video인 이유: 같은 길이를 GIF로 담으면 8~9fps로 눌러야 2MB 안에
            들어가고, 그러면 실제보다 느려 보인다. h264는 30fps로 1MB 아래다. README는
            GitHub이 마크다운에서 video를 지워 버리므로 거기서만 GIF를 쓴다. -->
-      <video src="assets/demo.mp4" poster="assets/demo-poster.jpg"
-             autoplay loop muted playsinline
+      <video id="demo" autoplay loop muted playsinline
              aria-label="Reading in Safari, sharing to Push-Point, and the link appearing tagged"></video>
-      <img src="assets/ios-list.png" alt="The board on iPhone" loading="lazy">
-      <img src="assets/ios-stats.png" alt="Stats screen" loading="lazy">
+      <img data-asset="ios-list" alt="The board on iPhone" loading="lazy">
+      <img data-asset="ios-stats" alt="Stats screen" loading="lazy">
     </div>
     <figcaption data-t="demo.caption" style="margin-top:16px"></figcaption>
   </section>
@@ -175,11 +174,11 @@ It tags itself.</h1>
 
   <section>
     <figure>
-      <img src="assets/web-list.png" alt="The link board in the web app" loading="lazy">
+      <img data-asset="web-list" alt="The link board in the web app" loading="lazy">
       <figcaption><b data-t="shot.list.t"></b> · <span data-t="shot.list.b"></span></figcaption>
     </figure>
     <figure style="margin-bottom:0">
-      <img src="assets/web-tags.png" alt="The tag dictionary" loading="lazy">
+      <img data-asset="web-tags" alt="The tag dictionary" loading="lazy">
       <figcaption><b data-t="shot.tags.t"></b> · <span data-t="shot.tags.b"></span></figcaption>
     </figure>
   </section>
@@ -238,6 +237,20 @@ function apply(lang) {
     // fallback in place and say so in the console instead.
     if (v === undefined) { console.warn('missing copy key', el.dataset.t, lang); continue }
     el.textContent = v
+  }
+  // **화면 사진도 언어를 따라간다.** 영어 페이지가 한국어 앱을 보여주는 것이 이 작업을
+  // 시작한 이유였고, 문구만 바꾸고 그림을 그대로 두면 같은 자리로 돌아온다.
+  for (const el of document.querySelectorAll('[data-asset]')) {
+    el.src = `assets/${el.dataset.asset}-${lang}.png`
+  }
+  const video = document.getElementById('demo')
+  const next = `assets/demo-${lang}.mp4`
+  if (!video.src.endsWith(next)) {
+    video.poster = `assets/demo-${lang}-poster.jpg`
+    video.src = next
+    video.load()
+    // autoplay 속성은 최초 로드에만 적용된다 — 언어를 바꾼 뒤에도 돌아야 한다.
+    video.play().catch(() => {})
   }
   localStorage.setItem('pp.lang', lang)
 }
