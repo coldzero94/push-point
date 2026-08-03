@@ -24,6 +24,7 @@
 </p>
 
 <p align="center">
+  <a href="https://coldzero94.github.io/push-point/">Site</a> ·
   <a href="docs/v2/00-README.md">Docs</a> ·
   <a href="api/openapi.yaml">API contract</a> ·
   <a href="nlu/golden/README.md">Tagging evaluation</a> ·
@@ -40,6 +41,19 @@ Read-it-later apps forget things for you. The link goes in, and finding it later
 Push-Point tags every save so the archive stays searchable — and it does that **without sending anything to an LLM**. Not because an API call is hard, but because a personal archive shouldn't have a per-item cost, a rate limit, an outage, or a third party reading it. Tagging is a rule engine over a controlled dictionary, and its quality is measured rather than asserted.
 
 Everything runs in one process on your own machine. A backup is `cp -r data/`.
+
+## What it looks like
+
+<p align="center">
+  <img src="site/assets/demo.gif" width="240" alt="Saving and browsing on iPhone">
+</p>
+
+<p align="center">
+  <img src="site/assets/web-list.png" width="760" alt="The link board in the web app">
+</p>
+
+The covers on links without a thumbnail are generated from the domain, so the same
+source always draws the same mark. More screens on the [site](https://coldzero94.github.io/push-point/).
 
 ## What it does
 
