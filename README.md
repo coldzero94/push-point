@@ -45,15 +45,17 @@ Everything runs in one process on your own machine. A backup is `cp -r data/`.
 ## What it looks like
 
 <p align="center">
-  <img src="site/assets/demo.gif" width="240" alt="Saving and browsing on iPhone">
+  <img src="site/assets/demo-en.gif" width="240" alt="Sharing a page from Safari into Push-Point">
 </p>
 
 <p align="center">
-  <img src="site/assets/web-list.png" width="760" alt="The link board in the web app">
+  <img src="site/assets/web-list-en.png" width="760" alt="The link board in the web app">
 </p>
 
-The covers on links without a thumbnail are generated from the domain, so the same
-source always draws the same mark. More screens on the [site](https://coldzero94.github.io/push-point/).
+You never leave the page: a notification confirms the save and shows the tags it
+worked out. Covers on links without a thumbnail are generated from the domain, so the
+same source always draws the same mark. The app follows your system language — Korean
+screens and more of them on the [site](https://coldzero94.github.io/push-point/).
 
 ## What it does
 

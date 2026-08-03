@@ -76,6 +76,27 @@ same = [
 if same:
     fail.append(f"ko가 en을 그대로 복사한 것으로 보이는 키: {', '.join(same)}")
 
+# 화면 사진도 언어를 따라간다. `data-asset="web-list"`는 런타임에
+# `assets/web-list-{lang}.png`가 되므로, 한쪽 언어의 파일이 없으면 **그 언어에서만**
+# 이미지가 깨진다 — 영어로 보지 않으면 끝까지 모른다.
+ASSETS = ROOT / "site" / "assets"
+for name in sorted(set(re.findall(r'data-asset="([a-z-]+)"', HTML.read_text(encoding="utf-8")))):
+    for lang in ("ko", "en"):
+        if not (ASSETS / f"{name}-{lang}.png").exists():
+            fail.append(f"{name}-{lang}.png 가 없다 (index.html의 data-asset이 참조한다)")
+for lang in ("ko", "en"):
+    for f_ in (f"demo-{lang}.mp4", f"demo-{lang}-poster.jpg"):
+        if not (ASSETS / f_).exists():
+            fail.append(f"{f_} 가 없다")
+
+# README도 같은 자산을 가리킨다. 로케일 접미사를 붙이면서 `demo.gif`가 사라졌는데
+# README는 그대로였다 — GitHub 첫 화면의 깨진 이미지는 아무도 대신 알려주지 않는다.
+import re as _re
+readme = (ROOT / "README.md").read_text(encoding="utf-8")
+for ref in sorted(set(_re.findall(r'src="(site/assets/[^"]+)"', readme))):
+    if not (ROOT / ref).exists():
+        fail.append(f"README가 가리키는 {ref} 가 없다")
+
 if fail:
     print("site 문구 검사 실패")
     for f in fail:
