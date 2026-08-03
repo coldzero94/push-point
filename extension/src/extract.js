@@ -202,10 +202,31 @@ function capture(doc, url) {
   };
 }
 
-/** captureOnce는 한 번만 캡처하고 결과를 재사용한다 — 아래 두 규약이 같은 결과를 쓴다. */
+/**
+ * captureOnce는 한 번만 캡처하고 결과를 재사용한다 — 아래 두 규약이 같은 결과를 쓴다.
+ *
+ * **캡처가 실패해도 URL은 반드시 돌려준다.** 저장의 단위가 URL이라, 본문 추출이 나쁜
+ * 날을 보냈다고 저장 자체가 사라지면 안 된다.
+ *
+ * 이게 이론이 아닌 이유: 2026-08-03에 공유 저장이 `URL을 찾을 수 없습니다`로 끝나는
+ * 것을 봤다. 확장 코드에는 `UTType.url` 폴백이 있지만, **JS 전처리가 선언돼 있으면
+ * Safari는 propertyList 하나만 준다** — 폴백이 쓸 재료 자체가 오지 않는다. 그래서
+ * 폴백은 여기, JS 안에 있어야 한다.
+ *
+ * 다만 이 방어에도 한계가 있다: JS가 **시작조차 못 하는** 경우(페이지가 모달을 띄운
+ * 채인 경우 등)에는 이 `try`도 돌지 않는다. 그때는 구할 방법이 없다(04 §7.3.2).
+ */
 let captured = null;
 function captureOnce() {
-  if (captured === null) captured = capture(document, location.href);
+  if (captured !== null) return captured;
+  try {
+    captured = capture(document, location.href);
+  } catch (e) {
+    // 본문 없이 URL만 보낸다. 서버가 스크레이핑을 시도하므로 완전한 손실은 아니다 —
+    // 아무것도 안 보내는 것과는 다르다.
+    captured = { url: location.href, title: (document.title || '').slice(0, 300),
+                 description: '', body_text: '', keywords: '' };
+  }
   return captured;
 }
 
