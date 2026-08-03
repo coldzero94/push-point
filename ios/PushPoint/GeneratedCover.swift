@@ -40,71 +40,43 @@ struct GeneratedCover: View {
         }
     }
 
+    /// 도형 목록을 받아 칠하기만 한다 — 모양 결정은 전부 `CoverGeometry`에 있고,
+    /// 그래야 `testdata/cover-ops.json`이 웹과 대조할 수 있다.
     private func draw(_ pattern: CoverPattern, in context: inout GraphicsContext, size: CGSize) {
-        let step = CGFloat(pattern.step)
-        let stroke = facet.ink
-        // 무늬마다 획 알파가 다르다 — stack은 채우므로 더 낮게 앉는다.
-        // **웹과 같은 값이어야 한다**(§4.5): 같은 도메인은 두 클라이언트에서 같은 그림이
-        // 나온다는 것이 R4의 약속이고, 해시가 같아도 렌더 상수가 다르면 그 약속이 깨진다.
-        // 2026-07-29까지 stack이 0.10(웹 0.13), 획이 1.5(웹 1.25)였다.
-        let alpha: Double = pattern.kind == .stack ? 0.13 : 0.16
+        let g = CoverGeometry.make(pattern, width: size.width, height: size.height)
 
         // **중심을 기준으로 회전한다** — 웹이 그렇게 한다(covers.ts는 캔버스 중앙으로
         // 옮겼다가 회전하고 되돌린다). 원점 기준으로 돌리면 같은 각도라도 무늬가 다른
         // 자리에 놓인다.
         context.translateBy(x: size.width / 2, y: size.height / 2)
-        context.rotate(by: .degrees(Double(pattern.rotate)))
+        context.rotate(by: .degrees(Double(g.rotate)))
         context.translateBy(x: -size.width / 2, y: -size.height / 2)
-        let bounds = CGRect(origin: .zero, size: size).insetBy(dx: -size.width, dy: -size.height)
 
         var path = Path()
-        switch pattern.kind {
-        case .hatch:
-            var x = bounds.minX
-            while x < bounds.maxX {
-                path.move(to: CGPoint(x: x, y: bounds.minY))
-                path.addLine(to: CGPoint(x: x, y: bounds.maxY))
-                x += step
-            }
-        case .lattice:
-            var x = bounds.minX
-            while x < bounds.maxX {
-                path.move(to: CGPoint(x: x, y: bounds.minY))
-                path.addLine(to: CGPoint(x: x, y: bounds.maxY))
-                x += step
-            }
-            var y = bounds.minY
-            while y < bounds.maxY {
-                path.move(to: CGPoint(x: bounds.minX, y: y))
-                path.addLine(to: CGPoint(x: bounds.maxX, y: y))
-                y += step
-            }
-        case .contour:
-            // 동심 곡선 — variant가 중심을 옮긴다.
-            let cx = size.width * (0.2 + 0.15 * CGFloat(pattern.variant))
-            let cy = size.height * 0.5
-            var r = step
-            while r < size.width * 1.6 {
+        for op in g.ops {
+            switch op {
+            case let .line(x1, y1, x2, y2):
+                path.move(to: CGPoint(x: x1, y: y1))
+                path.addLine(to: CGPoint(x: x2, y: y2))
+            case let .dot(cx, cy, r):
                 path.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
-                r += step
-            }
-        case .stack:
-            // 가로 띠 — 채우므로 알파가 낮다.
-            var y = bounds.minY
-            var odd = false
-            while y < bounds.maxY {
-                if odd {
-                    path.addRect(CGRect(x: bounds.minX, y: y, width: bounds.width, height: step))
-                }
-                y += step
-                odd.toggle()
+            case let .arc(cx, cy, r):
+                // 아래쪽 반원. SwiftUI의 y축은 아래로 커지므로 웹의 π→2π(캔버스 기준
+                // 위쪽 절반이 아니라 **화면 위로 솟은 호**)와 같은 그림이 되려면
+                // 180°→360° 구간을 그린다.
+                path.addArc(center: CGPoint(x: cx, y: cy), radius: r,
+                            startAngle: .degrees(180), endAngle: .degrees(360),
+                            clockwise: false)
+            case let .rect(x, y, w, h):
+                path.addRect(CGRect(x: x, y: y, width: w, height: h))
             }
         }
 
-        if pattern.kind == .stack {
-            context.fill(path, with: .color(stroke.opacity(alpha)))
+        let ink = facet.ink.opacity(g.alpha)
+        if g.mode == .fill {
+            context.fill(path, with: .color(ink))
         } else {
-            context.stroke(path, with: .color(stroke.opacity(alpha)), lineWidth: 1.25)
+            context.stroke(path, with: .color(ink), lineWidth: g.lineWidth)
         }
     }
 }

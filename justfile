@@ -345,6 +345,14 @@ ios-i18n-check:
 i18n-cross-check:
     python3 scripts/i18n_cross_check.py
 
+# 커버 도형 픽스처를 웹 구현에서 다시 만든다 (testdata/cover-ops.json)
+#
+# 무늬를 고쳤으면 이걸 돌리고 결과를 같은 커밋에 넣는다 — 그러면 iOS 테스트가 빨개져
+# 양쪽을 같이 고치게 된다. 그 강제가 이 픽스처의 존재 이유다.
+cover-ops:
+    cd frontend && node_modules/.bin/vite-node ../scripts/gen_cover_ops.ts > ../testdata/cover-ops.json
+    @echo "testdata/cover-ops.json 재생성 완료 — just ios-test / web-test로 확인할 것"
+
 # 데모 영상을 다시 찍는다 — 시뮬레이터를 몰면서 녹화하고 손가락 커서를 합성한다
 #
 # 커서를 합성하는 이유: 녹화만 하면 화면이 저절로 움직이는 것처럼 보인다. 시뮬레이터의

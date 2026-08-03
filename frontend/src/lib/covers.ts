@@ -119,11 +119,83 @@ const ALPHA: Record<CoverPatternKind, number> = {
   contour: 0.16,
   stack: 0.13,
 }
+const LINE_WIDTH = 1.25
+
+/** One primitive. `arc` is the lower half only (π → 2π), which is what contour draws. */
+export type CoverOp =
+  | { op: 'line'; x1: number; y1: number; x2: number; y2: number }
+  | { op: 'dot'; cx: number; cy: number; r: number }
+  | { op: 'arc'; cx: number; cy: number; r: number }
+  | { op: 'rect'; x: number; y: number; w: number; h: number }
+
+export interface CoverGeometry {
+  alpha: number
+  lineWidth: number
+  /** Degrees, applied about the centre of the box before anything is drawn. */
+  rotate: number
+  mode: 'stroke' | 'fill'
+  ops: CoverOp[]
+}
 
 /**
- * Draw one cover. `w`/`h` are CSS pixels — the caller has already applied the
- * devicePixelRatio transform.
+ * The drawing, as data.
+ *
+ * **This exists so iOS can be held to it.** The two clients agreed on the pattern
+ * *parameters* (`testdata/cover-cases.json`) while drawing four completely different
+ * pictures from them — web hatched diagonally where iOS drew verticals, web dotted a
+ * lattice where iOS ruled a grid, web arced half circles from below the frame where
+ * iOS drew whole ellipses through the middle. Every one of those passed both test
+ * suites, because nothing compared the *marks*. `testdata/cover-ops.json` does now.
+ *
+ * `w`/`h` are CSS pixels; the caller has already applied device pixel ratio.
  */
+export function coverGeometry(pattern: CoverPattern, w: number, h: number): CoverGeometry {
+  const { kind, rotate, step, variant } = pattern
+  // Draw past the edges so no corner is left bare once the box is rotated.
+  const reach = Math.hypot(w, h)
+  const ops: CoverOp[] = []
+
+  if (kind === 'hatch') {
+    for (let x = -reach; x < reach * 2; x += step) {
+      ops.push({ op: 'line', x1: x, y1: -reach, x2: x + h + reach, y2: reach * 2 })
+    }
+  } else if (kind === 'lattice') {
+    const r = Math.max(1.4, step / 8)
+    for (let y = step / 2; y < h + step; y += step) {
+      // every other row offsets by half a step — a lattice, not a grid
+      const offset = (Math.floor(y / step) % 2) * (step / 2)
+      for (let x = step / 2; x < w + step; x += step) {
+        ops.push({ op: 'dot', cx: x + offset, cy: y, r })
+      }
+    }
+  } else if (kind === 'contour') {
+    const cx = w * (0.18 + variant * 0.16)
+    const cy = h * 1.02
+    for (let r = step; r < reach; r += step) {
+      ops.push({ op: 'arc', cx, cy, r })
+    }
+  } else if (kind === 'stack') {
+    const s = step * 1.4
+    for (let i = 0; i * s < w + h; i++) {
+      ops.push({ op: 'rect', x: i * s - h, y: i * s * 0.55, w: s * 0.62, h: h * 2 })
+    }
+  } else {
+    // Exhaustiveness: adding a CoverPatternKind fails the build here (as it
+    // already does at ALPHA), instead of silently rendering as `stack`.
+    const _never: never = kind
+    void _never
+  }
+
+  return {
+    alpha: ALPHA[kind],
+    lineWidth: LINE_WIDTH,
+    rotate,
+    mode: kind === 'lattice' || kind === 'stack' ? 'fill' : 'stroke',
+    ops,
+  }
+}
+
+/** Paint the geometry. Kept thin on purpose — the shape decisions all live above. */
 export function drawCover(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -135,54 +207,38 @@ export function drawCover(
   ctx.fillStyle = colors.ground
   ctx.fillRect(0, 0, w, h)
 
-  const { kind, rotate, step, variant } = pattern
+  const g = coverGeometry(pattern, w, h)
   ctx.save()
-  ctx.globalAlpha = ALPHA[kind]
+  ctx.globalAlpha = g.alpha
   ctx.strokeStyle = colors.stroke
   ctx.fillStyle = colors.stroke
-  ctx.lineWidth = 1.25
-  // Rotate about the center, then draw past the edges so no corner is left bare.
+  ctx.lineWidth = g.lineWidth
   ctx.translate(w / 2, h / 2)
-  ctx.rotate((rotate * Math.PI) / 180)
+  ctx.rotate((g.rotate * Math.PI) / 180)
   ctx.translate(-w / 2, -h / 2)
-  const reach = Math.hypot(w, h)
 
-  if (kind === 'hatch') {
-    ctx.beginPath()
-    for (let x = -reach; x < reach * 2; x += step) {
-      ctx.moveTo(x, -reach)
-      ctx.lineTo(x + h + reach, reach * 2)
-    }
-    ctx.stroke()
-  } else if (kind === 'lattice') {
-    const r = Math.max(1.4, step / 8)
-    for (let y = step / 2; y < h + step; y += step) {
-      // every other row offsets by half a step — a lattice, not a grid
-      const offset = (Math.floor(y / step) % 2) * (step / 2)
-      for (let x = step / 2; x < w + step; x += step) {
+  if (g.mode === 'stroke') ctx.beginPath()
+  for (const o of g.ops) {
+    switch (o.op) {
+      case 'line':
+        ctx.moveTo(o.x1, o.y1)
+        ctx.lineTo(o.x2, o.y2)
+        break
+      case 'dot':
         ctx.beginPath()
-        ctx.arc(x + offset, y, r, 0, Math.PI * 2)
+        ctx.arc(o.cx, o.cy, o.r, 0, Math.PI * 2)
         ctx.fill()
-      }
+        break
+      case 'arc':
+        ctx.beginPath()
+        ctx.arc(o.cx, o.cy, o.r, Math.PI, Math.PI * 2)
+        ctx.stroke()
+        break
+      case 'rect':
+        ctx.fillRect(o.x, o.y, o.w, o.h)
+        break
     }
-  } else if (kind === 'contour') {
-    const cx = w * (0.18 + variant * 0.16)
-    const cy = h * 1.02
-    for (let r = step; r < reach; r += step) {
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, Math.PI, Math.PI * 2)
-      ctx.stroke()
-    }
-  } else if (kind === 'stack') {
-    const s = step * 1.4
-    for (let i = 0; i * s < w + h; i++) {
-      ctx.fillRect(i * s - h, i * s * 0.55, s * 0.62, h * 2)
-    }
-  } else {
-    // Exhaustiveness: adding a CoverPatternKind fails the build here (as it
-    // already does at ALPHA), instead of silently rendering as `stack`.
-    const _never: never = kind
-    void _never
   }
+  if (g.mode === 'stroke' && g.ops[0]?.op === 'line') ctx.stroke()
   ctx.restore()
 }
