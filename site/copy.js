@@ -27,10 +27,10 @@ export const COPY = {
     'hero.cta2': 'How it works',
     'hero.note': 'Apache-2.0 · self-hosted · single user by design',
 
-    'demo.title': 'One tap in the share sheet, and it is filed',
+    'demo.title': 'Reading something. Two taps. It is filed.',
     'demo.body':
-      'The extension writes straight to the shared database, so the save completes even in airplane mode and even if you never open the app. The list below was filled this way.',
-    'demo.caption': 'iPhone — list and stats. The UI is Korean; the app is a personal one.',
+      'That is the whole recording — a page open in Safari, the share sheet, and the link already sitting in the archive with its title, its image and its tags. No app to open first, no form to fill. The extension writes straight to the shared database, so it finishes in airplane mode too. This exact save took 23 ms.',
+    'demo.caption': 'A real simulator recording, not a mockup. The list and stats screens are the same archive. The UI is Korean — it is a personal app.',
 
     'num.title': 'Numbers, measured',
     'num.body':
@@ -106,10 +106,10 @@ export const COPY = {
     'hero.cta2': '어떻게 동작하나',
     'hero.note': 'Apache-2.0 · 직접 호스팅 · 단일 사용자가 설계 전제',
 
-    'demo.title': '공유 시트에서 한 번 누르면 정리까지 끝',
+    'demo.title': '보다가, 두 번 누르면, 정리까지 끝',
     'demo.body':
-      '확장이 공유 데이터베이스에 직접 씁니다. 그래서 비행기 모드에서도, 앱을 한 번도 열지 않아도 저장이 완결됩니다. 아래 목록이 그렇게 채워진 것입니다.',
-    'demo.caption': '아이폰 — 목록과 통계.',
+      '영상이 전부입니다. 사파리에 페이지가 열려 있고, 공유 시트를 거치면, 링크가 제목과 이미지와 태그를 달고 아카이브에 들어가 있습니다. 앱을 먼저 열 것도, 입력할 것도 없습니다. 확장이 공유 데이터베이스에 직접 쓰므로 비행기 모드에서도 끝납니다. 이 저장은 23 ms 걸렸습니다.',
+    'demo.caption': '목업이 아니라 실제 시뮬레이터 녹화입니다. 목록·통계 화면은 같은 아카이브고, UI가 한국어인 것은 개인용 앱이기 때문입니다.',
 
     'num.title': '숫자는 재서 넣었다',
     'num.body':

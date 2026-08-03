@@ -89,7 +89,10 @@
   figcaption b { color: var(--ink); font-weight: 650; }
 
   .phones { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
-  .phones img { width: 260px; max-width: 44vw; border-radius: 22px; }
+  .phones img, .phones video {
+    width: 260px; max-width: 44vw; border-radius: 22px; display: block;
+    border: 1px solid var(--line); background: var(--card);
+  }
 
   ul.plain { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; max-width: 72ch; }
   ul.plain li { padding-left: 22px; position: relative; color: var(--muted); }
@@ -138,7 +141,13 @@ It tags itself.</h1>
     <h2 data-t="demo.title"></h2>
     <p class="section-lede" data-t="demo.body"></p>
     <div class="phones">
-      <img src="assets/demo.gif" alt="Push-Point on iPhone" loading="lazy">
+      <!-- GIF가 아니라 video인 이유: 같은 길이를 GIF로 담으면 8~9fps로 눌러야 2MB 안에
+           들어가고, 그러면 실제보다 느려 보인다. h264는 30fps로 1MB 아래다. README는
+           GitHub이 마크다운에서 video를 지워 버리므로 거기서만 GIF를 쓴다. -->
+      <video src="assets/demo.mp4" poster="assets/demo-poster.jpg"
+             autoplay loop muted playsinline
+             aria-label="Reading in Safari, sharing to Push-Point, and the link appearing tagged"></video>
+      <img src="assets/ios-list.png" alt="The board on iPhone" loading="lazy">
       <img src="assets/ios-stats.png" alt="Stats screen" loading="lazy">
     </div>
     <figcaption data-t="demo.caption" style="margin-top:16px"></figcaption>
