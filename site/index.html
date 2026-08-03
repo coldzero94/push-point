@@ -141,9 +141,11 @@ It tags itself.</h1>
     <h2 data-t="demo.title"></h2>
     <p class="section-lede" data-t="demo.body"></p>
     <div class="phones">
-      <!-- 데모 영상은 내려 두었다. 배포된 판본에서 커서가 실제로 누른 자리와 다른
-           곳에 그려졌고, 메모 칸에는 이전 녹화가 남긴 깨진 글자가 보였다. 어디를 누르는지
-           보여주는 것이 이 영상의 요점이라, 그게 틀리면 없는 편이 낫다. 다시 찍어서 올린다. -->
+      <!-- 이 영상은 `just demo-check`를 통과한 것만 올린다 — 탭 시각마다 프레임에서
+           커서를 찾아 이벤트 좌표와 대조하고, 6개 전부 0.3pt 안에 들어왔다. 그 검사가
+           없던 판본이 커서를 엉뚱한 데 그린 채 배포됐다(2026-08-03). -->
+      <video id="demo" autoplay loop muted playsinline
+             aria-label="Reading in Safari, sharing to Push-Point, and the link opening from the notification"></video>
       <img data-asset="ios-list" alt="The board on iPhone" loading="lazy">
       <img data-asset="ios-stats" alt="Stats screen" loading="lazy">
     </div>

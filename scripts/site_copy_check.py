@@ -84,7 +84,10 @@ for name in sorted(set(re.findall(r'data-asset="([a-z-]+)"', HTML.read_text(enco
     for lang in ("ko", "en"):
         if not (ASSETS / f"{name}-{lang}.png").exists():
             fail.append(f"{name}-{lang}.png 가 없다 (index.html의 data-asset이 참조한다)")
-# 데모 영상은 지금 없다(잘못 찍혀 내렸다). 다시 넣을 때 이 검사를 되살린다.
+for lang in ("ko", "en"):
+    for f_ in (f"demo-{lang}.mp4", f"demo-{lang}-poster.jpg"):
+        if not (ASSETS / f_).exists():
+            fail.append(f"{f_} 가 없다")
 
 # README도 같은 자산을 가리킨다. 로케일 접미사를 붙이면서 `demo.gif`가 사라졌는데
 # README는 그대로였다 — GitHub 첫 화면의 깨진 이미지는 아무도 대신 알려주지 않는다.
