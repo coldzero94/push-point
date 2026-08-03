@@ -27,6 +27,7 @@ import { linkDisplayTitle } from '../lib/api/types'
 import type { LinkDetail, LinkTag } from '../lib/api/types'
 import { markOpened } from '../lib/api/markOpened'
 import { errorMessage } from '../lib/api/client'
+import { t } from '../lib/i18n'
 import { consumeInspectorFocus } from '../lib/keyboard/inspectorFocus'
 import { formatCount, formatDateTime, formatDay, formatDuration } from '../lib/datetime'
 
@@ -232,11 +233,11 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
         onClose()
         toast.show({
           variant: 'undo',
-          message: '삭제했습니다.',
+          message: t('common.deleted'),
           // no restore endpoint — re-POST the same url reopens the row (pending,
           // re-scraped). The label does not hide that (11 §1.5).
           action: {
-            label: '되돌리기 — 다시 수집됩니다',
+            label: t('common.undoRecollect'),
             onClick: () =>
               create.mutate(
                 { url, note: note || undefined },
@@ -390,20 +391,20 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
               <div className="flex items-start gap-12">
                 {!isTablet ? (
                   <Dialog.Close asChild>
-                    <button type="button" aria-label="닫기" className="-ml-4 shrink-0 rounded-control p-4 text-fg-2 hover:bg-hover">
+                    <button type="button" aria-label={t('common.close')} className="-ml-4 shrink-0 rounded-control p-4 text-fg-2 hover:bg-hover">
                       <Icon icon={ArrowLeft} size={20} />
                     </button>
                   </Dialog.Close>
                 ) : null}
                 <div className="min-w-0 flex-1">
                   <Dialog.Title asChild>
-                    <h2 className="line-clamp-3 text-head text-fg-1">{title || <span className="text-fg-3">불러오는 중…</span>}</h2>
+                    <h2 className="line-clamp-3 text-head text-fg-1">{title || <span className="text-fg-3">{t('common.loading')}</span>}</h2>
                   </Dialog.Title>
                   {link ? <p className="mt-4 truncate font-mono text-meta text-fg-3">{link.domain}</p> : null}
                 </div>
                 {isTablet ? (
                   <Dialog.Close asChild>
-                    <button type="button" aria-label="닫기" className="shrink-0 rounded-control p-4 text-fg-2 hover:bg-hover">
+                    <button type="button" aria-label={t('common.close')} className="shrink-0 rounded-control p-4 text-fg-2 hover:bg-hover">
                       <Icon icon={X} size={20} />
                     </button>
                   </Dialog.Close>
@@ -413,11 +414,11 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
               {notFound ? (
                 <EmptyState
                   className="py-40"
-                  title="삭제되었거나 없는 링크입니다"
-                  description="이 링크는 더 이상 존재하지 않습니다."
+                  title={t('inspector.goneTitle')}
+                  description={t('inspector.goneDesc')}
                   action={
                     <Dialog.Close asChild>
-                      <Button variant="secondary">닫기</Button>
+                      <Button variant="secondary">{t('common.close')}</Button>
                     </Dialog.Close>
                   }
                 />
@@ -435,19 +436,19 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                       className={PRIMARY_ANCHOR}
                     >
                       <Icon icon={ExternalLink} size={16} />
-                      원문 열기
+                      {t('common.openOriginal')}
                     </a>
                     {link.status === 'failed' ? (
                       <Button variant="secondary" onClick={onRetry} disabled={writesDisabled} loading={retry.isPending}>
-                        재시도
+                        {t('common.retry')}
                       </Button>
                     ) : null}
                     <Button variant="danger" onClick={onDelete} disabled={writesDisabled} loading={del.isPending}>
-                      삭제
+                      {t('common.delete')}
                     </Button>
                   </div>
 
-                  <Section label="태그">
+                  <Section label={t('common.tags')}>
                     <div className="flex flex-wrap items-center gap-6">
                       {link.tags.map((t) => (
                         <Chip
@@ -480,7 +481,7 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                     ) : null}
                   </Section>
 
-                  <Section label="메모">
+                  <Section label={t('common.note')}>
                     <Textarea
                       ref={noteRef}
                       value={noteDraft}
@@ -493,7 +494,7 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                           saveNote()
                         }
                       }}
-                      placeholder="나중에 왜 저장했는지 적어 두세요"
+                      placeholder={t('inspector.notePlaceholder')}
                     />
                   </Section>
 
@@ -502,7 +503,7 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                       설명이 사실상 같으면 요약을 빈 문자열로 주므로, 둘 다 보일 때는 서로
                       다르다는 게 보장된다(클라이언트에 중복 판정 로직이 없는 이유). */}
                   {link.summary ? (
-                    <Section label="요약">
+                    <Section label={t('inspector.summary')}>
                       <div className="flex flex-col gap-6">
                         {link.summary.split('\n').map((line, i) => (
                           <p key={i} className="text-body text-fg-1">
@@ -514,40 +515,45 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                   ) : null}
 
                   {link.description ? (
-                    <Section label="설명">
+                    <Section label={t('inspector.description')}>
                       <p className="whitespace-pre-line text-body text-fg-2">{link.description}</p>
                     </Section>
                   ) : null}
 
-                  <Section label="메타">
+                  <Section label={t('inspector.meta')}>
                     <dl className="flex flex-col gap-6">
-                      <MetaRow label="저장" value={formatDateTime(link.created_at)} mono />
+                      <MetaRow label={t('inspector.metaSaved')} value={formatDateTime(link.created_at)} mono />
                       {/* 마지막 열람 — 링크별 사실 하나. 비율도 횟수도 없다:
                           이 신호는 푸시포인트를 통과한 열람만 잡으므로 구조적으로
                           과소집계이고, 지표로 쓰면 틀린 결론을 만든다. */}
                       {link.opened_at ? (
-                        <MetaRow label="마지막 열람" value={formatDateTime(link.opened_at)} mono />
+                        <MetaRow label={t('inspector.metaOpened')} value={formatDateTime(link.opened_at)} mono />
                       ) : null}
-                      {link.published_at != null ? <MetaRow label="발행" value={formatDay(link.published_at)} mono /> : null}
-                      {link.author ? <MetaRow label="작성자" value={link.author} /> : null}
-                      <MetaRow label="종류" value={link.content_type} />
+                      {link.published_at != null ? <MetaRow label={t('inspector.metaPublished')} value={formatDay(link.published_at)} mono /> : null}
+                      {link.author ? <MetaRow label={t('inspector.metaAuthor')} value={link.author} /> : null}
+                      <MetaRow label={t('inspector.metaKind')} value={link.content_type} />
                       {link.duration_sec != null || link.word_count != null ? (
                         <MetaRow
-                          label="길이"
+                          label={t('inspector.metaLength')}
                           mono
                           value={[
                             link.duration_sec != null ? formatDuration(link.duration_sec) : null,
-                            link.word_count != null ? `${formatCount(link.word_count)} 단어` : null,
+                            link.word_count != null
+                              ? t('inspector.wordCount', {
+                                  n: formatCount(link.word_count),
+                                  count: link.word_count,
+                                })
+                              : null,
                           ]
                             .filter(Boolean)
                             .join(' / ')}
                         />
                       ) : null}
-                      {link.lang ? <MetaRow label="언어" value={link.lang} mono /> : null}
+                      {link.lang ? <MetaRow label={t('inspector.metaLang')} value={link.lang} mono /> : null}
                     </dl>
                   </Section>
 
-                  <Section label="잡">
+                  <Section label={t('inspector.jobs')}>
                     <p className="font-mono text-meta">
                       {(
                         [
@@ -567,7 +573,7 @@ export function InspectorPanel({ id, onClose }: InspectorPanelProps) {
                   </Section>
 
                   {link.error ? (
-                    <Section label="오류">
+                    <Section label={t('common.error')}>
                       <p className="flex items-start gap-6 text-meta text-danger">
                         <Icon icon={AlertTriangle} size={16} className="mt-2 shrink-0" />
                         <span>{link.error}</span>

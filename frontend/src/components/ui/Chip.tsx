@@ -9,6 +9,7 @@
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { Icon } from './Icon'
+import { t } from '../../lib/i18n'
 import { chipStyle } from '../../lib/tags/facet'
 import type { ChipInput, TagFacet } from '../../lib/tags/facet'
 import { cn } from './cn'
@@ -114,7 +115,9 @@ export function Chip({
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          aria-label={`${typeof children === 'string' ? children : '태그'} 제거`}
+          aria-label={
+            typeof children === 'string' ? t('tags.removeTag', { name: children }) : t('tags.removeChip')
+          }
           // hit-target (§7.5): mouse ≥24×24 (the ~16px glyph alone fails 2.5.8),
           // touch ::before to 44×44. `relative` anchors that pseudo-element.
           className="relative hit-target flex items-center justify-center rounded-chip text-current hover:opacity-70"

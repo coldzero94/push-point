@@ -28,6 +28,7 @@ import { StatusFilter } from '../components/StatusFilter'
 import { Button, Chip, EmptyState, Icon, useToast } from '../components/ui'
 import { makeFacetResolver } from '../lib/tags/facet'
 import { errorMessage } from '../lib/api/client'
+import { t } from '../lib/i18n'
 import { timeGroup } from '../lib/time'
 import type { Link as LinkItem, LinkStatus, Tag } from '../lib/api/types'
 
@@ -122,9 +123,9 @@ export function ListScreen() {
         if (link === l.id) closeInspector()
         toast.show({
           variant: 'undo',
-          message: '삭제했습니다.',
+          message: t('common.deleted'),
           action: {
-            label: '되돌리기 — 다시 수집됩니다',
+            label: t('common.undoRecollect'),
             onClick: () => undoDelete(url, note),
           },
         })
@@ -170,7 +171,7 @@ export function ListScreen() {
             className="flex h-40 min-w-0 flex-1 items-center gap-8 rounded-control border border-line-control bg-surface px-16 text-body text-fg-3 transition-colors duration-(--dur-out) ease-ui hover:bg-hover"
           >
             <Icon icon={Search} size={16} />
-            <span className="truncate">검색하거나 이동합니다</span>
+            <span className="truncate">{t('search.placeholder')}</span>
             <kbd className="ml-auto rounded-control bg-hover px-6 py-2 font-mono text-label text-fg-2">
               /
             </kbd>
@@ -189,7 +190,7 @@ export function ListScreen() {
               })
             }
           >
-            안 연 것
+            {t('list.unopened')}
           </Button>
         </div>
 
@@ -215,7 +216,7 @@ export function ListScreen() {
           <div className="flex flex-col items-center gap-12 rounded-card bg-surface py-40 text-center shadow-ring">
             <p className="text-body text-fg-2">{errorMessage(error)}</p>
             <Button variant="secondary" onClick={() => void query.refetch()}>
-              다시 시도
+              {t('common.tryAgain')}
             </Button>
           </div>
         ) : null}
@@ -257,28 +258,30 @@ export function ListScreen() {
       {!isPending && !isError && links.length === 0 ? (
         hasFilter ? (
           <EmptyState
-            title={status === 'failed' && !tag ? '실패한 링크가 없습니다' : '조건에 맞는 링크가 없습니다'}
+            title={
+              status === 'failed' && !tag ? t('list.emptyFailedTitle') : t('list.emptyFilterTitle')
+            }
             description={
               status === 'failed' && !tag
-                ? '모든 링크가 정상 처리되었습니다.'
-                : '선택한 태그·상태 조합에 해당하는 항목이 없습니다.'
+                ? t('list.emptyFailedDesc')
+                : t('list.emptyFilterDesc')
             }
             action={
               <Button variant="secondary" onClick={clearFilters}>
-                필터 해제
+                {t('common.clearFilters')}
               </Button>
             }
           />
         ) : (
           <EmptyState
-            title="아직 모아둔 것이 없습니다"
-            description="URL을 붙여넣으면 제목과 태그가 자동으로 채워집니다."
+            title={t('list.emptyTitle')}
+            description={t('list.emptyDesc')}
             action={
               <Link
                 to="/save"
                 className="inline-flex h-32 items-center rounded-control bg-accent px-12 text-label text-on-accent hover:bg-accent-hover"
               >
-                링크 저장하기
+                {t('list.saveCta')}
               </Link>
             }
           />
@@ -289,7 +292,7 @@ export function ListScreen() {
       <div ref={sentinel} className="h-2" />
       {hasNextPage && !isFetchingNextPage ? (
         <Button variant="secondary" className="mx-auto" onClick={() => void fetchNextPage()}>
-          더 보기
+          {t('common.loadMore')}
         </Button>
       ) : null}
       {/* P1: switch to @tanstack/react-virtual when rendered cards exceed 200 (§10 4.4). */}
@@ -304,7 +307,7 @@ function TimeSpine({ label, count }: { label: string; count: number }) {
   return (
     <div className="mb-12 flex items-baseline gap-12">
       <h2 className="font-serif text-spine text-fg-1">{label}</h2>
-      <span className="font-mono text-label text-fg-3">{count}건</span>
+      <span className="font-mono text-label text-fg-3">{t('list.groupCount', { count })}</span>
       <span className="h-px flex-1 bg-line-1" aria-hidden />
     </div>
   )

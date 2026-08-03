@@ -10,6 +10,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { InfiniteData, QueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
+import { t } from '../lib/i18n'
 import type { Link, LinkDetail, LinkInput, LinkPage } from '../lib/api/types'
 
 type LinksData = InfiniteData<LinkPage, string | undefined>
@@ -197,7 +198,7 @@ export function useSaveLink() {
     },
     mutationFn: async (input) => {
       const { data, error, response } = await api.POST('/api/v1/links', { body: input })
-      if (error || !data) throw error ?? new Error('empty response')
+      if (error || !data) throw error ?? new Error(t('common.emptyResponse'))
       // 200 = duplicate url_hash, 201 = newly saved (distinguished by status).
       return response.status === 200
         ? { kind: 'duplicate', id: data.id }

@@ -29,7 +29,8 @@ import { AliasInput } from '../components/tags/AliasInput'
 import { useTags } from '../hooks/useTags'
 import { useStats } from '../hooks/useStats'
 import { useCreateDictionaryTag, useDeleteTag, useUpdateTag } from '../hooks/useTagMutations'
-import { FACET_LABELS } from '../lib/tags/facet'
+import { facetLabel } from '../lib/tags/facet'
+import { t } from '../lib/i18n'
 import { errorMessage, isErrorCode } from '../lib/api/client'
 import { useOnline } from '../hooks/useOnline'
 import type { Tag, TagFacet } from '../lib/api/types'
@@ -55,7 +56,7 @@ export function TagsScreen() {
         <div className="flex flex-col items-center gap-12 rounded-card bg-surface py-40 text-center shadow-ring">
           <p className="text-body text-fg-2">{errorMessage(tagsQuery.error)}</p>
           <Button variant="secondary" onClick={() => void tagsQuery.refetch()}>
-            다시 시도
+            {t('common.tryAgain')}
           </Button>
         </div>
       </section>
@@ -70,9 +71,12 @@ export function TagsScreen() {
       {/* Header — count + total (mono) + add. */}
       <div className="flex items-end justify-between gap-12">
         <div>
-          <h1 className="text-head text-fg-1">태그 사전</h1>
+          <h1 className="text-head text-fg-1">{t('tags.title')}</h1>
           <p className="mt-4 font-mono text-meta text-fg-3">
-            {tags.length}개{total != null ? ` · 링크 ${total.toLocaleString()}건` : ''}
+            {t('tags.count', { count: tags.length })}
+            {total != null
+              ? ` · ${t('tags.linkTotal', { count: total, n: total.toLocaleString() })}`
+              : ''}
           </p>
         </div>
         <Button
@@ -84,24 +88,24 @@ export function TagsScreen() {
           }}
         >
           <Icon icon={Plus} size={16} />
-          태그 추가
+          {t('tags.add')}
         </Button>
       </div>
 
       {/* Sort toggle — 2 keys only (§11 5(4)). */}
       <div className="flex items-center gap-6">
-        <span className="text-label text-fg-3">정렬</span>
+        <span className="text-label text-fg-3">{t('common.sort')}</span>
         <SortToggle value={sort} onChange={setSort} />
       </div>
 
       {tags.length === 0 && !creating ? (
         <EmptyState
-          title="태그 사전이 비어 있습니다"
-          description="자동 태깅은 사전에 있는 태그만 붙입니다."
+          title={t('tags.emptyTitle')}
+          description={t('tags.emptyDescription')}
           action={
             <Button variant="primary" disabled={!online} onClick={() => setCreating(true)}>
               <Icon icon={Plus} size={16} />
-              태그 추가
+              {t('tags.add')}
             </Button>
           }
         />
@@ -130,7 +134,7 @@ export function TagsScreen() {
       )}
 
       {/* aliases matter most for accuracy — say so once, under the list. */}
-      <p className="text-meta text-fg-3">별칭은 규칙 태거가 문자열로 매칭하는 대상입니다.</p>
+      <p className="text-meta text-fg-3">{t('tags.aliasHint')}</p>
     </section>
   )
 }
@@ -151,9 +155,9 @@ function SortToggle({ value, onChange }: { value: TagSortKey; onChange: (k: TagS
   )
   return (
     <div className="flex items-center gap-2">
-      {opt('count', '링크 수')}
-      {opt('recent', '최근 저장순')}
-      {opt('name', '이름')}
+      {opt('count', t('tags.sortByCount'))}
+      {opt('recent', t('tags.sortByRecent'))}
+      {opt('name', t('tags.sortByName'))}
     </div>
   )
 }
@@ -185,7 +189,7 @@ function TagRow({
         {tag.name}
       </Link>
       <Chip facet={tag.facet} role="readonly" source="manual">
-        {FACET_LABELS[tag.facet]}
+        {facetLabel(tag.facet)}
       </Chip>
       <div className="flex min-w-0 flex-1 flex-wrap gap-4 overflow-hidden">
         {tag.aliases.map((a) => (
@@ -203,7 +207,7 @@ function TagRow({
       </span>
       <span className="shrink-0 font-mono text-meta tabular-nums text-fg-2">{tag.link_count}</span>
       <Button size="sm" variant="ghost" disabled={!online} onClick={onEdit}>
-        편집
+        {t('common.edit')}
       </Button>
     </div>
   )
@@ -234,7 +238,7 @@ function EditForm({
   const save = () => {
     const trimmed = name.trim()
     if (!trimmed) {
-      setNameError('이름을 입력하세요.')
+      setNameError(t('tags.nameRequired'))
       return
     }
     update.mutate(
@@ -248,7 +252,7 @@ function EditForm({
       {
         onSuccess: () => onDone(),
         onError: (err) => {
-          if (isErrorCode(err, 'invalid_input')) setNameError('이미 있는 이름입니다.')
+          if (isErrorCode(err, 'invalid_input')) setNameError(t('tags.nameTaken'))
           else toast.show({ variant: 'error', message: errorMessage(err) })
         },
       },
@@ -260,7 +264,7 @@ function EditForm({
       onSuccess: () => {
         setConfirmOpen(false)
         onDone()
-        toast.show({ variant: 'success', message: `"${tag.name}"을(를) 삭제했습니다.` })
+        toast.show({ variant: 'success', message: t('tags.deleted', { name: tag.name }) })
       },
       onError: (err) => {
         setConfirmOpen(false)
@@ -272,7 +276,7 @@ function EditForm({
     <div className="flex flex-col gap-12 bg-hover/40 px-16 py-16">
       <div className="flex flex-col gap-12 sm:flex-row sm:items-start">
         <div className="flex-1">
-          <label className="mb-6 block text-label text-fg-2">이름</label>
+          <label className="mb-6 block text-label text-fg-2">{t('tags.nameLabel')}</label>
           <Input
             value={name}
             autoFocus
@@ -282,26 +286,26 @@ function EditForm({
             }}
             invalid={nameError != null}
             errorMessage={nameError ?? undefined}
-            aria-label="태그 이름"
+            aria-label={t('tags.tagName')}
           />
         </div>
         <div>
-          <label className="mb-6 block text-label text-fg-2">분류</label>
+          <label className="mb-6 block text-label text-fg-2">{t('tags.facetField')}</label>
           <FacetSelect value={facet} onChange={setFacet} disabled={busy} />
         </div>
       </div>
 
       <div>
-        <label className="mb-6 block text-label text-fg-2">별칭</label>
+        <label className="mb-6 block text-label text-fg-2">{t('tags.aliasesLabel')}</label>
         <AliasInput value={aliases} onChange={setAliases} disabled={busy} />
       </div>
 
       <div className="flex items-center gap-8">
         <Button variant="primary" onClick={save} loading={update.isPending} disabled={busy}>
-          저장
+          {t('common.save')}
         </Button>
         <Button variant="secondary" onClick={onDone} disabled={busy}>
-          취소
+          {t('common.cancel')}
         </Button>
         <Button
           variant="danger"
@@ -309,7 +313,7 @@ function EditForm({
           disabled={busy}
           onClick={() => setConfirmOpen(true)}
         >
-          삭제
+          {t('common.delete')}
         </Button>
       </div>
 
@@ -341,7 +345,7 @@ function CreateRow({ onDone, online }: { onDone: () => void; online: boolean }) 
   const submit = () => {
     const trimmed = name.trim()
     if (!trimmed) {
-      setNameError('이름을 입력하세요.')
+      setNameError(t('tags.nameRequired'))
       return
     }
     create.mutate(
@@ -349,7 +353,7 @@ function CreateRow({ onDone, online }: { onDone: () => void; online: boolean }) 
       {
         onSuccess: () => onDone(),
         onError: (err) => {
-          if (isErrorCode(err, 'invalid_input')) setNameError('이미 있는 이름입니다.')
+          if (isErrorCode(err, 'invalid_input')) setNameError(t('tags.nameTaken'))
           else toast.show({ variant: 'error', message: errorMessage(err) })
         },
       },
@@ -360,7 +364,7 @@ function CreateRow({ onDone, online }: { onDone: () => void; online: boolean }) 
     <div className="flex flex-col gap-12 bg-accent-tint/40 px-16 py-16">
       <div className="flex flex-col gap-12 sm:flex-row sm:items-start">
         <div className="flex-1">
-          <label className="mb-6 block text-label text-fg-2">이름</label>
+          <label className="mb-6 block text-label text-fg-2">{t('tags.nameLabel')}</label>
           <Input
             value={name}
             autoFocus
@@ -373,25 +377,25 @@ function CreateRow({ onDone, online }: { onDone: () => void; online: boolean }) 
             }}
             invalid={nameError != null}
             errorMessage={nameError ?? undefined}
-            placeholder="새 태그 이름"
-            aria-label="새 태그 이름"
+            placeholder={t('tags.newTagName')}
+            aria-label={t('tags.newTagName')}
           />
         </div>
         <div>
-          <label className="mb-6 block text-label text-fg-2">분류</label>
+          <label className="mb-6 block text-label text-fg-2">{t('tags.facetField')}</label>
           <FacetSelect value={facet} onChange={setFacet} disabled={busy} />
         </div>
       </div>
       <div>
-        <label className="mb-6 block text-label text-fg-2">별칭 <span className="text-fg-3">(선택)</span></label>
+        <label className="mb-6 block text-label text-fg-2">{t('tags.aliasesLabel')} <span className="text-fg-3">{t('common.optional')}</span></label>
         <AliasInput value={aliases} onChange={setAliases} disabled={busy} />
       </div>
       <div className="flex items-center gap-8">
         <Button variant="primary" onClick={submit} loading={create.isPending} disabled={busy}>
-          추가
+          {t('common.add')}
         </Button>
         <Button variant="secondary" onClick={onDone} disabled={busy}>
-          취소
+          {t('common.cancel')}
         </Button>
       </div>
     </div>
@@ -422,17 +426,22 @@ function DeleteConfirm({
           role="alertdialog"
           className="fixed left-1/2 top-1/2 z-(--z-sheet) w-full max-w-(--w-form) -translate-x-1/2 -translate-y-1/2 rounded-panel bg-elevated p-20 shadow-panel"
         >
-          <Dialog.Title className="text-title text-fg-1">태그를 삭제할까요?</Dialog.Title>
+          <Dialog.Title className="text-title text-fg-1">{t('tags.deleteTitle')}</Dialog.Title>
+          {/* 이름만 굵게 남기려면 문장을 span 뒤에서 잘라야 한다. 그래서 en 값은
+              앞 공백으로 시작한다 — 한국어는 조사가 이름에 붙고, 영어는 띄어야 한다. */}
           <Dialog.Description className="mt-8 text-body text-fg-2">
-            <span className="font-medium text-fg-1">{tag.name}</span>을(를) 삭제하면 링크{' '}
-            {tag.link_count.toLocaleString()}건에서 이 태그가 함께 제거됩니다. 되돌릴 수 없습니다.
+            <span className="font-medium text-fg-1">{tag.name}</span>
+            {t('tags.deleteBody', {
+              count: tag.link_count,
+              n: tag.link_count.toLocaleString(),
+            })}
           </Dialog.Description>
           <div className="mt-20 flex justify-end gap-8">
             <Button variant="secondary" autoFocus onClick={onCancel} disabled={pending}>
-              취소
+              {t('common.cancel')}
             </Button>
             <Button variant="danger" onClick={onConfirm} loading={pending}>
-              삭제
+              {t('common.delete')}
             </Button>
           </div>
         </Dialog.Content>

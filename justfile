@@ -333,6 +333,10 @@ streak-selftest:
 site-check:
     python3 scripts/site_copy_check.py
 
+# 웹 앱 UI 문자열이 ko·en에서 갈라지지 않는지 (site-check와 같은 규칙, 대상만 앱)
+web-i18n-check:
+    python3 scripts/web_i18n_check.py
+
 # 데모 영상을 다시 찍는다 — 시뮬레이터를 몰면서 녹화하고 손가락 커서를 합성한다
 #
 # 커서를 합성하는 이유: 녹화만 하면 화면이 저절로 움직이는 것처럼 보인다. 시뮬레이터의

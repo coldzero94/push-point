@@ -5,6 +5,7 @@
 // The web maps token names to Tailwind utilities; iOS maps the same names to
 // Asset Catalog colors (§8.1). Neither hard-codes hex.
 
+import { t } from '../i18n'
 import type { LinkTag, Tag, TagFacet } from '../api/types'
 
 // Re-exported so screens import the facet vocabulary from one place.
@@ -36,6 +37,22 @@ export const FACET_LABELS: Record<TagFacet, string> = {
   media: '형식',
   life: '세상과 일상',
   neutral: '분류 없음',
+}
+
+/**
+ * The label to render. A **function, not a constant**: `t()` reads the current
+ * locale at call time, so a `Record` built at module load would freeze whichever
+ * language happened to be active when the module was imported.
+ *
+ * `FACET_LABELS` stays: it is the Korean side compared verbatim against iOS
+ * through `testdata/facet-labels.json`, and its four values are the ko entries
+ * of the four keys below. Screens call this; the fixture test calls that.
+ */
+export function facetLabel(facet: TagFacet): string {
+  if (facet === 'craft') return t('tags.facetCraft')
+  if (facet === 'media') return t('tags.facetMedia')
+  if (facet === 'life') return t('tags.facetLife')
+  return t('tags.facetNeutral')
 }
 
 /**

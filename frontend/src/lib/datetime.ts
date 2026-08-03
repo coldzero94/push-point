@@ -6,6 +6,8 @@
 // `2026-06-30`, not relative time (11 §6(2)). The list's relative "방금/3시간 전"
 // display is a separate concern owned by the row renderer.
 
+import { t } from './i18n'
+
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n)
 }
@@ -30,7 +32,7 @@ export function formatDuration(sec: number): string {
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
   const s = Math.floor(sec % 60)
-  return h > 0 ? `${h}시간 ${pad2(m)}분` : `${m}분 ${pad2(s)}초`
+  return h > 0 ? t('time.durationHm', { h, m: pad2(m) }) : t('time.durationMs', { m, s: pad2(s) })
 }
 
 // Comma-grouped so counts read as `2,140`. Fixed 'en-US' grouping keeps the

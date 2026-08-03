@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
+import { getLang, t } from '../lib/i18n'
 import { Button } from '../components/ui/Button'
 
 /**
@@ -38,44 +39,40 @@ export function SheetsSection() {
 
   return (
     <div className="space-y-12">
-      <h2 className="text-title text-fg-1">스프레드시트</h2>
+      <h2 className="text-title text-fg-1">{t('sheets.title')}</h2>
 
       {status.isPending ? (
-        <p className="text-body text-fg-2">확인 중…</p>
+        <p className="text-body text-fg-2">{t('sheets.checking')}</p>
       ) : !s?.connected ? (
         <>
+          {/* 강조가 문장 한가운데 있으면 앞뒤 조각을 이어 붙이게 되고, 그 조립은 어순이
+              다른 언어에서 무너진다. 그래서 강조를 문장 하나로 떼어 세 키로 나눴다 —
+              각 조각이 그 자체로 완결된 문장이라 따로 옮길 수 있다. */}
           <p className="text-body text-fg-2">
-            저장한 링크를 Google 스프레드시트로 내보낼 수 있습니다. 시트에서 걸러 보거나 남에게
-            보여줄 때 쓰는 자리이고, <strong className="text-fg-1">백업은 아닙니다</strong> —
-            데이터는 SQLite 파일 하나라 그 파일을 복사하는 편이 더 완전합니다.
+            {t('sheets.exportIntro')} <strong className="text-fg-1">{t('sheets.notBackup')}</strong>{' '}
+            {t('sheets.backupAdvice')}
           </p>
-          <p className="text-body text-fg-2">
-            연결은 터미널에서 한 번만 하면 됩니다. 구글 승인을 브라우저에서 직접 밟아야 해서
-            이 화면이 대신할 수 없습니다.
-          </p>
+          <p className="text-body text-fg-2">{t('sheets.connectOnce')}</p>
           <pre className="overflow-x-auto rounded-control border border-line-2 bg-surface p-12 font-mono text-meta text-fg-1">
             just sheets-setup
           </pre>
-          <p className="text-meta text-fg-3">
-            스크립트를 클립보드에 넣고 브라우저를 열어 줍니다. 붙여넣고 배포한 뒤 URL만
-            되돌려 주면 끝입니다.
-          </p>
+          <p className="text-meta text-fg-3">{t('sheets.setupHint')}</p>
         </>
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-16">
             <div className="space-y-4">
-              <p className="text-body text-fg-1">연결됨</p>
+              <p className="text-body text-fg-1">{t('sheets.connected')}</p>
               <p className="text-meta text-fg-2">{lastRun(s)}</p>
             </div>
             <div className="flex gap-8">
               {s.sheet_url ? (
                 <Button variant="secondary" onClick={() => window.open(s.sheet_url!, '_blank', 'noopener')}>
-                  시트 열기
+                  {t('sheets.openSheet')}
                 </Button>
               ) : null}
               <Button onClick={() => sync.mutate()} disabled={sync.isPending}>
-                {sync.isPending ? '보내는 중…' : '지금 동기화'}
+                {sync.isPending ? t('sheets.syncing') : t('sheets.syncNow')}
               </Button>
             </div>
           </div>
@@ -84,19 +81,19 @@ export function SheetsSection() {
               사유를 삼키면 사용자가 무엇을 고쳐야 할지 알 수 없다. */}
           {s.last_error ? (
             <p className="text-meta text-danger" role="status">
-              마지막 동기화 실패: {s.last_error}
+              {t('sheets.lastSyncFailed', { error: s.last_error })}
             </p>
           ) : null}
           {sync.isError ? (
             <p className="text-meta text-danger" role="status">
-              동기화 요청이 실패했습니다.
+              {t('sheets.syncRequestFailed')}
             </p>
           ) : null}
 
+          {/* 위 문단과 같은 이유로 강조가 문장 하나를 통째로 감싼다. */}
           <p className="text-meta text-fg-3">
-            매번 시트를 <strong className="text-fg-2">통째로 다시 씁니다</strong> — 태그를 고치거나
-            링크를 지운 것이 반영돼야 하기 때문입니다. 그래서 시트에 손으로 적은 것은 지워집니다.
-            메모를 남기려면 다른 탭에 하세요.
+            <strong className="text-fg-2">{t('sheets.rewriteWhole')}</strong>{' '}
+            {t('sheets.rewriteWhy')}
           </p>
         </>
       )}
@@ -106,13 +103,17 @@ export function SheetsSection() {
 
 /** 마지막 실행을 한 문장으로. 한 번도 안 했으면 그 사실을 그대로 말한다. */
 function lastRun(s: { last_sync_at?: number | null; last_rows?: number; last_error?: string }): string {
-  if (!s.last_sync_at) return '아직 한 번도 보내지 않았습니다'
-  const when = new Date(s.last_sync_at * 1000).toLocaleString('ko-KR', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-  if (s.last_error) return `${when}에 시도했다가 실패`
-  return `${when} · ${s.last_rows ?? 0}건`
+  if (!s.last_sync_at) return t('sheets.neverSynced')
+  // 날짜 형식도 화면에 보이는 문자열이다 — 'ko-KR'로 고정하면 영어 화면에 "오후"가 섞인다.
+  const when = new Date(s.last_sync_at * 1000).toLocaleString(
+    getLang() === 'ko' ? 'ko-KR' : 'en-US',
+    {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    },
+  )
+  if (s.last_error) return t('sheets.lastRunFailed', { when })
+  return t('sheets.lastRunOk', { when, count: s.last_rows ?? 0 })
 }

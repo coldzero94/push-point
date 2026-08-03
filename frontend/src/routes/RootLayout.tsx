@@ -3,25 +3,32 @@ import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { Button, Icon } from '../components/ui'
+import { LangToggle } from '../components/LangToggle'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { ApiKeyBanner } from '../components/ApiKeyBanner'
 import { OfflineBar } from '../components/OfflineBar'
 import { KeyboardShortcuts } from '../components/KeyboardShortcuts'
 import { LinkInspector } from './LinkInspector'
 import { reportNetworkError, reportNetworkOk } from '../lib/offline'
+import { t } from '../lib/i18n'
 
 // Nav is the 4 screen links only (§1.1). "저장" is the accent primary button on
 // the right, not a nav link; the detail inspector is an overlay, not a route tab.
-const NAV = [
-  { to: '/', label: '목록' },
-  { to: '/search', label: '검색' },
-  { to: '/tags', label: '태그' },
-  { to: '/settings', label: '설정' },
-] as const
+//
+// 렌더 안에서 만든다 — 모듈 상수로 두면 라벨이 로드 시점 언어로 굳어서 언어를 바꿔도
+// 헤더만 그대로 남는다.
+const navItems = () =>
+  [
+    { to: '/', label: t('nav.list') },
+    { to: '/search', label: t('nav.search') },
+    { to: '/tags', label: t('nav.tags') },
+    { to: '/settings', label: t('nav.settings') },
+  ] as const
 
 export function RootLayout() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const nav = navItems()
 
   // Offline escalation (§1.6): a network-level fetch rejection surfaces in the
   // query cache as a thrown TypeError ("Failed to fetch"). HTTP 4xx/5xx throw the
@@ -52,7 +59,7 @@ export function RootLayout() {
         href="#main-content"
         className="sr-only rounded-control bg-elevated px-12 py-8 text-body text-fg-1 shadow-panel focus-visible:not-sr-only focus-visible:absolute focus-visible:left-16 focus-visible:top-8 focus-visible:z-(--z-header)"
       >
-        본문으로 건너뛰기
+        {t('nav.skipToContent')}
       </a>
 
       <div className="min-h-full">
@@ -68,7 +75,7 @@ export function RootLayout() {
               </Link>
 
               <nav className="flex items-center gap-2 text-body">
-                {NAV.map((n) => (
+                {nav.map((n) => (
                   <Link
                     key={n.to}
                     to={n.to}
@@ -85,12 +92,13 @@ export function RootLayout() {
                 {/* "저장" opens the composer over the list (§0 / §2). Icon (+) < 560. */}
                 <Button
                   variant="primary"
-                  aria-label="링크 저장"
+                  aria-label={t('nav.saveLink')}
                   onClick={() => navigate({ to: '/save' })}
                 >
                   <Icon icon={Plus} size={16} className="sm:hidden" />
-                  <span className="hidden sm:inline">저장</span>
+                  <span className="hidden sm:inline">{t('common.save')}</span>
                 </Button>
+                <LangToggle />
                 <ThemeToggle />
               </div>
             </div>

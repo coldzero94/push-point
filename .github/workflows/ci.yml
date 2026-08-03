@@ -100,6 +100,9 @@ jobs:
       - name: 랜딩 페이지 문구 en·ko 정합 (just site-check)
         run: just site-check
 
+      - name: 앱 UI 문자열 en·ko 정합 (just web-i18n-check)
+        run: just web-i18n-check
+
       - name: 웹 빌드 (just web-build)
         run: just web-build
 

@@ -6,13 +6,27 @@
 // request time. Every preset is open-ended (no `to`) — "recent" means "since X,
 // up to now".
 
+import { t } from './i18n'
+
 export type PeriodKey = '7d' | '30d' | 'year'
 
+// Getters, not values. The object is built once at import time but the language
+// can change at runtime, so each label has to be looked up when it is read
+// rather than when the module loads. Property access keeps every call site
+// (`PERIOD_LABEL['7d']`) exactly as it was.
 export const PERIOD_LABEL: Record<PeriodKey | 'all', string> = {
-  all: '전체',
-  '7d': '최근 7일',
-  '30d': '최근 30일',
-  year: '올해',
+  get all() {
+    return t('common.all')
+  },
+  get '7d'() {
+    return t('search.period7d')
+  },
+  get '30d'() {
+    return t('common.last30Days')
+  },
+  get year() {
+    return t('search.periodYear')
+  },
 }
 
 /** Preset key → `from` in unix SECONDS (contract unit), or undefined for 전체. */

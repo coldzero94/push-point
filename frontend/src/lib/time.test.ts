@@ -8,6 +8,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { formatRelativeTime } from './time'
+import { setLang } from './i18n'
+
+// 상대 시각 픽스처(testdata/relative-time-cases.json)는 iOS와 공유하는 **한국어** 기준값이다.
+// node 환경에서는 navigator.language가 없어 i18n이 'en'으로 떨어지므로,
+// 여기서 고정하지 않으면 영어 문구와 비교하게 된다. iOS가 영문화되면
+// 픽스처가 두 언어를 갖게 되고, 그때 이 고정을 두 번 도는 것으로 바꾼다.
+setLang('ko')
 
 const FIXTURE = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../testdata/relative-time-cases.json', import.meta.url)), 'utf8'),

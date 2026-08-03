@@ -2,6 +2,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { statusAnnouncement } from './statusAnnounce'
+import { setLang } from './i18n'
+
+// 상태 라벨 픽스처(testdata/status-labels.json)는 iOS와 공유하는 **한국어** 기준값이다.
+// node 환경에서는 navigator.language가 없어 i18n이 'en'으로 떨어지므로,
+// 여기서 고정하지 않으면 영어 문구와 비교하게 된다. iOS가 영문화되면
+// 픽스처가 두 언어를 갖게 되고, 그때 이 고정을 두 번 도는 것으로 바꾼다.
+setLang('ko')
 
 // 이 규칙은 **화면으로 검증할 수 없다.** 레일이 색과 펄스를 그대로 두고 `aria-label`만
 // 바꾸므로 스크린샷에 안 찍힌다. 그래서 여기가 유일한 검증 자리다.
