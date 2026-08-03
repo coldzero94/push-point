@@ -81,40 +81,47 @@ def overlay(video, events, out):
     fps = 30
     frames = int(dur * fps)
 
-    # 각 시점의 커서 위치와 상태를 만든다. **동작 사이에는 다음 지점으로 미리 이동한다** —
-    # 눌러야 비로소 나타나면 어디서 왔는지가 안 보이고, 그게 "직접 움직인다"의 반대다.
+    # 각 시점의 커서 위치와 상태를 만든다.
+    #
+    # **끝난 동작만 원점이 될 수 있다.** 첫 판은 아직 오지 않은 동작을 `prev`로 잡아서,
+    # 커서가 매 단계 엉뚱한 자리(대개 마지막 스와이프가 끝난 화면 한가운데)로 돌아갔다가
+    # 목표로 튀었다. 사용자의 손이 아니라 순간이동으로 보였고, 그게 정확히 사용자가
+    # 지적한 것이다. 지금은 순서대로 훑되 **완료된 동작의 끝점만** 원점으로 남긴다.
     acts = [e for e in events if e["kind"] in ("tap", "swipe", "hide")]
-    MOVE = 0.55  # 다음 지점까지 옮겨 가는 시간(초)
+    MOVE = 0.7  # 다음 지점까지 옮겨 가는 시간(초)
+
+    def rest(e):
+        """그 동작이 끝났을 때 손가락이 놓인 자리."""
+        return (e["x2"], e["y2"]) if e["kind"] == "swipe" else (e["x"], e["y"])
 
     def state(t):
-        prev = None
-        for i, e in enumerate(acts):
+        origin = None  # 지금까지 **끝난** 동작의 마지막 자리
+        for e in acts:
             if e["kind"] == "hide":
                 if t >= e["t"]:
                     return None
                 continue
             start = e["t"]
             end = start + max(e.get("dur", 0.2), 0.2)
-            if t < start - MOVE:
-                prev = e
+            if t > end:
+                origin = rest(e)
                 continue
-            if t < start:  # 이동 구간
-                p = ease((t - (start - MOVE)) / MOVE)
-                fx, fy = (prev["x2"] if prev and prev["kind"] == "swipe" else prev["x"],
-                          prev["y2"] if prev and prev["kind"] == "swipe" else prev["y"]) if prev else (e["x"], e["y"] - 120)
-                return (fx + (e["x"] - fx) * p, fy + (e["y"] - fy) * p, 0.0)
-            if t <= end:
+            if t >= start:  # 동작 중
                 p = (t - start) / (end - start)
                 if e["kind"] == "swipe":
                     q = ease(p)
                     return (e["x"] + (e["x2"] - e["x"]) * q,
-                            e["y"] + (e["y2"] - e["y"]) * q, 0.35)
+                            e["y"] + (e["y2"] - e["y"]) * q, 0.3)
                 return (e["x"], e["y"], 1.0 - p)
-            prev = e
-        if prev is None:
-            return None
-        return (prev["x2"] if prev["kind"] == "swipe" else prev["x"],
-                prev["y2"] if prev["kind"] == "swipe" else prev["y"], 0.0)
+            # 아직 안 온 동작 — 이동 구간이거나, 그 전이면 제자리에서 기다린다
+            if t >= start - MOVE:
+                q = ease((t - (start - MOVE)) / MOVE)
+                # 첫 동작에는 원점이 없다. 화면 아래에서 올라오게 해서 손이 들어오는
+                # 것처럼 보이게 한다 — 없던 점이 갑자기 생기는 것보다 낫다.
+                fx, fy = origin if origin else (e["x"], e["y"] + 150)
+                return (fx + (e["x"] - fx) * q, fy + (e["y"] - fy) * q, 0.0)
+            return (*origin, 0.0) if origin else None
+        return (*origin, 0.0) if origin else None
 
     tmp = pathlib.Path("/tmp/pp-cursor")
     tmp.mkdir(exist_ok=True)
