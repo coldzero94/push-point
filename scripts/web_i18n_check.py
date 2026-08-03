@@ -66,6 +66,21 @@ for f in SRC.rglob("*.ts*"):
     used |= {m for m in LITERAL.findall(body) if m in ko}
 
 fail = []
+
+# **중복 키를 먼저 본다.** JS 객체 리터럴은 중복 키를 조용히 뒤엣것으로 덮는다 — 크래시는 없지만 앞의 값이 사라진다.
+def dup_keys(block_text):
+    seen, dup = set(), []
+    for k in ENTRY.findall(block_text):
+        if k in seen and k not in dup:
+            dup.append(k)
+        seen.add(k)
+    return dup
+
+for _name, _blk in (("ko", block("ko")), ("en", block("en"))):
+    _d = dup_keys(_blk)
+    if _d:
+        fail.append(f"{_name}에 중복 키 {len(_d)}개: {', '.join(_d)}")
+
 if ko - en:
     fail.append(f"en에 없는 키 {len(ko - en)}개: {', '.join(sorted(ko - en)[:12])}")
 if en - ko:

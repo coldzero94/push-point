@@ -51,7 +51,8 @@ final class ShareViewController: UIViewController {
                                                duplicate: result.duplicate)
             } else {
                 await SaveNotifier.notifySaved(title: title, host: host,
-                                               tags: result.tagNames, duplicate: result.duplicate)
+                                               tags: result.tagNames, duplicate: result.duplicate,
+                                               linkID: result.id)
             }
             // 배너까지 띄운 뒤에 잰다 — 사용자에게 "됐다"가 보이는 시점이 곧 응답이고,
             // 저장 함수가 반환한 시점이 아니다.
