@@ -14,6 +14,7 @@ import { useRetryLink } from '../hooks/useLinkMutations'
 import { Button, EmptyState } from '../components/ui'
 import { makeFacetResolver } from '../lib/tags/facet'
 import { errorMessage } from '../lib/api/client'
+import { t } from '../lib/i18n'
 
 const route = getRouteApi('/save')
 
@@ -76,14 +77,11 @@ export function SaveScreen() {
           <div className="rounded-card bg-surface p-20 text-body text-fg-2 shadow-ring">
             <p>{errorMessage(error)}</p>
             <div className="mt-12">
-              <Button onClick={() => void refetch()}>다시 시도</Button>
+              <Button onClick={() => void refetch()}>{t('common.tryAgain')}</Button>
             </div>
           </div>
         ) : links.length === 0 ? (
-          <EmptyState
-            title="아직 모아둔 것이 없습니다"
-            description="URL을 붙여넣으면 제목과 태그가 자동으로 채워집니다."
-          />
+          <EmptyState title={t('list.emptyTitle')} description={t('list.emptyDesc')} />
         ) : (
           <ul className={BOARD_GRID}>
             {links.map((l) => (
@@ -104,7 +102,7 @@ export function SaveScreen() {
       <div ref={sentinel} className="h-2" />
       {hasNextPage && !isFetchingNextPage ? (
         <Button variant="secondary" className="mx-auto" onClick={() => void fetchNextPage()}>
-          더 보기
+          {t('common.loadMore')}
         </Button>
       ) : null}
     </section>

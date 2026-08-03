@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { Icon } from './ui'
+import { t } from '../lib/i18n'
 import { effectiveDark, toggleTheme } from '../lib/theme'
 
 export function ThemeToggle() {
@@ -12,7 +13,7 @@ export function ThemeToggle() {
         toggleTheme()
         setDark(effectiveDark())
       }}
-      aria-label={dark ? '라이트 모드로 전환' : '다크 모드로 전환'}
+      aria-label={dark ? t('settings.switchToLight') : t('settings.switchToDark')}
       // ghost control, token-only. Header quick toggle; the 3-state segment lives
       // in Settings (§8). hover: enter 0ms / leave --dur-out (§4.1). The 32px box
       // clears the mouse 24×24 minimum; `relative hit-target` extends it to 44×44

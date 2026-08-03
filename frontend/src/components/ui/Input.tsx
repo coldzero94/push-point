@@ -11,6 +11,7 @@ import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Search, X } from 'lucide-react'
 import { Icon } from './Icon'
 import { cn } from './cn'
+import { t } from '../../lib/i18n'
 
 const FIELD_BASE =
   'w-full rounded-control bg-surface text-body text-fg-1 placeholder:text-fg-3 ' +
@@ -76,7 +77,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             <button
               type="button"
               onClick={onClear}
-              aria-label="검색어 지우기"
+              aria-label={t('search.clear')}
               // hit-target (§7.5): the ~20px clear button needs mouse ≥24×24 and
               // touch 44×44. Already `absolute`, so it anchors its own ::before.
               className="hit-target absolute right-8 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-control p-2 text-fg-3 hover:bg-hover"

@@ -7,7 +7,8 @@
 import { Check, ChevronDown } from 'lucide-react'
 import * as Select from '@radix-ui/react-select'
 import { Icon } from '../ui'
-import { FACET_LABELS, TAG_FACETS } from '../../lib/tags/facet'
+import { t } from '../../lib/i18n'
+import { facetLabel, TAG_FACETS } from '../../lib/tags/facet'
 import type { TagFacet } from '../../lib/api/types'
 
 // facet → ink swatch background. Literal classes for Tailwind's scanner. neutral
@@ -31,7 +32,7 @@ export function FacetSelect({
   return (
     <Select.Root value={value} onValueChange={(v) => onChange(v as TagFacet)} disabled={disabled}>
       <Select.Trigger
-        aria-label="분류(facet)"
+        aria-label={t('tags.facetSelectLabel')}
         className="inline-flex h-32 min-w-[7.5rem] items-center gap-8 rounded-control border border-line-control bg-surface px-12 text-label text-fg-1 hover:bg-hover data-[state=open]:bg-hover disabled:pointer-events-none disabled:opacity-45"
       >
         <span className={`size-8 shrink-0 rounded-full ${SWATCH[value]}`} aria-hidden />
@@ -54,7 +55,7 @@ export function FacetSelect({
                 className="relative flex h-32 cursor-default select-none items-center gap-8 rounded-control pl-8 pr-24 text-label text-fg-1 outline-none data-[highlighted]:bg-hover"
               >
                 <span className={`size-8 shrink-0 rounded-full ${SWATCH[f]}`} aria-hidden />
-                <Select.ItemText>{FACET_LABELS[f]}</Select.ItemText>
+                <Select.ItemText>{facetLabel(f)}</Select.ItemText>
                 <Select.ItemIndicator className="absolute right-8 inline-flex items-center">
                   <Icon icon={Check} size={16} className="text-accent" />
                 </Select.ItemIndicator>

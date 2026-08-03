@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { Icon } from '../ui'
+import { t } from '../../lib/i18n'
 import type { KeyboardEvent } from 'react'
 
 export function AliasInput({
@@ -21,9 +22,9 @@ export function AliasInput({
   const [draft, setDraft] = useState('')
 
   const commit = () => {
-    const t = draft.trim()
-    if (!t) return
-    if (!value.some((a) => a.toLowerCase() === t.toLowerCase())) onChange([...value, t])
+    const token = draft.trim()
+    if (!token) return
+    if (!value.some((a) => a.toLowerCase() === token.toLowerCase())) onChange([...value, token])
     setDraft('')
   }
 
@@ -56,7 +57,7 @@ export function AliasInput({
               onChange(value.filter((a) => a !== alias))
             }}
             disabled={disabled}
-            aria-label={`별칭 ${alias} 제거`}
+            aria-label={t('tags.removeAlias', { alias })}
             className="relative hit-target flex items-center justify-center rounded-chip text-fg-3 hover:text-fg-1"
           >
             <Icon icon={X} size={16} />
@@ -69,8 +70,8 @@ export function AliasInput({
         onKeyDown={onKeyDown}
         onBlur={commit}
         disabled={disabled}
-        placeholder={value.length === 0 ? '별칭 입력 후 Enter' : ''}
-        aria-label="별칭 추가"
+        placeholder={value.length === 0 ? t('tags.aliasPlaceholder') : ''}
+        aria-label={t('tags.addAlias')}
         className="min-w-[6rem] flex-1 bg-transparent font-mono text-meta text-fg-1 placeholder:text-fg-3 focus:outline-none disabled:opacity-45"
       />
     </div>

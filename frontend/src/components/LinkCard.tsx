@@ -26,6 +26,7 @@ import { sortLinkTags } from '../lib/tags/facet'
 import type { TagFacet } from '../lib/tags/facet'
 import type { Link, LinkTag } from '../lib/api/types'
 import { linkDisplayTitle } from '../lib/api/types'
+import { t } from '../lib/i18n'
 import { formatAbsoluteTime, formatRelativeTime, toIso } from '../lib/time'
 import { markOpened } from '../lib/api/markOpened'
 
@@ -103,7 +104,7 @@ export function LinkCard({
         <button
           type="button"
           data-link-id={link.id}
-          aria-label={`${title} 상세 열기`}
+          aria-label={t('common.openDetail', { title })}
           onClick={() => onOpen(link.id)}
           className="absolute inset-0 scroll-mt-80 rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         />
@@ -163,7 +164,7 @@ export function LinkCard({
           {link.content_type === 'video' ? (
             <span className="absolute right-8 top-8 flex items-center justify-center rounded-full bg-fg-1/70 p-4 text-fg-inverse">
               <Icon icon={Play} size={16} className="fill-current" />
-              <span className="sr-only">동영상</span>
+              <span className="sr-only">{t('common.video')}</span>
             </span>
           ) : null}
         </div>
@@ -191,9 +192,9 @@ export function LinkCard({
               {title}
             </a>
             {link.note.trim() ? (
-              <span className="shrink-0 pt-2 text-fg-3" title="메모 있음">
+              <span className="shrink-0 pt-2 text-fg-3" title={t('common.hasNote')}>
                 <Icon icon={StickyNote} size={16} />
-                <span className="sr-only">메모 있음</span>
+                <span className="sr-only">{t('common.hasNote')}</span>
               </span>
             ) : null}
           </div>
@@ -210,7 +211,7 @@ export function LinkCard({
                 이었고, 무엇이 잘못됐는지 보려면 링크마다 상세를 열어야 했다. 계약이 사유를
                 목록으로 올렸다(`Link.error`). iOS의 failureLabel과 같은 폴백을 쓴다. */}
             {failed && !hasDesc
-              ? link.error || '수집하지 못했습니다.'
+              ? link.error || t('common.collectFailed')
               : link.description}
           </p>
 
@@ -250,7 +251,7 @@ export function LinkCard({
             <span className="ml-auto flex shrink-0 items-center gap-4">
               {failed && onRetry ? (
                 <Button size="sm" variant="secondary" onClick={() => onRetry(link)}>
-                  재시도
+                  {t('common.retry')}
                 </Button>
               ) : null}
               <a
@@ -261,11 +262,11 @@ export function LinkCard({
                   e.stopPropagation()
                   markOpened(link.id)
                 }}
-                aria-label="원문 열기"
+                aria-label={t('common.openOriginal')}
                 className="flex h-24 items-center justify-center rounded-control px-6 text-fg-2 opacity-0 transition-opacity duration-(--dur-out) ease-ui hover:bg-hover focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
               >
                 <Icon icon={ExternalLink} size={16} />
-                <span className="sr-only">원문 열기</span>
+                <span className="sr-only">{t('common.openOriginal')}</span>
               </a>
             </span>
           </div>

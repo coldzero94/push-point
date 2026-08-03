@@ -8,6 +8,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api/client'
+import { t } from '../lib/i18n'
 import type { Tag, TagFacet } from '../lib/api/types'
 
 export type CreateTagVars = {
@@ -30,7 +31,7 @@ export function useCreateDictionaryTag() {
       if (aliases !== undefined) body.aliases = aliases
       if (facet !== undefined) body.facet = facet
       const { data, error } = await api.POST('/api/v1/tags', { body })
-      if (error || !data) throw error ?? new Error('empty response')
+      if (error || !data) throw error ?? new Error(t('common.emptyResponse'))
       return data
     },
     onSuccess: () => {
@@ -71,7 +72,7 @@ export function useUpdateTag() {
         params: { path: { id } },
         body,
       })
-      if (error || !data) throw error ?? new Error('empty response')
+      if (error || !data) throw error ?? new Error(t('common.emptyResponse'))
       return data
     },
     onMutate: async (vars) => {

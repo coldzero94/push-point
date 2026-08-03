@@ -15,9 +15,10 @@ import { Link } from '@tanstack/react-router'
 import { useStats } from '../hooks/useStats'
 import { useTags } from '../hooks/useTags'
 import { isUnauthorized } from '../lib/api/client'
+import { t } from '../lib/i18n'
 import { EmptyState } from '../components/ui'
 import { activeDays, cappedStreak, daysSinceLastSave, groupedTags, streak } from '../lib/rhythm'
-import { FACET_LABELS } from '../lib/tags/facet'
+import { facetLabel } from '../lib/tags/facet'
 import type { Stats, TagFacet } from '../lib/api/types'
 
 
@@ -51,17 +52,17 @@ export function RhythmSection() {
     <>
       <div className="border-t border-line-2" />
       <div className="space-y-12">
-        <h2 className="text-title text-fg-1">리듬</h2>
+        <h2 className="text-title text-fg-1">{t('rhythm.title')}</h2>
 
         {stats.isError ? (
           <div className="space-y-4" role="status">
-            <p className="text-body text-danger">통계를 불러오지 못했습니다.</p>
+            <p className="text-body text-danger">{t('rhythm.loadFailed')}</p>
             <button
               type="button"
               onClick={() => void stats.refetch()}
               className="text-label text-fg-2 underline underline-offset-4 hover:text-fg-1"
             >
-              다시 시도
+              {t('common.tryAgain')}
             </button>
           </div>
         ) : stats.isPending || tags.isPending ? (
@@ -77,7 +78,7 @@ export function RhythmSection() {
           </div>
         ) : !stats.data || stats.data.total_links === 0 ? (
           // 빈 상태에서 0을 세 개 보여주는 것은 정보가 아니라 소음이다.
-          <p className="text-body text-fg-2">링크를 저장하면 여기에 리듬이 쌓입니다.</p>
+          <p className="text-body text-fg-2">{t('rhythm.emptyBody')}</p>
         ) : (
           <Rhythm s={stats.data} facetOf={facetLookup(tags.data)} />
         )}
@@ -98,7 +99,7 @@ export function RhythmSection() {
  * 묶음과 색뿐이고, 연속·리듬·태그 목록은 사전 없이도 정확하다.
  */
 function facetLookup(list: ReturnType<typeof useTags>['data']): (name: string) => TagFacet {
-  const byName = new Map((list ?? []).map((t) => [t.name, t.facet]))
+  const byName = new Map((list ?? []).map((tag) => [tag.name, tag.facet]))
   return (name) => byName.get(name) ?? 'neutral'
 }
 
@@ -114,10 +115,7 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
   // 문구는 iOS와 같다(13 §3). 형태만 플랫폼 관용을 따른다.
   if (s.total_links === 0) {
     return (
-      <EmptyState
-        title="아직 볼 통계가 없습니다"
-        description="링크를 저장하면 여기에 리듬이 쌓입니다."
-      />
+      <EmptyState title={t('rhythm.emptyTitle')} description={t('rhythm.emptyBody')} />
     )
   }
 
@@ -134,8 +132,10 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
 
       <div className="space-y-4">
         <div className="flex items-baseline justify-between">
-          <span className="text-label text-fg-3">최근 30일</span>
-          <span className="font-mono text-label text-fg-3">{active}일 저장</span>
+          <span className="text-label text-fg-3">{t('common.last30Days')}</span>
+          <span className="font-mono text-label text-fg-3">
+            {t('rhythm.daysSaved', { count: active })}
+          </span>
         </div>
         {/* 계약이 by_day를 **빈 날까지 채운 30칸**으로 보장하므로(openapi.yaml Stats.by_day)
             i번째 칸이 곧 i번째 날이다. 예전에는 GROUP BY 결과를 그대로 받아 행 순서로
@@ -151,8 +151,8 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
           ))}
         </div>
         <div className="flex justify-between">
-          <span className="text-label text-fg-3">30일 전</span>
-          <span className="text-label text-fg-3">오늘</span>
+          <span className="text-label text-fg-3">{t('rhythm.axisStart')}</span>
+          <span className="text-label text-fg-3">{t('time.today')}</span>
         </div>
       </div>
 
@@ -164,25 +164,25 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
       {groups.length > 0 && (
         <div className="space-y-8">
           <div className="flex items-baseline justify-between">
-            <span className="text-label text-fg-3">무엇을 모았나</span>
-            <span className="text-label text-fg-3">누르면 그 목록으로</span>
+            <span className="text-label text-fg-3">{t('rhythm.collected')}</span>
+            <span className="text-label text-fg-3">{t('rhythm.collectedHint')}</span>
           </div>
           {groups.map((g) => (
             <div key={g.facet} className="space-y-2">
               <div className="flex items-center gap-6">
                 <span aria-hidden className={`size-6 shrink-0 rounded-full ${FACET_DOT[g.facet]}`} />
-                <span className="text-label text-fg-2">{FACET_LABELS[g.facet]}</span>
+                <span className="text-label text-fg-2">{facetLabel(g.facet)}</span>
                 <span className="font-mono text-label text-fg-3">{g.total}</span>
               </div>
-              {g.tags.map((t) => (
+              {g.tags.map((tag) => (
                 <Link
-                  key={t.name}
+                  key={tag.name}
                   to="/"
-                  search={{ tag: t.name }}
+                  search={{ tag: tag.name }}
                   className="flex items-baseline justify-between gap-8 rounded-control py-2 pl-12 pr-4 text-body text-fg-2 hover:bg-hover hover:text-fg-1"
                 >
-                  <span className="truncate">{t.name}</span>
-                  <span className="font-mono text-label text-fg-3">{t.count}</span>
+                  <span className="truncate">{tag.name}</span>
+                  <span className="font-mono text-label text-fg-3">{tag.count}</span>
                 </Link>
               ))}
             </div>
@@ -199,12 +199,12 @@ function Rhythm({ s, facetOf }: { s: Stats; facetOf: (name: string) => TagFacet 
           search={{ status: 'failed' }}
           className="flex items-center gap-6 text-body text-danger underline underline-offset-4"
         >
-          수집에 실패한 링크 <span className="font-mono">{s.failed_links}</span>개 — 다시 시도하기
+          {t('rhythm.failedLinks', { count: s.failed_links })}
         </Link>
       ) : null}
 
       <p className="text-meta text-fg-3">
-        전체 <span className="font-mono">{s.total_links.toLocaleString('ko-KR')}</span>
+        {t('rhythm.total')} <span className="font-mono">{s.total_links.toLocaleString('ko-KR')}</span>
       </p>
     </div>
   )
@@ -238,19 +238,24 @@ function narrative(s: Stats): string {
   const capped = cappedStreak(s.by_day, days)
 
   // 창 안에 아무것도 없으면 활성 일수는 0이고, "0일 저장했어요"는 정보가 아니다.
-  if (active === 0) return `최근 30일에는 저장한 게 없어요. 지금까지 ${s.total_links}개를 모았어요.`
+  if (active === 0) return t('rhythm.narrativeNoRecent', { count: s.total_links })
 
-  const first = `최근 30일 가운데 ${active}일 저장했어요.`
+  // 이어 붙이는 조각은 전부 그 자체로 완결된 문장이다 — 조각으로 문장을 조립하면
+  // 어순이 다른 언어에서 무너진다.
+  const first = t('rhythm.narrativeActive', { n: active })
   if (days > 0) {
     return capped
-      ? `${first} 30일 이상 이어가고 있어요.`
-      : `${first} 지금 ${days}일째 이어가고 있어요.`
+      ? `${first} ${t('rhythm.narrativeStreakCapped')}`
+      : `${first} ${t('rhythm.narrativeStreak', { n: days })}`
   }
 
   // 끊긴 것은 사실이므로 말하되, 되돌리라고 요구하지 않는다. 자가추적 연구가
   // 반복해서 찾아낸 이탈 원인이 정확히 그 반대편이다(14 §D1).
   const gap = daysSinceLastSave(s.by_day)
-  return gap === null ? first : `${first} 마지막은 ${gap === 1 ? '어제' : `${gap}일 전`}이에요.`
+  if (gap === null) return first
+  return gap === 1
+    ? `${first} ${t('rhythm.narrativeLastYesterday')}`
+    : `${first} ${t('rhythm.narrativeLastDaysAgo', { n: gap })}`
 }
 
 /**
@@ -266,8 +271,8 @@ function narrative(s: Stats): string {
  * 하고 있었다. 판정기가 정직한 자리에서 화면이 더 정확한 척하면 안 된다.
  */
 function goalLine(days: number, capped: boolean): string {
-  if (days === 0) return '오늘 하나 저장하면 연속이 시작돼요'
-  if (capped) return `${days}일 이상 연속 — 4주 목표를 넘겼습니다 (30일 창 상한)`
-  if (days < 28) return `${days}일 연속 — 4주(28일)까지 ${28 - days}일 남았어요`
-  return `${days}일 연속 — 4주 목표를 넘겼습니다`
+  if (days === 0) return t('rhythm.goalStart')
+  if (capped) return t('rhythm.goalMetCapped', { n: days })
+  if (days < 28) return t('rhythm.goalProgress', { n: days, count: 28 - days })
+  return t('rhythm.goalMet', { n: days })
 }

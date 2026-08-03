@@ -16,6 +16,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { X } from 'lucide-react'
 import { cn, Icon } from './ui'
 import { SHORTCUTS, isEditableTarget } from '../lib/keyboard/shortcuts'
+import { t } from '../lib/i18n'
 
 export function KeyboardShortcuts() {
   const navigate = useNavigate()
@@ -100,11 +101,11 @@ function ShortcutsOverlay({ open, onOpenChange }: { open: boolean; onOpenChange:
           )}
         >
           <div className="flex items-start justify-between gap-12">
-            <Dialog.Title className="text-head text-fg-1">키보드 단축키</Dialog.Title>
+            <Dialog.Title className="text-head text-fg-1">{t('shortcuts.title')}</Dialog.Title>
             <Dialog.Close asChild>
               <button
                 type="button"
-                aria-label="닫기"
+                aria-label={t('common.close')}
                 className="-mr-4 shrink-0 rounded-control p-4 text-fg-2 hover:bg-hover"
               >
                 <Icon icon={X} size={20} />
@@ -132,8 +133,8 @@ function ShortcutsOverlay({ open, onOpenChange }: { open: boolean; onOpenChange:
                   )}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-body text-fg-1">{s.action}</p>
-                  <p className="text-meta text-fg-3">{s.scope}</p>
+                  <p className="text-body text-fg-1">{t(s.action)}</p>
+                  <p className="text-meta text-fg-3">{t(s.scope)}</p>
                 </div>
               </li>
             ))}

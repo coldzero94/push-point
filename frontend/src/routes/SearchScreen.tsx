@@ -20,6 +20,7 @@ import { BOARD_GRID, LinkCard, LinkCardSkeleton } from '../components/LinkCard'
 import { Button, EmptyState, Icon, Input } from '../components/ui'
 import { makeFacetResolver } from '../lib/tags/facet'
 import { errorMessage } from '../lib/api/client'
+import { t } from '../lib/i18n'
 import { PERIOD_LABEL, periodFrom } from '../lib/period'
 import type { PeriodKey } from '../lib/period'
 import type { SearchResult, Tag } from '../lib/api/types'
@@ -112,8 +113,8 @@ export function SearchScreen() {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKeyDown}
             onClear={() => setText('')}
-            placeholder="검색하거나 이동합니다"
-            aria-label="검색어"
+            placeholder={t('search.placeholder')}
+            aria-label={t('search.queryLabel')}
           />
         </div>
 
@@ -122,7 +123,7 @@ export function SearchScreen() {
           <TagFilter tags={tagsQuery.data} value={tag} onChange={setTag} />
           {hasFilter ? (
             <Button size="sm" variant="ghost" onClick={clearFilters}>
-              필터 해제
+              {t('common.clearFilters')}
             </Button>
           ) : null}
         </div>
@@ -135,15 +136,17 @@ export function SearchScreen() {
             aria-live="polite"
           >
             {mode
-              ? `${mode === 'fts' ? 'FTS5 · bm25 정렬' : 'LIKE 폴백 · 최신순'} · 불러온 ${results.length}건`
-              : '검색 중…'}
+              ? mode === 'fts'
+                ? t('search.metaFts', { count: results.length })
+                : t('search.metaLike', { count: results.length })
+              : t('search.searching')}
           </p>
         ) : null}
       </div>
 
       {/* Results / states. */}
       {!active ? (
-        <EmptyState title="검색어를 입력하세요" description="제목·메모·본문에서 찾습니다." />
+        <EmptyState title={t('search.promptTitle')} description={t('search.promptDesc')} />
       ) : showResultSkeleton ? (
         <div className="@container">
           <ul className={BOARD_GRID} aria-hidden>
@@ -156,17 +159,17 @@ export function SearchScreen() {
         <div className="flex flex-col items-center gap-12 rounded-card bg-surface py-40 text-center shadow-ring">
           <p className="text-body text-fg-2">{errorMessage(error)}</p>
           <Button variant="secondary" onClick={() => void query.refetch()}>
-            다시 시도
+            {t('common.tryAgain')}
           </Button>
         </div>
       ) : results.length === 0 ? (
         <EmptyState
-          title={`"${q}"에 해당하는 링크가 없습니다`}
-          description="검색어나 필터를 바꿔 보세요."
+          title={t('search.noResultsTitle', { q })}
+          description={t('search.noResultsDesc')}
           action={
             hasFilter ? (
               <Button variant="secondary" onClick={clearFilters}>
-                필터 해제
+                {t('common.clearFilters')}
               </Button>
             ) : undefined
           }
@@ -193,7 +196,7 @@ export function SearchScreen() {
       <div ref={sentinel} className="h-2" />
       {hasNextPage && !isFetchingNextPage ? (
         <Button variant="secondary" className="mx-auto" onClick={() => void fetchNextPage()}>
-          더 보기
+          {t('common.loadMore')}
         </Button>
       ) : null}
     </section>
@@ -214,10 +217,10 @@ function PeriodFilter({
       onValueChange={(v) => onChange(v === ALL ? undefined : (v as PeriodKey))}
     >
       <Select.Trigger
-        aria-label="기간 필터"
+        aria-label={t('search.periodFilter')}
         className="inline-flex h-32 items-center gap-6 rounded-control border border-line-control bg-surface px-12 text-label text-fg-1 hover:bg-hover data-[state=open]:bg-hover"
       >
-        <span className="text-fg-3">기간</span>
+        <span className="text-fg-3">{t('search.period')}</span>
         <Select.Value />
         <Select.Icon>
           <Icon icon={ChevronDown} size={16} className="text-fg-2" />
@@ -259,10 +262,10 @@ function TagFilter({
       onValueChange={(v) => onChange(v === ALL ? undefined : v)}
     >
       <Select.Trigger
-        aria-label="태그 필터"
+        aria-label={t('search.tagFilter')}
         className="inline-flex h-32 items-center gap-6 rounded-control border border-line-control bg-surface px-12 text-label text-fg-1 hover:bg-hover data-[state=open]:bg-hover"
       >
-        <span className="text-fg-3">태그</span>
+        <span className="text-fg-3">{t('search.tag')}</span>
         <Select.Value />
         <Select.Icon>
           <Icon icon={ChevronDown} size={16} className="text-fg-2" />
@@ -275,7 +278,7 @@ function TagFilter({
           className="z-(--z-popover) max-h-[16rem] min-w-(--radix-select-trigger-width) overflow-y-auto rounded-panel bg-elevated p-4 shadow-panel"
         >
           <Select.Viewport>
-            <SelectItem value={ALL} label="전체" />
+            <SelectItem value={ALL} label={t('common.all')} />
             {sorted.map((t) => (
               <SelectItem key={t.id} value={t.name} label={t.name} count={t.link_count} />
             ))}

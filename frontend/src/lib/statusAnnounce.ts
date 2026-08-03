@@ -1,4 +1,5 @@
 import type { LinkStatus } from './api/types'
+import { t } from './i18n'
 
 /**
  * 상태 레일이 **색 말고 무엇으로 말하는가**.
@@ -10,12 +11,15 @@ import type { LinkStatus } from './api/types'
  * iOS `LinkCard.statusLabel`과 **같은 단어**를 써야 한다(§8.1). 두 화면이 같은 상태를
  * 다르게 부르면 사용자가 둘을 다른 일로 읽는다.
  */
-const STATUS_LABEL: Record<LinkStatus, string> = {
-  pending: '대기',
-  scraping: '수집 중',
-  tagging: '태깅 중',
-  done: '완료',
-  failed: '실패',
+// 값이 문자열이 아니라 함수인 이유는 둘이다. 모듈이 읽히는 순간 문자열을 굳히면 언어를
+// 바꿔도 옛 낱말이 남고, 키를 `t(MAP[status])`로 조립하면 `scripts/web_i18n_check.py`가
+// 호출을 못 본다. 다섯 갈래를 그대로 펴 두면 둘 다 없다.
+const STATUS_LABEL: Record<LinkStatus, () => string> = {
+  pending: () => t('status.pending'),
+  scraping: () => t('status.scraping'),
+  tagging: () => t('status.tagging'),
+  done: () => t('status.done'),
+  failed: () => t('status.failed'),
 }
 
 const PROGRESS: ReadonlySet<LinkStatus> = new Set(['pending', 'scraping', 'tagging'])
@@ -32,6 +36,6 @@ export function isProgress(status: LinkStatus): boolean {
  * 실제로는 실패해서 30×attempts초를 세는 중이고, 그 둘은 사용자에게 다른 일이다.
  */
 export function statusAnnouncement(status: LinkStatus, retryWaiting: boolean): string {
-  if (retryWaiting) return '재시도 대기 중'
-  return status === 'failed' || isProgress(status) ? STATUS_LABEL[status] : ''
+  if (retryWaiting) return t('status.retryWaiting')
+  return status === 'failed' || isProgress(status) ? STATUS_LABEL[status]() : ''
 }

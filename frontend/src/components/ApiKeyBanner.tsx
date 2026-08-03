@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { Link } from '@tanstack/react-router'
 import { hasApiKey, isAuthFailed, subscribeApiKey, subscribeAuthFailed } from '../lib/auth'
+import { t } from '../lib/i18n'
 
 // Top-fixed banner shown when the app cannot authenticate (§1.4: unauthorized →
 // banner, not a toast). Two triggers: no key configured, OR a key that the server
@@ -15,12 +16,16 @@ export function ApiKeyBanner() {
   const authFailed = useSyncExternalStore(subscribeAuthFailed, isAuthFailed)
   if (configured && !authFailed) return null
   return (
-    <div role="region" aria-label="API 키 상태" className="border-b border-line-1 bg-warn-tint">
+    <div
+      role="region"
+      aria-label={t('status.apiKeyState')}
+      className="border-b border-line-1 bg-warn-tint"
+    >
       <div className="mx-auto flex max-w-(--w-page) items-center gap-8 px-(--gutter) py-8 text-meta text-warn">
-        <span>API 키가 필요합니다</span>
+        <span>{t('status.apiKeyRequired')}</span>
         <span aria-hidden>·</span>
         <Link to="/settings" className="font-medium underline underline-offset-2 hover:text-warn">
-          설정 열기
+          {t('common.openSettings')}
         </Link>
       </div>
     </div>

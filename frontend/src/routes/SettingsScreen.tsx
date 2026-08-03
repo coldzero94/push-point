@@ -14,8 +14,8 @@
 // unsaved edit disables the button (with a "먼저 저장하세요" prompt) instead of
 // validating a stale key and misreporting "키 불일치".
 
-import { useEffect, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { RhythmSection } from './RhythmSection'
 import { SheetsSection } from './SheetsSection'
@@ -23,8 +23,20 @@ import { Eye, EyeOff } from 'lucide-react'
 import { api, errorMessage } from '../lib/api/client'
 import { Button, Icon, Input, cn } from '../components/ui'
 import { getApiKey, hasApiKey, setApiKey } from '../lib/auth'
+import { t } from '../lib/i18n'
 import { getThemePref, setThemePref } from '../lib/theme'
 import type { ThemePref } from '../lib/theme'
+
+// 인라인 마크업(<code>, <strong>)이 섞인 문장. 앞뒤를 따로 번역해 이어 붙이면 어순이
+// 다른 언어에서 무너지므로, 문장 하나를 통째로 사전에 두고 {이름} 자리에만 노드를 끼운다.
+// 키가 아니라 t()의 결과를 받는다 — scripts/web_i18n_check.py는 리터럴 t('키') 호출만
+// 사용으로 세므로, 여기서 키를 받으면 멀쩡히 쓰는 문장이 미사용으로 잡힌다.
+function fill(text: string, slots: Record<string, ReactNode>): ReactNode[] {
+  return text.split(/(\{\w+\})/g).map((part, i) => {
+    const name = /^\{(\w+)\}$/.exec(part)?.[1]
+    return name !== undefined && name in slots ? <Fragment key={i}>{slots[name]}</Fragment> : part
+  })
+}
 
 // idle → (checking) → one terminal result. `error` carries a contract message;
 // the other three map to the three fixed phrases in §8(3).
@@ -42,15 +54,15 @@ export function SettingsScreen() {
 
   const copy = async (value: string, label: string) => {
     if (!value) {
-      setCopied(`${label}가 비어 있습니다 — 먼저 위에서 API 키를 저장하세요`)
+      setCopied(t('settings.copyEmpty', { label }))
       return
     }
     try {
       await navigator.clipboard.writeText(value)
-      setCopied(`${label}를 복사했습니다`)
+      setCopied(t('settings.copied', { label }))
     } catch {
       // 클립보드가 막힌 환경(비보안 컨텍스트 등) — 값을 숨기지 않고 그대로 보여준다.
-      setCopied(`복사에 실패했습니다. 직접 입력하세요: ${value}`)
+      setCopied(t('settings.copyFailed', { value }))
     }
   }
   const [saved, setSaved] = useState(false)
@@ -123,15 +135,15 @@ export function SettingsScreen() {
 
   return (
     <section className="mx-auto max-w-(--w-form) space-y-32 py-8">
-      <h1 className="text-head text-fg-1">설정</h1>
+      <h1 className="text-head text-fg-1">{t('settings.title')}</h1>
 
       {/* ── 연결 ─────────────────────────────────────────────── */}
       <div className="space-y-12">
-        <h2 className="text-title text-fg-1">연결</h2>
+        <h2 className="text-title text-fg-1">{t('settings.connection')}</h2>
 
         <form onSubmit={onSave} className="space-y-8">
           <label htmlFor="apikey" className="block text-label text-fg-2">
-            API 키
+            {t('settings.apiKey')}
           </label>
           <div className="flex items-start gap-8">
             <div className="relative flex-1">
@@ -149,7 +161,7 @@ export function SettingsScreen() {
               <button
                 type="button"
                 onClick={() => setShow((s) => !s)}
-                aria-label={show ? 'API 키 숨기기' : 'API 키 표시'}
+                aria-label={show ? t('settings.hideKey') : t('settings.showKey')}
                 // 24×24 meets the mouse minimum; `hit-target` adds the touch
                 // 44×44 ::before. Already `absolute`, so it anchors its own (§7.5).
                 className="hit-target absolute right-8 top-1/2 flex h-24 w-24 -translate-y-1/2 items-center justify-center rounded-control text-fg-3 hover:bg-hover hover:text-fg-2"
@@ -158,18 +170,19 @@ export function SettingsScreen() {
               </button>
             </div>
             <Button type="submit" variant="primary">
-              저장
+              {t('common.save')}
             </Button>
             {saved ? (
               <span aria-live="polite" className="self-center text-meta text-fg-2">
-                저장됨
+                {t('common.saved')}
               </span>
             ) : null}
           </div>
           <p className="text-meta text-fg-3">
-            서버의 <code className="font-mono text-fg-2">PUSHPOINT_API_KEY</code> 값입니다. 이
-            브라우저의 localStorage에 저장되어 모든 요청에{' '}
-            <code className="font-mono text-fg-2">Authorization: Bearer</code>로 붙습니다.
+            {fill(t('settings.keyHint'), {
+              env: <code className="font-mono text-fg-2">PUSHPOINT_API_KEY</code>,
+              header: <code className="font-mono text-fg-2">Authorization: Bearer</code>,
+            })}
           </p>
         </form>
 
@@ -181,11 +194,11 @@ export function SettingsScreen() {
             loading={state === 'checking'}
             disabled={dirty}
           >
-            {state === 'checking' ? '확인 중…' : '연결 확인'}
+            {state === 'checking' ? t('settings.checking') : t('settings.checkConnection')}
           </Button>
           {dirty ? (
             <p role="status" className="text-meta text-fg-3">
-              변경한 키를 먼저 저장하세요
+              {t('settings.saveKeyFirst')}
             </p>
           ) : (
             <ConnectionResult
@@ -204,26 +217,34 @@ export function SettingsScreen() {
           본문을 함께 보낸다. 여기서는 설치 안내와 확장에 넣을 값 복사만 제공한다 —
           키는 확장 저장소로 들어가고 웹페이지는 접근할 수 없다. */}
       <div className="space-y-12">
-        <h2 className="text-title text-fg-1">저장 도구</h2>
+        <h2 className="text-title text-fg-1">{t('settings.saveTools')}</h2>
         <p className="text-body text-fg-2">
-          브라우저 확장을 설치하면 보고 있는 페이지를 <strong className="text-fg-1">본문까지</strong> 저장합니다.
-          서버가 직접 가져올 수 없는 페이지(자바스크립트로 그리는 사이트, 봇 차단, 로그인이 필요한 글)도
-          그대로 담깁니다.
+          {fill(t('settings.extensionIntro'), {
+            body: <strong className="text-fg-1">{t('settings.extensionIntroBody')}</strong>,
+          })}
         </p>
         <ol className="ml-16 list-decimal space-y-6 text-body text-fg-2 marker:text-fg-3">
           <li>
-            Chrome 주소창에 <code className="font-mono text-meta text-fg-1">chrome://extensions</code> 입력 → 우측 상단
-            개발자 모드 켜기
+            {fill(t('settings.extensionStep1'), {
+              url: <code className="font-mono text-meta text-fg-1">chrome://extensions</code>,
+            })}
           </li>
-          <li>“압축해제된 확장 프로그램을 로드” → 저장소의 <code className="font-mono text-meta text-fg-1">extension/</code> 폴더 선택</li>
-          <li>확장 옵션에서 아래 두 값을 붙여넣기</li>
+          <li>
+            {fill(t('settings.extensionStep2'), {
+              dir: <code className="font-mono text-meta text-fg-1">extension/</code>,
+            })}
+          </li>
+          <li>{t('settings.extensionStep3')}</li>
         </ol>
         <div className="flex flex-wrap gap-8">
-          <Button variant="secondary" onClick={() => copy(window.location.origin, '서버 주소')}>
-            서버 주소 복사
+          <Button
+            variant="secondary"
+            onClick={() => copy(window.location.origin, t('settings.serverAddress'))}
+          >
+            {t('settings.copyServerAddress')}
           </Button>
-          <Button variant="secondary" onClick={() => copy(getApiKey() ?? '', 'API 키')}>
-            API 키 복사
+          <Button variant="secondary" onClick={() => copy(getApiKey() ?? '', t('settings.apiKey'))}>
+            {t('settings.copyApiKey')}
           </Button>
         </div>
         {copied ? (
@@ -249,9 +270,9 @@ export function SettingsScreen() {
 
       {/* ── 모양 ─────────────────────────────────────────────── */}
       <div className="space-y-12">
-        <h2 className="text-title text-fg-1">모양</h2>
+        <h2 className="text-title text-fg-1">{t('settings.appearance')}</h2>
         <div className="flex items-center justify-between gap-16">
-          <span className="text-body text-fg-1">테마</span>
+          <span className="text-body text-fg-1">{t('settings.theme')}</span>
           <ThemeSegment />
         </div>
       </div>
@@ -280,20 +301,20 @@ function ConnectionResult({
   if (state === 'valid') {
     return (
       <p role="status" className={cn(base, 'text-fg-1')}>
-        서버 정상 · 키 유효
+        {t('settings.checkValid')}
       </p>
     )
   }
   if (state === 'unauthorized') {
     return (
       <p role="status" className={cn(base, 'text-danger')}>
-        서버 정상 · 키 불일치 (401)
+        {t('settings.checkUnauthorized')}
         <button
           type="button"
           onClick={onReenter}
           className="ml-8 rounded-control text-fg-1 underline underline-offset-2 hover:text-fg-2"
         >
-          키 다시 입력
+          {t('settings.reenterKey')}
         </button>
       </p>
     )
@@ -301,7 +322,7 @@ function ConnectionResult({
   if (state === 'unreachable') {
     return (
       <p role="status" className={cn(base, 'text-danger')}>
-        서버에 연결할 수 없습니다
+        {t('status.serverUnreachable')}
       </p>
     )
   }
@@ -313,10 +334,12 @@ function ConnectionResult({
   )
 }
 
-const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
-  { value: 'light', label: '라이트' },
-  { value: 'dark', label: '다크' },
-  { value: 'system', label: '시스템' },
+// 라벨이 함수인 이유: 모듈 로드 시점에 t()를 부르면 그때 잡힌 언어가 그대로 굳어
+// 언어를 바꿔도 세그먼트만 안 바뀐다. 렌더할 때마다 다시 뽑는다.
+const THEME_OPTIONS: { value: ThemePref; label: () => string }[] = [
+  { value: 'light', label: () => t('settings.themeLight') },
+  { value: 'dark', label: () => t('settings.themeDark') },
+  { value: 'system', label: () => t('settings.themeSystem') },
 ]
 
 // 3-state theme segment (§8(4)/§2.1.6). `system` MUST be reachable — its absence
@@ -348,7 +371,7 @@ function ThemeSegment() {
   return (
     <div
       role="radiogroup"
-      aria-label="테마"
+      aria-label={t('settings.theme')}
       className="inline-flex gap-2 rounded-control border border-line-control bg-hover p-2"
     >
       {THEME_OPTIONS.map((o, i) => {
@@ -370,7 +393,7 @@ function ThemeSegment() {
               checked ? 'bg-surface text-fg-1 shadow-ring' : 'text-fg-2 hover:text-fg-1',
             )}
           >
-            {o.label}
+            {o.label()}
           </button>
         )
       })}

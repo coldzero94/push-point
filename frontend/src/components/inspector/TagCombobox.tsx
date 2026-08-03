@@ -11,6 +11,7 @@ import { forwardRef, useId, useImperativeHandle, useMemo, useRef, useState } fro
 import * as Popover from '@radix-ui/react-popover'
 import { Plus } from 'lucide-react'
 import type { Tag } from '../../lib/api/types'
+import { t } from '../../lib/i18n'
 import { Icon, Input } from '../ui'
 import { cn } from '../ui/cn'
 
@@ -53,12 +54,12 @@ export const TagCombobox = forwardRef<TagComboboxHandle, TagComboboxProps>(funct
 
   const options = useMemo(() => {
     return tags
-      .filter((t) => !attached.has(t.name.toLowerCase()) && t.name.toLowerCase().includes(q))
+      .filter((tag) => !attached.has(tag.name.toLowerCase()) && tag.name.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, 8)
   }, [tags, attached, q])
 
-  const exactExists = q !== '' && tags.some((t) => t.name.toLowerCase() === q)
+  const exactExists = q !== '' && tags.some((tag) => tag.name.toLowerCase() === q)
   const showCreate = q !== '' && !exactExists
   // combined item count: options first, then the optional create row.
   const itemCount = options.length + (showCreate ? 1 : 0)
@@ -110,7 +111,7 @@ export const TagCombobox = forwardRef<TagComboboxHandle, TagComboboxProps>(funct
           )}
         >
           <Icon icon={Plus} size={16} />
-          태그 추가
+          {t('tags.add')}
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -134,7 +135,7 @@ export const TagCombobox = forwardRef<TagComboboxHandle, TagComboboxProps>(funct
             aria-controls={listId}
             aria-activedescendant={itemCount > 0 ? optionId(Math.min(active, itemCount - 1)) : undefined}
             aria-autocomplete="list"
-            aria-label="태그 검색"
+            aria-label={t('inspector.tagSearch')}
             spellCheck={false}
             value={query}
             onChange={(e) => {
@@ -142,12 +143,17 @@ export const TagCombobox = forwardRef<TagComboboxHandle, TagComboboxProps>(funct
               setActive(0)
             }}
             onKeyDown={onInputKeyDown}
-            placeholder="태그 이름"
+            placeholder={t('tags.tagName')}
           />
-          <ul id={listId} role="listbox" aria-label="태그 후보" className="mt-8 flex flex-col">
-            {options.map((t, i) => (
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label={t('inspector.tagCandidates')}
+            className="mt-8 flex flex-col"
+          >
+            {options.map((tag, i) => (
               <li
-                key={t.id}
+                key={tag.id}
                 id={optionId(i)}
                 role="option"
                 aria-selected={i === active}
@@ -158,7 +164,7 @@ export const TagCombobox = forwardRef<TagComboboxHandle, TagComboboxProps>(funct
                   i === active && 'bg-hover',
                 )}
               >
-                {t.name}
+                {tag.name}
               </li>
             ))}
 
@@ -177,13 +183,13 @@ export const TagCombobox = forwardRef<TagComboboxHandle, TagComboboxProps>(funct
                 )}
               >
                 <span className="font-sans text-fg-1">{query.trim()}</span>
-                <span>은 사전에 없습니다 · 추가하고 붙이기</span>
+                <span>{t('inspector.tagNotInDictionary')}</span>
               </li>
             ) : null}
 
             {itemCount === 0 && !showCreate ? (
               <li className="px-8 py-4 text-meta text-fg-3" aria-disabled>
-                이름을 입력해 태그를 찾으세요
+                {t('inspector.tagSearchHint')}
               </li>
             ) : null}
           </ul>

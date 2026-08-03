@@ -4,15 +4,20 @@
 // region — the app keeps exactly one (the toast viewport, §4.10 / §7.3); the
 // persistent bar plus aria-disabled write controls convey the state instead.
 
+import { t } from '../lib/i18n'
 import { useOffline } from '../lib/offline'
 
 export function OfflineBar() {
   const offline = useOffline()
   if (!offline) return null
   return (
-    <div role="region" aria-label="연결 상태" className="border-b border-line-1 bg-hover">
+    <div
+      role="region"
+      aria-label={t('status.connectionState')}
+      className="border-b border-line-1 bg-hover"
+    >
       <div className="mx-auto max-w-(--w-page) px-(--gutter) py-8 text-meta text-fg-2">
-        서버에 연결할 수 없습니다. 저장·수정이 비활성화됩니다.
+        {t('status.offline')}
       </div>
     </div>
   )

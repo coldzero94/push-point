@@ -1,6 +1,7 @@
 import createClient from 'openapi-fetch'
 import type { paths } from './schema'
 import { getApiKey, setAuthFailed } from '../auth'
+import { t } from '../i18n'
 
 // Single typed client over the openapi.yaml contract. baseUrl is empty so every
 // request is a relative path — dev goes through the Vite proxy, prod hits the
@@ -49,7 +50,9 @@ export function isUnauthorized(err: unknown): boolean {
 }
 
 // Narrow an openapi-fetch error (or thrown value) to a display message.
-export function errorMessage(err: unknown, fallback = '요청에 실패했습니다.'): string {
+// 기본값은 **호출할 때** 평가되므로(기본 매개변수의 성질) 언어를 바꾸면 다음 호출부터
+// 새 낱말이 나온다. 모듈 최상단 상수로 두면 그 자리에서 굳는다.
+export function errorMessage(err: unknown, fallback = t('common.requestFailed')): string {
   if (err && typeof err === 'object' && 'error' in err) {
     const e = (err as ApiError).error
     if (e && typeof e.message === 'string') return e.message
