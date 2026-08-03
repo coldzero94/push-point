@@ -30,7 +30,7 @@ export const COPY = {
     'demo.title': 'Reading something. Two taps. It is filed.',
     'demo.body':
       'Watch where it ends: you never leave the page. A notification says it is saved and shows the tags it already worked out — frontend, javascript, dev — and Safari is exactly where you left it. There is no app to open, no form, and nothing to come back to later. The extension writes straight to the shared database, so it finishes in airplane mode too. This save took 76 ms.',
-    'demo.caption': 'A real simulator recording, not a mockup. The list and stats beside it are the same archive, opened separately.',
+    'demo.caption': 'A real simulator recording: share, notification, tap, and the link open on its own screen with a note field waiting. The list and stats beside it are the same archive, opened separately. The Korean recording stops at the notification — the simulator can only run one system language at a time.',
 
     'num.title': 'Numbers, measured',
     'num.body':
@@ -109,7 +109,7 @@ export const COPY = {
     'demo.title': '보다가, 두 번 누르면, 정리까지 끝',
     'demo.body':
       '끝나는 지점을 보세요 — 페이지를 떠나지 않습니다. 알림이 저장됐다고 알려주면서 이미 붙은 태그(frontend · javascript · dev)까지 보여주고, 사파리는 있던 그대로입니다. 열 앱도, 채울 입력란도, 나중에 돌아와서 할 일도 없습니다. 확장이 공유 데이터베이스에 직접 쓰므로 비행기 모드에서도 끝납니다. 이 저장은 76 ms 걸렸습니다.',
-    'demo.caption': '목업이 아니라 실제 시뮬레이터 녹화입니다. 옆의 목록·통계는 같은 아카이브를 따로 연 것입니다.',
+    'demo.caption': '실제 시뮬레이터 녹화입니다. 이 한국어 영상은 알림이 뜨는 데서 끝납니다 — 알림을 눌러 링크가 열리는 뒷부분은 영문 영상에 있습니다(시뮬레이터가 시스템 언어를 한 번에 하나만 씁니다). 옆의 목록·통계는 같은 아카이브를 따로 연 것입니다.',
 
     'num.title': '숫자는 재서 넣었다',
     'num.body':

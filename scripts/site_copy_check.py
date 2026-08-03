@@ -93,7 +93,7 @@ for lang in ("ko", "en"):
 # README는 그대로였다 — GitHub 첫 화면의 깨진 이미지는 아무도 대신 알려주지 않는다.
 import re as _re
 readme = (ROOT / "README.md").read_text(encoding="utf-8")
-for ref in sorted(set(_re.findall(r'src="(site/assets/[^"]+)"', readme))):
+for ref in sorted(set(_re.findall(r'(?:src|poster)="(site/assets/[^"]+)"', readme))):
     if not (ROOT / ref).exists():
         fail.append(f"README가 가리키는 {ref} 가 없다")
 
