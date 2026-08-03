@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var undoTask: Task<Void, Never>?
     /// 열어 볼 링크. NavigationLink 대신 이 값으로 이동한다 — 아래 row 주석 참조.
     @State private var opening: OpeningLink?
+    @ObservedObject private var router = NotificationRouter.shared
     /// 검색어. 비어 있으면 평소의 보드, 있으면 검색 결과가 그 자리를 대신한다.
     @State private var query = ""
     @State private var results: [Components.Schemas.Link] = []
@@ -104,6 +105,16 @@ struct ContentView: View {
             .sheet(isPresented: $saving) {
                 SaveSheet(onSave: saveLink)
             }
+            // 저장 알림을 눌러 들어온 경우 그 링크를 연다. 값을 소비하면 되돌려 놓는다 —
+            // 남겨 두면 다음에 앱을 열 때 지난 알림의 링크가 또 열린다.
+            //
+            // **첫 프레임 안에서 밀면 안 된다.** 알림 탭으로 차갑게 뜬 앱은 iOS가
+            // `didReceive`를 첫 CATransaction 도중에 부르는데, 그 안에서 내비게이션
+            // 상태를 바꾸면 SwiftUI가 `_performBlockAfterCATransactionCommit`
+            // 어서션에서 죽는다(2026-08-03, 실제로 홈 화면으로 떨어졌다). `.task`는
+            // 화면이 올라온 뒤에 돌고, `onChange`는 앱이 이미 떠 있을 때를 맡는다.
+            .task { consumePendingNotification() }
+            .onChange(of: router.pendingLinkID) { _, _ in consumePendingNotification() }
             .navigationDestination(item: $opening) { target in
                 LinkDetailView(linkID: target.id,
                                facetOf: { facets[$0] ?? .neutral },
@@ -525,6 +536,13 @@ struct ContentView: View {
     private var activeTagName: String? {
         if case let .tag(name) = filter { return name }
         return nil
+    }
+
+    /// 알림이 남긴 링크를 열고 값을 비운다. 두 곳에서 불려도 한 번만 동작한다.
+    private func consumePendingNotification() {
+        guard let id = router.pendingLinkID else { return }
+        router.pendingLinkID = nil
+        opening = OpeningLink(id: Int(id))
     }
 
     /// navigationDestination(item:)이 Identifiable을 요구해서 id만 감싼다.

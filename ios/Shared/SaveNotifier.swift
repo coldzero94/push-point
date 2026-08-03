@@ -51,7 +51,11 @@ enum SaveNotifier {
     /// 권한이 없으면 확장 흐름은 막지 않는다(저장은 이미 끝났다). 대신 **버린 횟수를
     /// 공유 defaults에 남겨** 본체 앱이 배너로 알린다 — 원래는 그냥 사라져서, 저장 성공과
     /// 완전 실패가 사용자에게 똑같이 보였다.
-    static func notifySaved(title: String, host: String, tags: [String], duplicate: Bool) async {
+    /// 탭한 알림이 어느 링크였는지 앱이 알아보는 열쇠.
+    static let linkIDKey = "pushpoint.linkID"
+
+    static func notifySaved(title: String, host: String, tags: [String], duplicate: Bool,
+                            linkID: Int64? = nil) async {
         let content = UNMutableNotificationContent()
         content.title = duplicate ? t("notify.duplicate") : t("notify.saved")
         // 무엇이 저장됐는지 — 제목이 없으면 도메인이라도 보여준다(엉뚱한 링크를 저장했을 때
@@ -61,6 +65,9 @@ enum SaveNotifier {
         // 본문에 그대로 노출한다.
         content.body = tags.isEmpty ? host : tags.prefix(4).joined(separator: " · ")
         content.sound = nil // 저장은 조용해야 한다 — 소리는 방해다
+        // **어느 링크인지 싣는다.** 이게 없으면 알림을 눌러도 목록만 열리고, 방금 저장한
+        // 것을 다시 찾아야 한다 — 저장이 한 번에 끝난다는 약속이 마지막 한 걸음에서 깨진다.
+        if let linkID { content.userInfo[linkIDKey] = linkID }
         await post(content)
     }
 

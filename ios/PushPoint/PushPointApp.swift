@@ -2,6 +2,10 @@ import SwiftUI
 
 @main
 struct PushPointApp: App {
+    /// **앱이 뜨는 즉시 건다.** iOS는 알림 탭으로 앱을 깨우면서 `didReceive`를 곧장
+    /// 부르는데, 그때 델리게이트가 없으면 그 탭이 조용히 버려진다 — `.onAppear`는 늦다.
+    init() { NotificationRouter.shared.install() }
+
     @StateObject private var backend = Backend()
     @Environment(\.scenePhase) private var scenePhase
 
