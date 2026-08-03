@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Push-Point — save a link, it tags itself</title>
+<meta name="description" content="A personal link archive that tags what you save without an LLM.">
+<link rel="icon" href="assets/icon.png">
+<meta property="og:title" content="Push-Point">
+<meta property="og:description" content="Save a link. It tags itself. No LLM, no cloud, no account.">
+<meta property="og:image" content="assets/web-list.png">
+<style>
+  :root {
+    --ink: #0d1310; --paper: #f4f7f4; --muted: #5d6b62; --line: #d8e2da;
+    --accent: #1f8a5c; --accent-soft: #e3f2e9; --card: #ffffff;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e8f0ea; --paper: #080d0a; --muted: #93a49a; --line: #1e2a23;
+      --accent: #4ade9b; --accent-soft: #10241a; --card: #0e1712;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 0; border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand img { width: 30px; height: 30px; border-radius: 7px; }
+  .hdr-actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    display: inline-block; padding: 8px 15px; border-radius: 999px;
+    border: 1px solid var(--line); background: transparent; color: var(--ink);
+    font: inherit; font-size: 14px; cursor: pointer; text-decoration: none;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-solid { background: var(--accent); border-color: var(--accent); color: var(--paper); font-weight: 600; }
+  .btn-solid:hover { color: var(--paper); opacity: 0.9; }
+
+  .hero { padding: 76px 0 56px; }
+  .eyebrow {
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(38px, 6.4vw, 66px); line-height: 1.08; letter-spacing: -0.03em;
+    margin: 0 0 22px; white-space: pre-line; font-weight: 800;
+  }
+  .lede { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 62ch; margin: 0 0 30px; }
+  .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .fineprint { font-size: 13px; color: var(--muted); margin-top: 18px; }
+
+  section { padding: 62px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -0.02em; margin: 0 0 12px; font-weight: 750; }
+  .section-lede { color: var(--muted); max-width: 60ch; margin: 0 0 34px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+  .stat b { display: block; font-size: 32px; font-family: var(--mono); letter-spacing: -0.02em; color: var(--accent); }
+  .stat span { display: block; font-weight: 650; margin: 6px 0 8px; }
+  .stat small { color: var(--muted); font-size: 12.5px; line-height: 1.5; display: block; }
+
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 26px; }
+  .step h3 { margin: 0 0 8px; font-size: 19px; }
+  .step .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent);
+    font-family: var(--mono); font-size: 13px; font-weight: 700; margin-bottom: 12px;
+  }
+  .step p { color: var(--muted); margin: 0; }
+
+  figure { margin: 0 0 40px; }
+  figure img {
+    display: block; max-width: 100%; height: auto;
+    border-radius: 14px; border: 1px solid var(--line);
+  }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 12px; }
+  figcaption b { color: var(--ink); font-weight: 650; }
+
+  .phones { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .phones img { width: 260px; max-width: 44vw; border-radius: 22px; }
+
+  ul.plain { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; max-width: 72ch; }
+  ul.plain li { padding-left: 22px; position: relative; color: var(--muted); }
+  ul.plain li::before {
+    content: "—"; position: absolute; left: 0; color: var(--accent); font-family: var(--mono);
+  }
+
+  pre {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; overflow-x: auto; font-family: var(--mono); font-size: 13.5px; line-height: 1.7;
+  }
+  pre .c { color: var(--muted); }
+
+  footer {
+    border-top: 1px solid var(--line); padding: 30px 0 56px;
+    display: flex; gap: 18px; flex-wrap: wrap; justify-content: space-between;
+    color: var(--muted); font-size: 14px;
+  }
+  footer a { text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="assets/icon.png" alt=""> Push-Point</div>
+    <div class="hdr-actions">
+      <button class="btn" id="lang" type="button" data-t="nav.lang">한국어</button>
+      <a class="btn" href="https://github.com/coldzero94/push-point" data-t="nav.repo">GitHub</a>
+    </div>
+  </header>
+
+  <div class="hero">
+    <p class="eyebrow" data-t="hero.tag">Personal link archive</p>
+    <h1 data-t="hero.title">Save a link.
+It tags itself.</h1>
+    <p class="lede" data-t="hero.lede"></p>
+    <div class="hero-actions">
+      <a class="btn btn-solid" href="https://github.com/coldzero94/push-point" data-t="hero.cta">Read the source</a>
+      <a class="btn" href="#how" data-t="hero.cta2">How it works</a>
+    </div>
+    <p class="fineprint" data-t="hero.note"></p>
+  </div>
+
+  <section>
+    <h2 data-t="demo.title"></h2>
+    <p class="section-lede" data-t="demo.body"></p>
+    <div class="phones">
+      <img src="assets/demo.gif" alt="Push-Point on iPhone" loading="lazy">
+      <img src="assets/ios-stats.png" alt="Stats screen" loading="lazy">
+    </div>
+    <figcaption data-t="demo.caption" style="margin-top:16px"></figcaption>
+  </section>
+
+  <section>
+    <h2 data-t="num.title"></h2>
+    <p class="section-lede" data-t="num.body"></p>
+    <div class="stats">
+      <div class="stat"><b data-t="num.1.v"></b><span data-t="num.1.k"></span><small data-t="num.1.n"></small></div>
+      <div class="stat"><b data-t="num.2.v"></b><span data-t="num.2.k"></span><small data-t="num.2.n"></small></div>
+      <div class="stat"><b data-t="num.3.v"></b><span data-t="num.3.k"></span><small data-t="num.3.n"></small></div>
+      <div class="stat"><b data-t="num.4.v"></b><span data-t="num.4.k"></span><small data-t="num.4.n"></small></div>
+    </div>
+  </section>
+
+  <section id="how">
+    <h2 data-t="how.title"></h2>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><h3 data-t="how.1.t"></h3><p data-t="how.1.b"></p></div>
+      <div class="step"><div class="n">2</div><h3 data-t="how.2.t"></h3><p data-t="how.2.b"></p></div>
+      <div class="step"><div class="n">3</div><h3 data-t="how.3.t"></h3><p data-t="how.3.b"></p></div>
+    </div>
+  </section>
+
+  <section>
+    <figure>
+      <img src="assets/web-list.png" alt="The link board in the web app" loading="lazy">
+      <figcaption><b data-t="shot.list.t"></b> · <span data-t="shot.list.b"></span></figcaption>
+    </figure>
+    <figure style="margin-bottom:0">
+      <img src="assets/web-tags.png" alt="The tag dictionary" loading="lazy">
+      <figcaption><b data-t="shot.tags.t"></b> · <span data-t="shot.tags.b"></span></figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2 data-t="honest.title"></h2>
+    <p class="section-lede" data-t="honest.body"></p>
+    <ul class="plain">
+      <li data-t="honest.1"></li>
+      <li data-t="honest.2"></li>
+      <li data-t="honest.3"></li>
+      <li data-t="honest.4"></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2 data-t="start.title"></h2>
+    <p class="section-lede" data-t="start.body"></p>
+<pre><span class="c">git clone https://github.com/coldzero94/push-point.git</span>
+<span class="c">cd push-point</span>
+just dev</pre>
+    <p class="fineprint" data-t="start.note"></p>
+  </section>
+
+  <footer>
+    <span>Push-Point · <span data-t="foot.built"></span></span>
+    <span>
+      <a href="https://github.com/coldzero94/push-point/blob/main/LICENSE" data-t="foot.license">Apache-2.0</a>
+      ·
+      <a href="https://github.com/coldzero94/push-point/tree/main/docs/v2" data-t="foot.docs">Docs</a>
+    </span>
+  </footer>
+</div>
+
+<script type="module">
+import { COPY } from './copy.js'
+
+// ?lang wins (so a link can point at a specific language), then a previous
+// choice, then the browser. Korean visitors should not have to hunt for the toggle.
+const pick = () => {
+  const q = new URLSearchParams(location.search).get('lang')
+  if (q && COPY[q]) return q
+  const saved = localStorage.getItem('pp.lang')
+  if (saved && COPY[saved]) return saved
+  return navigator.language?.startsWith('ko') ? 'ko' : 'en'
+}
+
+function apply(lang) {
+  const t = COPY[lang]
+  document.documentElement.lang = t['html.lang']
+  document.title = t['meta.title']
+  document.querySelector('meta[name=description]').content = t['meta.desc']
+  for (const el of document.querySelectorAll('[data-t]')) {
+    const v = t[el.dataset.t]
+    // A missing key would silently blank the element, so leave the markup's
+    // fallback in place and say so in the console instead.
+    if (v === undefined) { console.warn('missing copy key', el.dataset.t, lang); continue }
+    el.textContent = v
+  }
+  localStorage.setItem('pp.lang', lang)
+}
+
+let lang = pick()
+apply(lang)
+document.getElementById('lang').addEventListener('click', () => {
+  lang = lang === 'en' ? 'ko' : 'en'
+  apply(lang)
+})
+</script>
+</body>
+</html>

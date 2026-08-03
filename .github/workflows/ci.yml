@@ -97,6 +97,9 @@ jobs:
       - name: streak 구현 일치 (just streak-selftest)
         run: just streak-selftest
 
+      - name: 랜딩 페이지 문구 en·ko 정합 (just site-check)
+        run: just site-check
+
       - name: 웹 빌드 (just web-build)
         run: just web-build
 

@@ -325,6 +325,19 @@ web-embed-test: web-build
 streak-selftest:
     bash scripts/streak.sh --self-test
 
+# 랜딩 페이지(site/) 문구가 en·ko에서 갈라지지 않는지
+#
+# 두 벌을 손으로 관리하면 갈라진다 — streak·커버 패턴·iOS 골든에서 이미 세 번 당했고
+# 전부 "양쪽 다 정상으로 보이는데 값이 다른" 형태였다. 그래서 문구는 site/copy.js 한
+# 군데에 있고, 이 검사가 키 집합·오타·번역 누락을 막는다.
+site-check:
+    python3 scripts/site_copy_check.py
+
+# 랜딩 페이지를 로컬에서 띄운다 (http://localhost:8877)
+site:
+    @echo "http://localhost:8877 — Ctrl+C로 종료"
+    cd site && python3 -m http.server 8877
+
 # 아이덴티티 마크 → 네 표면의 아이콘 (소스: design/icon/mark.svg)
 #
 # 생성물은 커밋한다 — CI가 macOS·Chrome 없이 돌기 때문에 재생성으로 검사할 수 없다.
