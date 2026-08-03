@@ -29,11 +29,17 @@ enum SaveTiming {
     ///
     /// 실패도 잰다. 실패가 느린 것은 성공이 느린 것과 **다른 문제**인데(대개 타임아웃),
     /// 성공만 재면 그 구분이 사라지고 평균만 좋아 보인다.
-    static func end(_ start: Date, outcome: String, tags: Int = 0) {
+    ///
+    /// `source`는 어느 갈래로 들어왔는지다(`SharePayload.Source`). 이걸 남기는 이유는
+    /// 본문 캡처가 **사파리에서만** 실려 오기 때문이다 — Chrome·Firefox·SNS 앱은 URL만
+    /// 주므로 제목도 태그도 서버 스크랩에 달린다. 저장된 링크만 봐서는 어느 쪽이었는지
+    /// 구분할 수 없어서(그런 열이 없다), 캡처 경로가 실사용에서 얼마나 자주 걸리는지
+    /// 물었을 때 답할 수가 없었다.
+    static func end(_ start: Date, outcome: String, tags: Int = 0, source: String = "unknown") {
         let ms = Date().timeIntervalSince(start) * 1000
         let over = ms > budget * 1000
         let memMB = availableMemoryMB()
-        log.info("저장 \(outcome) \(ms, format: .fixed(precision: 1))ms over=\(over) mem=\(memMB)MB")
+        log.info("저장 \(outcome) \(ms, format: .fixed(precision: 1))ms over=\(over) mem=\(memMB)MB src=\(source)")
         append([
             "at": ISO8601DateFormatter().string(from: start),
             "ms": (ms * 10).rounded() / 10,
@@ -41,6 +47,7 @@ enum SaveTiming {
             "tags": tags,
             "over": over,
             "mem_avail_mb": memMB,
+            "source": source,
         ])
     }
 

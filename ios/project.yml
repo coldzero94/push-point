@@ -71,6 +71,9 @@ targets:
       # 단위 테스트가 아니게 되고, 이 모델을 뷰에서 떼어 낸 이유가 사라진다.
       - path: PushPoint/FeedModel.swift
       - path: PushPoint/ListFilter.swift
+      # 공유 첨부 → 계약 필드 규칙. **확장 타깃과 같은 파일**을 컴파일한다 —
+      # 복사본을 두면 갈라져도 양쪽 다 초록으로 보인다(streak에서 겪은 그것).
+      - path: PushPointShare/SharePayload.swift
       - path: PushPoint/Generated
       - path: PushPoint/Resources/Fonts
         buildPhase: resources

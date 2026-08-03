@@ -1,6 +1,6 @@
 # 데이터 플로우
 
-> Push-Point v2.1 — 마지막 업데이트: 2026-07-25
+> Push-Point v2.1 — 마지막 업데이트: 2026-08-03
 
 모든 흐름은 단일 프로세스(`pushpoint` 바이너리) 안에서 일어난다.
 v1처럼 API 서버 → Redis → RabbitMQ → Worker로 네트워크를 건너다니는 구간이 없고,
@@ -377,10 +377,24 @@ v1의 DLQ(dead letter queue)는 사라졌다. `status='failed'`인 행이 곧 DL
 "공유 버튼을 누르면 알아서 되는" 정도는 **출처가 무엇을 주느냐**로 정해진다. Share Extension은
 소스 앱이 넘긴 것 이상을 만들어낼 수 없다.
 
-| 공유 출처 | Share Extension이 받는 것 | 얻는 것 |
-|---|---|---|
-| **Safari** | URL + **JS 전처리 결과** — `NSExtensionAttributes`의 `NSExtensionJavaScriptPreprocessingFile`에 지정한 JS를 Safari가 확장 시작 **전에** 페이지에서 실행해 그 반환값을 넘긴다 | **본문까지** — `extension/src/extract.js`를 그대로 지정하면 웹 확장과 같은 규칙으로 캡처된다 |
-| **네이티브 앱**(인스타그램 등) | `NSItemProvider` 항목들 — 대개 `public.url`, 앱에 따라 `public.plain-text`·`public.image`도 | 그 앱이 준 것만. URL뿐이면 서버가 못 가져오는 사이트는 **빈 채로 저장**된다 |
+| 공유 출처 | Share Extension이 받는 것 | 얻는 것 | `source` |
+|---|---|---|---|
+| **Safari** | **JS 전처리 결과 하나.** `NSExtensionAttributes`의 `NSExtensionJavaScriptPreprocessingFile`에 지정한 JS를 Safari가 확장 시작 **전에** 페이지에서 실행해 그 반환값을 넘긴다 | **본문까지** — `extension/src/extract.js`를 그대로 지정하면 웹 확장과 같은 규칙으로 캡처된다 | `captured` |
+| **Chrome·Firefox 등 다른 브라우저** | `public.url` 하나 | **URL만.** 전처리는 사파리 공유 시트의 기능이라 여기서는 돌지 않는다 — 제목·본문·태그가 전부 서버 스크랩에 달리고, 봇 벽이 있는 사이트는 빈 채로 저장된다 | `url` |
+| **네이티브 앱**(인스타그램 등) | `NSItemProvider` 항목들 — 대개 `public.url`, 앱에 따라 `public.plain-text`·`public.image`도 | 그 앱이 준 것만. 캡션이 함께 오면 그것이 유일한 내용인 경우가 있다 | `url_with_text` |
+| **메모·메시지** | `public.plain-text` 하나 | 텍스트 안에서 URL을 찾아낸다(`NSDataDetector`). 스킴 없는 `example.com`도 `http://`로 승격된다 | `text_only` |
+
+**전처리를 선언하면 사파리는 propertyList만 준다** — `public.url` 첨부가 따로 오지 않는다.
+그래서 JS가 URL을 못 만들면 저장이 통째로 실패하고, 화면에는 `URL을 찾을 수 없습니다`만
+남는다. 2026-08-03에 실제로 이렇게 실패했다(§7.3.2).
+
+네 갈래 전부 `ios/PushPointTests/SharePayloadTests.swift`가 고정한다 — 진짜 `NSItemProvider`를
+만들어 확장이 부르는 것과 **같은 함수**를 부른다. 그 전까지 이 규칙에는 테스트가 하나도 없었고
+검증 수단은 "시뮬레이터에서 사파리로 공유해 본다" 뿐이라, 나머지 세 갈래는 한 번도 확인된
+적이 없었다.
+
+어느 갈래였는지는 `save-timing.jsonl`의 `source`에 남는다. 저장된 링크만 봐서는 구분할 수
+없어서(그런 열이 없다) "캡처 경로가 실사용에서 얼마나 걸리나"에 답할 수가 없었다.
 
 그래서 설계 규칙 셋:
 
@@ -396,6 +410,32 @@ v1의 DLQ(dead letter queue)는 사라졌다. `status='failed'`인 행이 곧 DL
    가지므로, 사용자가 앱 안에서 해당 사이트에 한 번 로그인해두면 이후 그 URL을 앱이 렌더해
    본문을 뽑을 수 있다. 네이티브 앱 공유로 들어온 로그인 벽 콘텐츠(인스타그램 등)를 살릴 수
    있는 유일한 경로다. **서버가 자격증명을 갖지 않는다는 원칙은 그대로다** — 세션은 기기 안에만 있다.
+
+### 7.3.2 2026-08-03 실측 — 2.1초 실패의 정체
+
+`just save-timing`이 2121.5ms짜리 `failed`를 하나 물고 FAIL을 낸다. 원인을 처음에는
+"클러스터 페이지는 `div`가 수천 개라 캡처가 느리다"로 잡았는데, **그게 아니었다.**
+그 URL은 이미 죽어 있었고 페이지가 `현재 유효하지 않은 클러스터입니다` 모달을 띄운다.
+모달이 뜬 페이지에서는 전처리 JS가 끝나지 못하고, 사파리는 propertyList만 주므로
+대체할 URL 첨부도 없다 — 확장이 2.1초를 기다린 끝에 저장할 대상 없이 끝났다.
+
+같은 종류의 **살아 있는** 페이지(`n.news.naver.com` 기사)로 다시 재면:
+
+```
+saved  48ms  over=False  tags=5  source=captured   본문 1990자
+```
+
+그래서 지금 서 있는 사실은 두 개다.
+
+- **성공 경로는 예산 안에 있다** — 48ms(한국어 기사, 캡처 포함), 91.8ms(go.dev).
+- **M4 DoD ①은 닫히지 않았다.** 실패가 2.1초 걸리는 경우가 있고, 게이트는 그것을 예산
+  초과로 센다(설계 의도다 — 느린 실패는 느린 성공과 다른 문제다). 기록을 지워 통과시키지
+  않는다. 죽은 URL을 상대로 재현할 수 없으므로, 다음 실패가 잡힐 때까지 열어 둔다.
+
+한 가지는 이 실측으로 분명해졌다: **`extract.js`의 방어(캡처가 던져도 `location.href`는
+남긴다)는 이 경우를 구하지 못한다.** JS 자체가 시작되지 못하면 그 안의 `try`도 돌지 않는다.
+구하는 쪽은 `SharePayload`가 propertyList 실패를 삼키지 않고 나머지 첨부를 계속 훑는
+것이고, 그것은 사파리가 URL 첨부를 함께 줄 때만 값이 있다.
 
 실측(2026-07-25): 인스타그램 게시물 URL은 서버가 받아도 HTTP 200 623KB에 og 메타가 0이고
 스크립트 493KB 어디에도 캡션이 없다(로그인 상태에서 XHR로 불러온다). 그래서 어댑터가 아예
