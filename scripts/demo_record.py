@@ -49,6 +49,19 @@ def drive(flow, udid, out):
                  "--duration", str(step.get("duration", 0.45)), "--udid", udid])
             events.append({"t": at, "kind": "swipe", "x": step["x"], "y": step["y"],
                            "x2": step["x2"], "y2": step["y2"], "dur": time.time() - t0 - at})
+        elif kind == "find_tap":
+            # **공유 시트의 아이콘 위치는 설치 사이에 움직인다** — 2026-08-03에 x가
+            # 261에서 245로 옮겨 앉아 저장이 통째로 안 됐고, 겉으로는 확장이 죽은 것과
+            # 구분되지 않았다. 그래서 좌표를 믿지 않고 매번 찾는다.
+            pt = locate_icon(udid, step["band"], step.get("rgb", [14, 79, 60]))
+            if pt is None:
+                raise SystemExit("공유 시트에서 Push-Point 아이콘을 못 찾았다")
+            x, y = pt
+            run(["axe", "tap", "-x", str(x), "-y", str(y), "--udid", udid])
+            events.append({"t": at, "kind": "tap", "x": x, "y": y,
+                           "dur": time.time() - t0 - at})
+        elif kind == "type":
+            run(["axe", "type", step["text"], "--udid", udid])
         elif kind == "open":
             run(["xcrun", "simctl", "openurl", "booted", step["url"]])
         elif kind == "launch":
@@ -60,6 +73,32 @@ def drive(flow, udid, out):
     rec.send_signal(2)
     rec.wait()
     return events
+
+
+def locate_icon(udid, band, rgb):
+    """화면의 `band`(포인트 y 범위)에서 `rgb`에 가장 가까운 덩어리의 중심을 찾는다.
+
+    Push-Point 아이콘은 짙은 초록 정사각형이라 공유 시트의 다른 아이콘과 색으로 갈린다.
+    글자를 찾지 않는 이유는 `maestro hierarchy`가 시스템 공유 시트를 못 보기 때문이다.
+    """
+    from PIL import Image
+
+    shot = "/tmp/pp-sheet.png"
+    run(["axe", "screenshot", "--output", shot, "--udid", udid])
+    im = Image.open(shot).convert("RGB")
+    W, H = im.size
+    px = im.load()
+    y0, y1 = int(band[0] * SCALE), min(int(band[1] * SCALE), H)
+    tr, tg, tb = rgb
+    xs, ys, n = 0, 0, 0
+    for y in range(y0, y1, 3):
+        for x in range(0, W, 3):
+            r, g, b = px[x, y]
+            if abs(r - tr) < 26 and abs(g - tg) < 26 and abs(b - tb) < 26:
+                xs += x; ys += y; n += 1
+    if n < 40:
+        return None
+    return (round(xs / n / SCALE), round(ys / n / SCALE))
 
 
 def ease(p):

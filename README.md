@@ -45,7 +45,8 @@ Everything runs in one process on your own machine. A backup is `cp -r data/`.
 ## What it looks like
 
 <p align="center">
-  <img src="site/assets/demo-en.gif" width="240" alt="Sharing a page from Safari into Push-Point">
+  <video src="https://raw.githubusercontent.com/coldzero94/push-point/main/site/assets/demo-en.mp4"
+         poster="site/assets/demo-en-poster.jpg" width="240" muted></video>
 </p>
 
 <p align="center">
