@@ -1,16 +1,57 @@
 {
   "udid": "D919C420-5EB9-465E-BF72-3ED451A8EF83",
-  "tail": 3.0,
+  "tail": 7.0,
   "steps": [
-    {"do": "terminate", "bundle": "com.pushpoint.app"},
-    {"do": "open", "url": "https://react.dev/blog/2024/04/25/react-19-upgrade-guide", "wait": 0.5},
-    {"do": "swipe", "x": 200, "y": 640, "x2": 200, "y2": 340, "duration": 0.5, "wait": 11},
-    {"do": "swipe", "x": 200, "y": 640, "x2": 200, "y2": 390, "duration": 0.5, "wait": 1.0},
-    {"do": "tap", "x": 201, "y": 839, "wait": 1.2},
-    {"do": "tap", "x": 344, "y": 816, "wait": 1.4},
-    {"do": "tap", "x": 203, "y": 538, "wait": 1.5},
-    {"do": "tap", "x": 261, "y": 651, "wait": 3.6},
-    {"do": "launch", "bundle": "com.pushpoint.app", "wait": 5.5},
-    {"do": "swipe", "x": 200, "y": 620, "x2": 200, "y2": 380, "duration": 0.8, "wait": 3.5}
+    {
+      "do": "terminate",
+      "bundle": "com.pushpoint.app"
+    },
+    {
+      "do": "open",
+      "url": "https://react.dev/blog/2024/04/25/react-19-upgrade-guide",
+      "wait": 0.5
+    },
+    {
+      "do": "swipe",
+      "x": 200,
+      "y": 640,
+      "x2": 200,
+      "y2": 340,
+      "duration": 0.5,
+      "wait": 11
+    },
+    {
+      "do": "swipe",
+      "x": 200,
+      "y": 640,
+      "x2": 200,
+      "y2": 390,
+      "duration": 0.5,
+      "wait": 1.0
+    },
+    {
+      "do": "tap",
+      "x": 201,
+      "y": 839,
+      "wait": 1.2
+    },
+    {
+      "do": "tap",
+      "x": 344,
+      "y": 816,
+      "wait": 1.4
+    },
+    {
+      "do": "tap",
+      "x": 203,
+      "y": 538,
+      "wait": 1.5
+    },
+    {
+      "do": "tap",
+      "x": 261,
+      "y": 651,
+      "wait": 3.6
+    }
   ]
 }

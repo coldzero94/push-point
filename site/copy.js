@@ -29,8 +29,8 @@ export const COPY = {
 
     'demo.title': 'Reading something. Two taps. It is filed.',
     'demo.body':
-      'That is the whole recording — a page open in Safari, the share sheet, and the link already sitting in the archive with its title, its image and its tags. No app to open first, no form to fill. The extension writes straight to the shared database, so it finishes in airplane mode too. This exact save took 23 ms.',
-    'demo.caption': 'A real simulator recording, not a mockup. The list and stats screens are the same archive. The UI is Korean — it is a personal app.',
+      'Watch where it ends: you never leave the page. A notification says it is saved and shows the tags it already worked out — frontend, javascript, dev — and Safari is exactly where you left it. There is no app to open, no form, and nothing to come back to later. The extension writes straight to the shared database, so it finishes in airplane mode too. This save took 76 ms.',
+    'demo.caption': 'A real simulator recording, not a mockup. The list and stats beside it are the same archive, opened separately.',
 
     'num.title': 'Numbers, measured',
     'num.body':
@@ -108,8 +108,8 @@ export const COPY = {
 
     'demo.title': '보다가, 두 번 누르면, 정리까지 끝',
     'demo.body':
-      '영상이 전부입니다. 사파리에 페이지가 열려 있고, 공유 시트를 거치면, 링크가 제목과 이미지와 태그를 달고 아카이브에 들어가 있습니다. 앱을 먼저 열 것도, 입력할 것도 없습니다. 확장이 공유 데이터베이스에 직접 쓰므로 비행기 모드에서도 끝납니다. 이 저장은 23 ms 걸렸습니다.',
-    'demo.caption': '목업이 아니라 실제 시뮬레이터 녹화입니다. 목록·통계 화면은 같은 아카이브고, UI가 한국어인 것은 개인용 앱이기 때문입니다.',
+      '끝나는 지점을 보세요 — 페이지를 떠나지 않습니다. 알림이 저장됐다고 알려주면서 이미 붙은 태그(frontend · javascript · dev)까지 보여주고, 사파리는 있던 그대로입니다. 열 앱도, 채울 입력란도, 나중에 돌아와서 할 일도 없습니다. 확장이 공유 데이터베이스에 직접 쓰므로 비행기 모드에서도 끝납니다. 이 저장은 76 ms 걸렸습니다.',
+    'demo.caption': '목업이 아니라 실제 시뮬레이터 녹화입니다. 옆의 목록·통계는 같은 아카이브를 따로 연 것입니다.',
 
     'num.title': '숫자는 재서 넣었다',
     'num.body':
