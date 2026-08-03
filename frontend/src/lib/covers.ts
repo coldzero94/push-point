@@ -45,14 +45,27 @@ export function hashDomain(domain: string): number {
   return h >>> 0
 }
 
-/** domain → geometry. Pure, and deliberately colorless (§5.4). */
+/**
+ * domain → geometry. Pure, and deliberately colorless (§5.4).
+ *
+ * **The shifts must be `>>>`, not `>>`.** `hashDomain` returns a full uint32, but
+ * JavaScript's `>>` coerces to int32 first, so any hash with the high bit set —
+ * about half of all domains — comes out negative. `news.ycombinator.com` hashes
+ * to 2307374702 and produced `step = -4`, which threw
+ * `Failed to execute 'arc' … The radius provided (-4) is negative` and took the
+ * entire list screen down with it (2026-08-03). Swift has no such coercion:
+ * `CoverPattern.swift` shifts a `UInt32`, so iOS was right and the web was drawing
+ * different covers for half the domains it had ever seen.
+ *
+ * `testdata/cover-cases.json` pins both sides against the same numbers.
+ */
 export function coverPattern(domain: string): CoverPattern {
   const seed = hashDomain(domain)
   return {
     kind: KINDS[seed % KINDS.length] ?? 'hatch',
-    rotate: ((seed >> 4) % 5) - 2,
-    step: 12 + ((seed >> 8) % 5) * 4,
-    variant: (seed >> 12) % 5,
+    rotate: ((seed >>> 4) % 5) - 2,
+    step: 12 + ((seed >>> 8) % 5) * 4,
+    variant: (seed >>> 12) % 5,
   }
 }
 

@@ -6,8 +6,13 @@ import XCTest
 /// 다른 무늬로 나오면 그 표식이 무의미해지는데, 두 구현이 갈라져도 **양쪽 다 정상 동작하는
 /// 것처럼 보이므로** 눈으로는 잡히지 않는다. 그래서 기준값을 박아 둔다.
 ///
-/// 아래 값은 `frontend/src/lib/covers.ts`의 알고리즘으로 계산한 것이다. 이 테스트가 깨지면
-/// 둘 중 하나가 움직인 것이므로, 고치기 전에 **어느 쪽이 옳은지부터** 정해야 한다.
+/// 기준값은 `testdata/cover-cases.json`이다 — **웹의 `covers.test.ts`가 읽는 바로 그 파일.**
+/// 2026-08-03까지는 이 파일 안에 손으로 옮겨 적은 숫자가 있었고 "웹의 알고리즘으로 계산한
+/// 것"이라는 주석이 붙어 있었는데, 웹 쪽에는 그것을 확인하는 테스트가 **하나도 없었다.**
+/// 실제로 두 구현은 갈라져 있었다: JS의 `>>`는 int32로 강제하므로 FNV-1a 해시의 최상위
+/// 비트가 선 도메인(대략 절반)에서 웹이 음수 기하를 만들었고, 그중 하나가 캔버스 `arc`에
+/// 음수 반지름으로 들어가 목록 화면 전체를 죽였다. Swift는 `UInt32`를 밀어서 멀쩡했다.
+///
 final class CoverPatternTests: XCTestCase {
     private struct Expected {
         let seed: UInt32
@@ -17,15 +22,30 @@ final class CoverPatternTests: XCTestCase {
         let variant: Int
     }
 
-    private let golden: [String: Expected] = [
-        "go.dev": .init(seed: 1_169_986_798, kind: .contour, rotate: 2, step: 12, variant: 1),
-        "m.blog.naver.com": .init(seed: 1_580_799_633, kind: .lattice, rotate: 0, step: 24, variant: 2),
-        "n.news.naver.com": .init(seed: 3_890_673_925, kind: .lattice, rotate: -2, step: 12, variant: 1),
-        "github.com": .init(seed: 1_228_281_881, kind: .lattice, rotate: 0, step: 16, variant: 3),
-        "example.com": .init(seed: 1_125_968_678, kind: .contour, rotate: 0, step: 12, variant: 4),
-    ]
+    private func loadFixture() throws -> [String: Expected] {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "cover-cases", withExtension: "json"),
+                                "cover-cases.json이 테스트 번들에 없다 — project.yml의 resources를 확인할 것")
+        struct Case: Decodable {
+            let domain: String
+            let seed: UInt32
+            let kind: String
+            let rotate: Int
+            let step: Int
+            let variant: Int
+        }
+        struct File: Decodable { let cases: [Case] }
+        let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
+        return Dictionary(uniqueKeysWithValues: file.cases.map {
+            ($0.domain, Expected(seed: $0.seed,
+                                 kind: CoverPattern.Kind(rawValue: $0.kind)!,
+                                 rotate: $0.rotate, step: $0.step, variant: $0.variant))
+        })
+    }
 
-    func testMatchesWebImplementation() {
+    func testMatchesWebImplementation() throws {
+        let golden = try loadFixture()
+        XCTAssertTrue(golden.values.contains { $0.seed >= 1 << 31 },
+                      "픽스처에 최상위 비트가 선 해시가 없으면 부호 버그를 못 잡는다")
         for (domain, want) in golden {
             XCTAssertEqual(CoverPattern.hash(domain), want.seed,
                            "\(domain): FNV-1a 해시가 웹과 다르다")
