@@ -81,6 +81,10 @@ targets:
       # 정상으로 보이고, streak에서 그 문제를 이미 겪었다(13 §3).
       - path: ../testdata/relative-time-cases.json
         buildPhase: resources
+      # 커버 기하 — **웹의 covers.test.ts와 같은 파일.** 손으로 옮겨 적은 골든을 쓰다가
+      # 웹이 갈라진 것을 2026-08-03까지 아무도 못 봤다.
+      - path: ../testdata/cover-cases.json
+        buildPhase: resources
       # 상태 라벨 — 웹과 같은 파일. §8.1이 "같은 단어"를 요구하는데 검사가 없었다.
       - path: ../testdata/status-labels.json
         buildPhase: resources

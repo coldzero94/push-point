@@ -1,0 +1,125 @@
+{
+  "note": "domain → cover geometry. Read by frontend/src/lib/covers.test.ts and ios/PushPointTests/CoverPatternTests.swift. At least one case must have seed >= 2^31 — that is the case the old hand-written golden lacked, and it is why a signed-shift bug shipped on the web (see covers.ts).",
+  "cases": [
+    {
+      "domain": "go.dev",
+      "seed": 1169986798,
+      "kind": "contour",
+      "rotate": 2,
+      "step": 12,
+      "variant": 1
+    },
+    {
+      "domain": "m.blog.naver.com",
+      "seed": 1580799633,
+      "kind": "lattice",
+      "rotate": 0,
+      "step": 24,
+      "variant": 2
+    },
+    {
+      "domain": "n.news.naver.com",
+      "seed": 3890673925,
+      "kind": "lattice",
+      "rotate": -2,
+      "step": 12,
+      "variant": 1
+    },
+    {
+      "domain": "github.com",
+      "seed": 1228281881,
+      "kind": "lattice",
+      "rotate": 0,
+      "step": 16,
+      "variant": 3
+    },
+    {
+      "domain": "example.com",
+      "seed": 1125968678,
+      "kind": "contour",
+      "rotate": 0,
+      "step": 12,
+      "variant": 4
+    },
+    {
+      "domain": "news.ycombinator.com",
+      "seed": 2307374702,
+      "kind": "contour",
+      "rotate": 1,
+      "step": 20,
+      "variant": 3
+    },
+    {
+      "domain": "www.youtube.com",
+      "seed": 3932375476,
+      "kind": "hatch",
+      "rotate": 0,
+      "step": 16,
+      "variant": 2
+    },
+    {
+      "domain": "www.theverge.com",
+      "seed": 2743395621,
+      "kind": "lattice",
+      "rotate": -1,
+      "step": 28,
+      "variant": 4
+    },
+    {
+      "domain": "sqlite.org",
+      "seed": 1819578093,
+      "kind": "lattice",
+      "rotate": -2,
+      "step": 16,
+      "variant": 2
+    },
+    {
+      "domain": "react.dev",
+      "seed": 762303277,
+      "kind": "lattice",
+      "rotate": 2,
+      "step": 20,
+      "variant": 4
+    },
+    {
+      "domain": "tailwindcss.com",
+      "seed": 967344131,
+      "kind": "stack",
+      "rotate": 1,
+      "step": 24,
+      "variant": 3
+    },
+    {
+      "domain": "",
+      "seed": 2166136261,
+      "kind": "lattice",
+      "rotate": -1,
+      "step": 28,
+      "variant": 1
+    },
+    {
+      "domain": "a",
+      "seed": 3826002220,
+      "kind": "hatch",
+      "rotate": 1,
+      "step": 16,
+      "variant": 2
+    },
+    {
+      "domain": "한글.테스트",
+      "seed": 2412699591,
+      "kind": "stack",
+      "rotate": 2,
+      "step": 20,
+      "variant": 2
+    },
+    {
+      "domain": "very.long.subdomain.example.co.kr",
+      "seed": 1148744896,
+      "kind": "hatch",
+      "rotate": -1,
+      "step": 28,
+      "variant": 0
+    }
+  ]
+}
