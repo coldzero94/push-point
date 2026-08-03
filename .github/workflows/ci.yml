@@ -103,6 +103,9 @@ jobs:
       - name: 앱 UI 문자열 en·ko 정합 (just web-i18n-check)
         run: just web-i18n-check
 
+      - name: 웹↔iOS 문구 대조 (just i18n-cross-check)
+        run: just i18n-cross-check
+
       - name: 웹 빌드 (just web-build)
         run: just web-build
 

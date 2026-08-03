@@ -12,7 +12,7 @@ import SwiftUI
 enum ListDensity: String, CaseIterable {
     case card, compact
 
-    var label: String { self == .card ? "카드" : "조밀" }
+    var label: String { self == .card ? t("list.densityCard") : t("list.densityCompact") }
     var symbol: String { self == .card ? "rectangle.grid.1x2" : "list.bullet" }
     var next: ListDensity { self == .card ? .compact : .card }
 }
@@ -272,7 +272,7 @@ struct LinkCard: View {
         case .failed:
             Rectangle().fill(PP.Palette.danger)
                 .frame(width: PP.Size.rail)
-                .accessibilityLabel("실패")
+                .accessibilityLabel(t("status.failed"))
         case .pending, .scraping, .tagging:
             Rectangle().fill(PP.Palette.railProgress)
                 .frame(width: PP.Size.rail)
@@ -318,7 +318,7 @@ struct LinkCard: View {
     /// **`waiting`은 여기 오지 않는다** — 그 링크의 `status`는 아직 `failed`가 아니라
     /// `pending`이고, 진행 레일이 도는 쪽(`statusLabel`)에서 다뤄야 한다.
     private var failureLabel: String {
-        link.error.isEmpty ? "수집에 실패했습니다" : link.error
+        link.error.isEmpty ? t("common.collectFailed") : link.error
     }
 
     /// 실패는 레일만으로 끝내지 않는다 — §4.7이 "레일 + 텍스트 + 아이콘" 3중을 요구한다.
@@ -343,7 +343,7 @@ struct LinkCard: View {
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if let onRetry {
-                    Button("재시도", action: onRetry)
+                    Button(t("common.retry"), action: onRetry)
                         .font(PP.Typo.label)
                         .foregroundStyle(PP.Palette.accent)
                         .buttonStyle(.plain)

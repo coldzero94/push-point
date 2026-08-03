@@ -337,6 +337,14 @@ site-check:
 web-i18n-check:
     python3 scripts/web_i18n_check.py
 
+# iOS 앱 UI 문자열이 ko·en에서 갈라지지 않는지 (web-i18n-check와 같은 규칙)
+ios-i18n-check:
+    python3 scripts/ios_i18n_check.py
+
+# 웹과 iOS가 같은 키를 같은 문장으로 말하는지 (각 클라이언트 내부 대칭은 위 두 레시피가 본다)
+i18n-cross-check:
+    python3 scripts/i18n_cross_check.py
+
 # 데모 영상을 다시 찍는다 — 시뮬레이터를 몰면서 녹화하고 손가락 커서를 합성한다
 #
 # 커서를 합성하는 이유: 녹화만 하면 화면이 저절로 움직이는 것처럼 보인다. 시뮬레이터의

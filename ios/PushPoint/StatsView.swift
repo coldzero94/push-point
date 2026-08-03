@@ -34,7 +34,7 @@ struct StatsView: View {
                 content.padding(.horizontal, 16).padding(.vertical, 16)
             }
             .background(PP.Palette.canvas)
-            .navigationTitle("통계")
+            .navigationTitle(t("nav.stats"))
             .refreshable { await load() }
         }
         // **`id:`가 있어야 한다.** 없으면 화면이 처음 뜰 때 한 번만 돌고, 그때 인프로세스
@@ -49,8 +49,8 @@ struct StatsView: View {
         if let stats {
             if stats.total_links == 0 {
                 // 빈 상태에서 0을 세 개 보여주는 것은 정보가 아니라 소음이다.
-                ContentUnavailableView("아직 볼 통계가 없습니다", systemImage: "chart.bar",
-                                       description: Text("링크를 저장하면 여기에 리듬이 쌓입니다."))
+                ContentUnavailableView(t("rhythm.emptyTitle"), systemImage: "chart.bar",
+                                       description: Text(t("rhythm.emptyBody")))
                     .padding(.top, 40)
             } else {
                 // **순차 등장 안무를 뺐다.** §6.1의 모션 표에 없었고 §6.2는 목록 항목의
@@ -65,7 +65,7 @@ struct StatsView: View {
                 }
             }
         } else if let loadError {
-            ContentUnavailableView("불러오지 못했습니다", systemImage: "exclamationmark.triangle",
+            ContentUnavailableView(t("common.loadFailed"), systemImage: "exclamationmark.triangle",
                                    description: Text(loadError))
         } else {
             ProgressView().padding(.top, 60)
@@ -121,19 +121,26 @@ struct StatsView: View {
         let capped = days > 0 && days >= s.by_day.count
 
         if active == 0 {
-            return "최근 30일에는 저장한 게 없어요. 지금까지 \(s.total_links)개를 모았어요."
+            let key = s.total_links == 1 ? "rhythm.narrativeNoRecentOne" : "rhythm.narrativeNoRecent"
+            return t(key, ["count": s.total_links])
         }
 
-        let first = "최근 30일 가운데 \(active)일 저장했어요."
+        // 이어 붙이는 조각은 전부 그 자체로 완결된 문장이다 — 조각으로 문장을 조립하면
+        // 어순이 다른 언어에서 무너진다. 웹도 같은 자리를 같은 키로 나눠 두었다.
+        let first = t("rhythm.narrativeActive", ["n": active])
         if days > 0 {
-            return capped
-                ? "\(first) 30일 이상 이어가고 있어요."
-                : "\(first) 지금 \(days)일째 이어가고 있어요."
+            let rest = capped
+                ? t("rhythm.narrativeStreakCapped")
+                : t("rhythm.narrativeStreak", ["n": days])
+            return "\(first) \(rest)"
         }
 
         // 끊긴 것은 사실이므로 말하되, 되돌리라고 요구하지 않는다(14 §D1).
         guard let gap = Self.daysSinceLastSave(s.by_day) else { return first }
-        return "\(first) 마지막은 \(gap == 1 ? "어제" : "\(gap)일 전")이에요."
+        let last = gap == 1
+            ? t("rhythm.narrativeLastYesterday")
+            : t("rhythm.narrativeLastDaysAgo", ["n": gap])
+        return "\(first) \(last)"
     }
 
     /// 30일 창 안에서 저장한 날의 수. 웹 `activeDays`와 같은 계산이다.
@@ -154,10 +161,14 @@ struct StatsView: View {
 
     private func goalLine(_ days: Int, _ capped: Bool) -> String {
         switch days {
-        case 0: "오늘 하나 저장하면 연속이 시작돼요"
-        case _ where capped: "\(days)일 이상 연속 — 4주 목표를 넘겼습니다 (30일 창 상한)"
-        case 1 ..< 28: "\(days)일 연속 — 4주(28일)까지 \(28 - days)일 남았어요"
-        default: "\(days)일 연속 — 4주 목표를 넘겼습니다"
+        case 0: t("rhythm.goalStart")
+        case _ where capped: t("rhythm.goalMetCapped", ["n": days])
+        // 영어는 남은 날이 하루일 때만 단수형이 필요하다. `t()`에 복수 규칙이 없으므로
+        // 여기서 갈라 쓴다 — 웹은 같은 문장을 값 안의 `|`로 처리한다.
+        case 1 ..< 28:
+            t(28 - days == 1 ? "rhythm.goalProgressOne" : "rhythm.goalProgress",
+              ["n": days, "count": 28 - days])
+        default: t("rhythm.goalMet", ["n": days])
         }
     }
 
@@ -197,7 +208,9 @@ struct StatsView: View {
     private func rhythm(_ s: Components.Schemas.Stats) -> some View {
         let active = s.by_day.filter { $0.count > 0 }.count
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("최근 30일", trailing: "\(active)일 저장")
+            sectionTitle(t("common.last30Days"),
+                         trailing: t(active == 1 ? "rhythm.daysSavedOne" : "rhythm.daysSaved",
+                                     ["count": active]))
             // 계약이 by_day를 **빈 날까지 채운 30칸**으로 보장하므로 i번째 칸이 곧
             // i번째 날이다. 그 보장이 없던 2026-07-28 이전에는 같은 코드가 거짓말을
             // 했다 — 행만 있는 배열을 위치로 그리는 바람에 한 달에 다섯 번 저장한
@@ -224,9 +237,9 @@ struct StatsView: View {
             .frame(height: 110)
 
             HStack {
-                Text("30일 전").font(PP.Typo.label).foregroundStyle(PP.Palette.fg3)
+                Text(t("rhythm.axisStart")).font(PP.Typo.label).foregroundStyle(PP.Palette.fg3)
                 Spacer()
-                Text("오늘").font(PP.Typo.label).foregroundStyle(PP.Palette.fg3)
+                Text(t("time.today")).font(PP.Typo.label).foregroundStyle(PP.Palette.fg3)
             }
         }
     }
@@ -247,7 +260,7 @@ struct StatsView: View {
         let groups = groupedTags(s)
         if !groups.isEmpty {
             VStack(alignment: .leading, spacing: 16) {
-                sectionTitle("무엇을 모았나", trailing: "누르면 그 목록으로")
+                sectionTitle(t("rhythm.collected"), trailing: t("rhythm.collectedHint"))
                 ForEach(groups, id: \.facet) { group in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 7) {
@@ -329,7 +342,8 @@ struct StatsView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(PP.Palette.danger)
                     // **"이상"이 사라졌다.** 계약이 정확한 수를 주므로 상한 표기가 필요 없다.
-                    Text("수집에 실패한 링크 \(failedCount)개")
+                    Text(t(failedCount == 1 ? "stats.failedLinksOne" : "stats.failedLinks",
+                           ["count": failedCount]))
                         .font(PP.Typo.body)
                         .foregroundStyle(PP.Palette.fg1)
                     Spacer()

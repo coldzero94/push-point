@@ -10,6 +10,14 @@ import XCTest
 /// 실재하는지만 보는 약한 검사였고, 판정표의 네 규칙 중 유일하게 그랬다. 규칙을
 /// `Shared/StatusAnnounce.swift`로 꺼내면서 "이 입력에 이 출력을 낸다"가 됐다.
 final class StatusLabelFixtureTests: XCTestCase {
+
+    /// 공용 픽스처(`testdata/*.json`)는 웹과 공유하는 **한국어** 기준값이다. 시뮬레이터의
+    /// 선호 언어는 영어라 고정하지 않으면 영어 문구와 비교하게 된다 — 웹의 vitest도
+    /// 같은 이유로 `setLang('ko')`를 부른다. 픽스처가 두 언어를 갖게 되면 그때 두 번 돈다.
+    override func setUp() {
+        super.setUp()
+        L.set(.ko)
+    }
     private struct Fixture: Decodable {
         let labels: [String: String]
         let retryWaiting: String

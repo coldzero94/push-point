@@ -55,14 +55,14 @@ struct TagEditor: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("태그")
+            .navigationTitle(t("common.tags"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("취소") { dismiss() }
+                    Button(t("common.cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("확인") {
+                    Button(t("common.done")) {
                         // 순서를 고정한다 — 집합은 순서가 없어서, 그대로 보내면 같은
                         // 선택이 요청마다 다른 배열이 되어 diff를 읽을 수 없다.
                         onSave(selected.sorted())

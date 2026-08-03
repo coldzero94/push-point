@@ -41,20 +41,43 @@ enum RelativeTime {
             return gap == 1 ? Self.timeOfDay(then) : Self.monthDay(then, cal)
         }
 
-        if diff < 60 { return "방금" }
-        if diff < 3600 { return "\(diff / 60)분 전" }
-        if diff < 86400 { return "\(diff / 3600)시간 전" }
+        if diff < 60 { return t("time.justNow") }
+        if diff < 3600 { return t("time.minutesAgo", ["n": diff / 60]) }
+        if diff < 86400 { return t("time.hoursAgo", ["n": diff / 3600]) }
 
         // "어제"는 48시간 창이 아니라 **달력 하루 차이**다 — 웹과 같은 규칙.
         // 경과 시간으로 재면 새벽에 저장한 것이 하루 종일 "N시간 전"으로 남는다.
-        if gap == 1 { return "어제" }
+        if gap == 1 { return t("time.yesterday") }
 
         return Self.monthDay(then, cal)
     }
 
+    /// 1..12 → 그 로케일이 그 달을 부르는 이름.
+    ///
+    /// 열두 개를 편 채로 둔다. `t("time.month\(n)")`으로 조립하면
+    /// `scripts/ios_i18n_check.py`가 호출을 못 보고 열두 키를 전부 "아무도 안 쓰는 키"로
+    /// 잡는다 — 웹 `time.ts`가 같은 이유로 같은 모양이다.
+    static func monthName(_ month: Int) -> String {
+        switch month {
+        case 1: t("time.month1")
+        case 2: t("time.month2")
+        case 3: t("time.month3")
+        case 4: t("time.month4")
+        case 5: t("time.month5")
+        case 6: t("time.month6")
+        case 7: t("time.month7")
+        case 8: t("time.month8")
+        case 9: t("time.month9")
+        case 10: t("time.month10")
+        case 11: t("time.month11")
+        case 12: t("time.month12")
+        default: String(month)
+        }
+    }
+
     static func monthDay(_ date: Date, _ cal: Calendar) -> String {
         let c = cal.dateComponents([.month, .day], from: date)
-        return "\(c.month ?? 0)월 \(c.day ?? 0)일"
+        return t("time.monthDay", ["month": Self.monthName(c.month ?? 0), "d": c.day ?? 0])
     }
 
     /// 그 날 안에서의 시각. 웹 `time.ts`와 같은 형식이어야 한다.
@@ -64,8 +87,10 @@ enum RelativeTime {
     static func timeOfDay(_ date: Date) -> String {
         let c = Calendar.current.dateComponents([.hour, .minute], from: date)
         let h = c.hour ?? 0, m = c.minute ?? 0
-        let period = h < 12 ? "오전" : "오후"
         let h12 = h % 12 == 0 ? 12 : h % 12
-        return "\(period) \(h12):\(String(format: "%02d", m))"
+        let mm = String(format: "%02d", m)
+        // 오전/오후는 낱말이 아니라 자리다 — ko는 앞, en은 뒤. 그래서 갈래마다 키를 따로 둔다.
+        return h < 12 ? t("time.timeOfDayAm", ["h": h12, "mm": mm])
+                      : t("time.timeOfDayPm", ["h": h12, "mm": mm])
     }
 }

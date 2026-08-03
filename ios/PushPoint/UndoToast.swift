@@ -8,7 +8,7 @@ import SwiftUI
 struct UndoToast: View {
     let message: String
     /// 액션 라벨. 되돌리기가 아닌 용도(변경 실패 알림)로도 쓰므로 고정하지 않는다.
-    var actionLabel: String = "실행 취소"
+    var actionLabel: String = t("common.undo")
     /// 실패 문구일 때 danger 색을 쓴다 — §4.10이 토스트에 상태 색을 허용하는 유일한 경우.
     var isError: Bool = false
     let onUndo: () -> Void

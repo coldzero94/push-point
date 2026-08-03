@@ -21,7 +21,7 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $tab) {
             ContentView(facets: facets, filter: $filter)
-                .tabItem { Label("목록", systemImage: "square.stack") }
+                .tabItem { Label(t("nav.list"), systemImage: "square.stack") }
                 .tag(Tab.list)
             StatsView(facetOf: { facets[$0] ?? .neutral }) { selected in
                 // 통계에서 무언가를 누르면 목록으로 데려간다 — 통계가 막다른 길이 아니라
@@ -29,7 +29,7 @@ struct RootView: View {
                 filter = selected
                 tab = .list
             }
-            .tabItem { Label("통계", systemImage: "chart.bar") }
+            .tabItem { Label(t("nav.stats"), systemImage: "chart.bar") }
             .tag(Tab.stats)
         }
         .tint(PP.Palette.accent)

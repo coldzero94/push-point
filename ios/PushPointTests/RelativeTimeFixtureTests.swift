@@ -9,6 +9,14 @@ import XCTest
 /// 픽스처가 `testdata/`에 있는 이유도 같다. `frontend/src/lib/time.test.ts`가 같은 파일을
 /// 읽으므로, 한쪽만 고치면 **반대쪽이 빨개진다.**
 final class RelativeTimeFixtureTests: XCTestCase {
+
+    /// 공용 픽스처(`testdata/*.json`)는 웹과 공유하는 **한국어** 기준값이다. 시뮬레이터의
+    /// 선호 언어는 영어라 고정하지 않으면 영어 문구와 비교하게 된다 — 웹의 vitest도
+    /// 같은 이유로 `setLang('ko')`를 부른다. 픽스처가 두 언어를 갖게 되면 그때 두 번 돈다.
+    override func setUp() {
+        super.setUp()
+        L.set(.ko)
+    }
     private struct Fixture: Decodable {
         struct Case: Decodable {
             let name: String

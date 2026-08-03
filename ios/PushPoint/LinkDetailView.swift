@@ -35,7 +35,7 @@ struct LinkDetailView: View {
             if let detail {
                 body(for: detail)
             } else if let loadError {
-                ContentUnavailableView("불러오지 못했습니다", systemImage: "exclamationmark.triangle",
+                ContentUnavailableView(t("detail.loadFailed"), systemImage: "exclamationmark.triangle",
                                        description: Text(loadError))
             } else {
                 ProgressView().padding(.top, 60)
@@ -53,10 +53,10 @@ struct LinkDetailView: View {
                 .tint(PP.Palette.danger)
             }
         }
-        .confirmationDialog("이 링크를 삭제할까요?", isPresented: $confirmingDelete,
+        .confirmationDialog(t("detail.deleteTitle"), isPresented: $confirmingDelete,
                             titleVisibility: .visible) {
-            Button("삭제", role: .destructive) { Task { await delete() } }
-            Button("취소", role: .cancel) {}
+            Button(t("common.delete"), role: .destructive) { Task { await delete() } }
+            Button(t("common.cancel"), role: .cancel) {}
         }
         .sheet(isPresented: $editingTags) {
             TagEditor(dictionary: dictionary,
@@ -106,7 +106,7 @@ struct LinkDetailView: View {
                          fill: .init(source: tag.source.rawValue, isActive: false))
                 }
                 Button { editingTags = true } label: {
-                    Label(d.value1.tags.isEmpty ? "태그 붙이기" : "고치기",
+                    Label(t(d.value1.tags.isEmpty ? "detail.attachTags" : "detail.editTags"),
                           systemImage: "tag")
                         .font(PP.Typo.label)
                         .foregroundStyle(PP.Palette.fg3)
@@ -178,10 +178,10 @@ struct LinkDetailView: View {
     @ViewBuilder
     private func noteEditor() -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("메모")
+            Text(t("common.note"))
                 .font(PP.Typo.label)
                 .foregroundStyle(PP.Palette.fg3)
-            TextField("왜 담았는지 한 줄", text: $noteDraft, axis: .vertical)
+            TextField(t("detail.notePlaceholder"), text: $noteDraft, axis: .vertical)
                 .font(PP.Typo.body)
                 .foregroundStyle(PP.Palette.fg1)
                 .lineLimit(1 ... 6)
@@ -196,7 +196,7 @@ struct LinkDetailView: View {
             if noteDraft != (detail?.value1.note ?? "") {
                 // 아직 안 보냈다는 사실을 숨기지 않는다. 저장 버튼을 따로 두지 않는 대신
                 // "언제 저장되는지"는 말해 줘야 한다.
-                Button("메모 저장") { Task { await saveNoteIfChanged() } }
+                Button(t("detail.saveNote")) { Task { await saveNoteIfChanged() } }
                     .font(PP.Typo.label)
                     .foregroundStyle(PP.Palette.accent)
             }
@@ -206,7 +206,7 @@ struct LinkDetailView: View {
     /// 값이 빈 행은 아예 숨긴다 — 빈칸을 만들지 않는다(§8.1 폴백 규칙).
     private func meta(_ d: Components.Schemas.LinkDetail) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            row("저장", absoluteTime(d.value1.created_at))
+            row(t("inspector.metaSaved"), absoluteTime(d.value1.created_at))
             // **웹 인스펙터에는 "마지막 열람"이 있고 여기엔 없었다.**
             //
             // 기록은 양쪽 다 한다 — iOS도 원문을 열 때 `recordOpen()`으로 `markOpened`를
@@ -214,11 +214,16 @@ struct LinkDetailView: View {
             // `oneOf: [EpochSeconds, "null"]`로 적혀 있어 **swift-openapi-generator가
             // 그 프로퍼티를 통째로 뺐다.** 생성이 성공으로 끝나므로 아무도 몰랐고,
             // 2026-07-30에 `EpochSecondsNullable`로 바꾸면서 비로소 iOS에 생겼다.
-            if let opened = d.value2.opened_at { row("열람", absoluteTime(opened)) }
-            if !d.value2.author.isEmpty { row("작성", d.value2.author) }
+            if let opened = d.value2.opened_at { row(t("detail.metaOpened"), absoluteTime(opened)) }
+            if !d.value2.author.isEmpty { row(t("detail.metaAuthor"), d.value2.author) }
             // word_count는 계약상 nullable — 스크랩이 세지 못한 경우가 있다.
-            if let words = d.value2.word_count, words > 0 { row("분량", "\(words)단어") }
-            if !d.value2.error.isEmpty { row("오류", d.value2.error, tone: PP.Palette.danger) }
+            if let words = d.value2.word_count, words > 0 {
+                row(t("detail.metaLength"),
+                    t(words == 1 ? "detail.wordCountOne" : "detail.wordCount", ["n": words]))
+            }
+            if !d.value2.error.isEmpty {
+                row(t("common.error"), d.value2.error, tone: PP.Palette.danger)
+            }
         }
     }
 
@@ -245,7 +250,7 @@ struct LinkDetailView: View {
 
     private func openButton(_ d: Components.Schemas.LinkDetail) -> some View {
         Link(destination: URL(string: d.value1.url) ?? URL(string: "https://example.com")!) {
-            Text("원문 열기")
+            Text(t("common.openOriginal"))
                 .font(PP.Typo.label)
                 .foregroundStyle(PP.Palette.onAccent)
                 .frame(maxWidth: .infinity)
@@ -298,7 +303,7 @@ struct LinkDetailView: View {
             noteDraft = detail?.value1.note ?? ""
             saveError = nil
         } catch {
-            saveError = "저장하지 못했습니다: \(error.localizedDescription)"
+            saveError = t("detail.saveFailed", ["error": error.localizedDescription])
         }
     }
 

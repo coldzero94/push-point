@@ -58,7 +58,7 @@ final class Backend: ObservableObject {
             container = AppGroup.dataDirectory()
         }
         guard let dir = container else {
-            state = .failed("App Group 컨테이너를 열 수 없습니다 (entitlement 확인 필요)")
+            state = .failed(t("status.appGroupUnavailable"))
             return
         }
         let path = dir.path
@@ -86,7 +86,7 @@ final class Backend: ObservableObject {
                 state = .failed(error.localizedDescription)
             case let .success(addr):
                 guard let url = URL(string: "http://\(addr)") else {
-                    state = .failed("서버 주소를 해석할 수 없습니다: \(addr)")
+                    state = .failed(t("status.badServerAddress", ["addr": addr]))
                     return
                 }
                 client = Client(

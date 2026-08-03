@@ -17,13 +17,16 @@ import Foundation
 /// 검사할 방법이 없다.
 enum StatusAnnounce {
     /// 웹 `STATUS_LABEL`과 같은 단어. `testdata/status-labels.json`이 둘을 묶는다.
+    // 다섯 갈래를 편 채로 둔다. `t("status.\(status.rawValue)")`로 조립하면
+    // `scripts/ios_i18n_check.py`가 호출을 못 보고 다섯 키를 전부 "아무도 안 쓰는 키"로
+    // 잡는다 — 웹 `statusAnnounce.ts`가 같은 이유로 같은 모양이다.
     static func label(_ status: Components.Schemas.LinkStatus) -> String {
         switch status {
-        case .pending: "대기"
-        case .scraping: "수집 중"
-        case .tagging: "태깅 중"
-        case .done: "완료"
-        case .failed: "실패"
+        case .pending: t("status.pending")
+        case .scraping: t("status.scraping")
+        case .tagging: t("status.tagging")
+        case .done: t("status.done")
+        case .failed: t("status.failed")
         }
     }
 
@@ -34,6 +37,6 @@ enum StatusAnnounce {
     /// 실제로는 실패해서 30×attempts초를 세는 중이고, 그 둘은 사용자에게 다른 일이다.
     static func announcement(_ status: Components.Schemas.LinkStatus,
                              retryWaiting: Bool) -> String {
-        retryWaiting ? "재시도 대기 중" : label(status)
+        retryWaiting ? t("status.retryWaiting") : label(status)
     }
 }
