@@ -97,6 +97,14 @@ On failure the suite attaches a screenshot and the accessibility tree — the on
 
 Target rows in long lists by `accessibilityIdentifier`, not by display text: the dictionary has 40+ tags, and matching on visible copy breaks the test the moment the wording is edited.
 
+## Recording a demo video
+
+`.claude/skills/app-demo/SKILL.md` — driving the simulator while recording, compositing a
+finger cursor, and **verifying frame-by-frame that the cursor is where it actually tapped**.
+The last one is the point: a demo whose cursor points at the wrong thing shipped to the
+landing page and stayed up until a human watched it, because a build cannot see it and
+nobody watches every re-render. `just demo-check` is that gate.
+
 ## The duplication to watch
 
 Maestro flows and XCUITest cases both describe the same screens. That is two sets of assets to update per UI change, which is exactly what the sweep rule in CLAUDE.md exists to prevent. It is tolerable now because the two cover different ground (structure-on-real-data vs behaviour-on-fixtures). **If they start asserting the same things, converge on one** — and the one to keep is whichever runs in CI.
