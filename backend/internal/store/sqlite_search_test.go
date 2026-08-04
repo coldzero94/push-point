@@ -91,3 +91,30 @@ func TestSearchLikeMatchesWordsSeparately(t *testing.T) {
 		t.Errorf("AND가 기본이어야 한다 — `비교`가 없는 문서까지 나왔다: %d건", len(got))
 	}
 }
+
+// 질의 확장이 실제로 FTS 문자열에 얹히는지. **조용히 안 붙어도 검색은 그냥 조금 나빠질
+// 뿐 아무것도 실패하지 않으므로**, 붙는다는 사실 자체를 고정한다.
+func TestFtsMatchExpanded(t *testing.T) {
+	s := &sqliteStore{}
+	// `쿠버네티스`도 `하드웨이`도 3룬을 넘으므로 둘 다 남는다 — 처음에 이 테스트를
+	// `"하드웨이"`만 기대하게 썼다가 틀렸다. 3룬 하한이 버리는 것은 2음절이다.
+	if got := s.ftsMatchExpanded(context.Background(), "쿠버네티스 하드웨이"); got != `"쿠버네티스" "하드웨이"` {
+		t.Fatalf("확장기 없을 때는 원래 동작이어야 한다: %q", got)
+	}
+
+	s.newExpander = func(context.Context) QueryExpander { return fakeExpander{"kubernetes"} }
+	got := s.ftsMatchExpanded(context.Background(), "쿠버네티스 하드웨이")
+	if got != `("쿠버네티스" "하드웨이") OR ("kubernetes")` {
+		t.Fatalf("확장이 OR로 얹혀야 한다: %q", got)
+	}
+
+	// 3룬 하한이 토큰을 전부 버린 경우 — 확장만으로 FTS를 탄다
+	s.newExpander = func(context.Context) QueryExpander { return fakeExpander{"devops"} }
+	if got := s.ftsMatchExpanded(context.Background(), "도커"); got != `"devops"` {
+		t.Fatalf("원래 토큰이 없으면 확장만 남아야 한다: %q", got)
+	}
+}
+
+type fakeExpander []string
+
+func (f fakeExpander) TagsInQuery(string) []string { return f }
