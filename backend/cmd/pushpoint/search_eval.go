@@ -26,6 +26,8 @@ import (
 
 	"github.com/coby/push-point/backend/internal/queue"
 	"github.com/coby/push-point/backend/internal/store"
+
+	"github.com/coby/push-point/backend/internal/summarizer"
 )
 
 // searchEvalTopN은 MRR을 자르는 순위. hit@1과 함께 낸다 —
@@ -65,7 +67,14 @@ func runSearchEval(args []string) error {
 	}
 	defer db.Close()
 	// 큐는 검색 경로가 안 쓰지만 생성자 계약상 필요하다 — 잡을 돌리지 않는다.
-	st := store.New(db, queue.NewSQLite(db.Writer))
+	//
+	// **사전을 넘긴다.** 이걸 빠뜨리면 하네스가 확장 없는 검색을 재고, 출하품과 다시
+	// 갈라진다 — 열 이름만 맞추고 내용이 갈렸던 그 실수를 반복하는 것이다.
+	dict, _, err := loadEvalDict()
+	if err != nil {
+		return fmt.Errorf("eval-search: 사전 로드 실패: %w", err)
+	}
+	st := store.New(db, queue.NewSQLite(db.Writer), store.WithQueryExpander(func(context.Context) store.QueryExpander { return dict }))
 
 	corpus, err := seedFromGolden(context.Background(), db, dir)
 	if err != nil {
@@ -209,13 +218,24 @@ func seedFromGolden(ctx context.Context, db *store.DB, dir string) (map[string]b
 				return nil, fmt.Errorf("eval-search: 링크 삽입 실패 %s: %w", e.URL, err)
 			}
 			id, _ := res.LastInsertId()
-			// 색인 구성은 런타임(reindexFTS)과 같아야 한다 — title·description·note·tags.
-			// 태그는 golden 라벨을 쓴다: 실제로 태거가 붙였을 값의 상한이고, 태그 검색이
-			// 동작하는지도 함께 재게 된다.
+			// 색인 구성은 런타임(store.reindexFTS)과 **글자 그대로** 같아야 한다.
+			//
+			// 열 이름만 맞추고 내용이 갈렸던 자리다: 런타임은 description 열에
+			// `description + " " + summary`를 넣는데 하네스는 description만 넣었다.
+			// 그래서 `just eval-search`가 **출하품을 4.0점 낮게** 쟀다(hit@1 0.480 대
+			// 실제 0.520). 요약은 본문에서 순수 함수로 나오므로 golden에 필드를 더할
+			// 필요 없이 여기서 같은 함수를 부른다.
+			//
+			// 태그는 golden 라벨을 쓴다: 태거가 붙였을 값의 상한이다. 실제 태거 예측으로
+			// 바꿔 재 봐도 hit@1·MRR이 **정확히 0.000** 움직였다 — 이 25개 질의는 태그
+			// 열로 풀리지 않는다.
+			summary := summarizer.Summarize(e.Snapshot.BodyText, e.Snapshot.Description)
 			if _, err := db.Writer.ExecContext(ctx, `
 				INSERT INTO links_fts (rowid, title, description, note, tags)
 				VALUES (?, ?, ?, '', ?)`,
-				id, e.Snapshot.Title, e.Snapshot.Description, strings.Join(e.ExpectedTags, " ")); err != nil {
+				id, e.Snapshot.Title,
+				strings.TrimSpace(e.Snapshot.Description+" "+summary),
+				strings.Join(e.ExpectedTags, " ")); err != nil {
 				return nil, fmt.Errorf("eval-search: FTS 색인 실패 %s: %w", e.URL, err)
 			}
 		}

@@ -39,14 +39,42 @@ const linkCols = `l.id, l.url, l.domain, l.title, l.description, l.content_type,
 type sqliteStore struct {
 	db *DB
 	q  queue.Queue
+	// 검색 질의를 태그 이름으로 넓히는 다리를 **그때그때 만든다.** nil이면 확장 없이
+	// 동작한다 — 사전을 못 읽는 실행 경로(마이그레이션 도구 등)를 죽이지 않기 위해서다.
+	//
+	// 한 번 만들어 들고 있지 않는 이유: 태그 사전은 앱에서 **편집할 수 있다.** 별칭을
+	// 하나 더해도 검색이 예전 사전을 쓰면, 사용자는 방금 고친 것이 안 먹는다고 느끼고
+	// 원인을 찾을 단서가 없다. 42개짜리 사전을 다시 세우는 비용은 FTS 질의 옆에서 소음이다.
+	newExpander func(context.Context) QueryExpander
+}
+
+// QueryExpander는 검색 질의에서 사전 태그 이름을 뽑는다. `tagger.Dictionary`가 만족한다.
+//
+// **store가 tagger를 import하지 않는 이유가 이 인터페이스다.** 저장소 계층이 NLU에
+// 의존하기 시작하면 둘을 따로 갈아 끼울 수 없게 되고, `.claude/rules/backend.md`의
+// 인터페이스 계약이 그것을 금한다.
+type QueryExpander interface {
+	TagsInQuery(q string) []string
+}
+
+// Option은 New의 선택 인자.
+type Option func(*sqliteStore)
+
+// WithQueryExpander는 검색에 질의 확장을 붙인다. 팩토리를 받는 이유는 위 필드 주석 참조.
+func WithQueryExpander(f func(context.Context) QueryExpander) Option {
+	return func(s *sqliteStore) { s.newExpander = f }
 }
 
 // 컴파일 타임 인터페이스 검증 (.claude/rules/backend.md 인터페이스 계약).
 var _ Store = (*sqliteStore)(nil)
 
 // New는 sqlite Store 구현체를 만든다. 쓰기는 db.Writer, 읽기는 db.Reader를 쓴다.
-func New(db *DB, q queue.Queue) Store {
-	return &sqliteStore{db: db, q: q}
+func New(db *DB, q queue.Queue, opts ...Option) Store {
+	s := &sqliteStore{db: db, q: q}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (s *sqliteStore) Close() error { return s.db.Close() }

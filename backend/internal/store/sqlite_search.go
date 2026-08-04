@@ -14,8 +14,12 @@ import (
 // 공백 분리 토큰이 전부 3자 미만이라 trigram 색인을 탈 수 없는 경우도 LIKE로 폴백한다.
 func (s *sqliteStore) Search(ctx context.Context, q, tag string, from, to *int64, cursor string, limit int) ([]SearchResult, string, SearchMode, error) {
 	q = strings.TrimSpace(q)
-	if utf8.RuneCountInString(q) >= 3 {
-		if match := ftsMatchQuery(q); match != "" {
+	// **3룬 미만이어도 사전이 아는 낱말이면 FTS를 탄다.** `도커`는 두 음절이라 trigram
+	// 색인을 못 타지만 사전이 `devops`를 알고 있고, 그 이름은 색인에 있다. 이 관문이
+	// 길이만 보고 돌려보내면 확장이 구할 수 있는 질의가 랭킹 없는 LIKE 폴백으로 떨어진다
+	// (LIKE 경로는 `ORDER BY created_at DESC`이고 tags 열도 안 본다).
+	if utf8.RuneCountInString(q) >= 3 || s.expandsToTags(ctx, q) {
+		if match := s.ftsMatchExpanded(ctx, q); match != "" {
 			items, next, err := s.searchFTS(ctx, match, tag, from, to, cursor, limit)
 			if err != nil {
 				return nil, "", SearchModeFTS, err
@@ -390,3 +394,49 @@ func (s *sqliteStore) Stats(ctx context.Context) (*Stats, error) {
 // statsWindowDays는 by_day 창의 길이. 클라이언트가 이 값을 가정하지 않도록 계약은
 // "배열 길이"로 말하지만, 서버 쪽 검증에는 상수가 필요하다.
 const statsWindowDays = 30
+
+// ftsMatchExpanded는 질의를 FTS 문자열로 만들되, **사전이 아는 태그 이름을 얹는다.**
+//
+// 왜: trigram의 3룬 하한이 질의 토큰의 52%를 버리는데 하필 한국어 내용어가 2음절이다
+// (`습관 만드는 법` → `만드는`만 남고 주어가 사라진다). 그리고 동결 25질의의 미발견 9건 중
+// 7건이 언어 경계다 — 한국어로 묻고 영어 문서를 찾는다. 사전은 이미 그 다리를 갖고 있다:
+// `쿠버네티스`→`kubernetes`, `습관`→`productivity`. 태거가 값을 치른 것을 검색이 쓰는 것뿐이다.
+//
+// **OR로 얹는다, AND로 조이지 않는다.** 확장은 추가 단서이지 요구 조건이 아니다 —
+// AND에 넣으면 문서가 그 태그를 갖고 있어야만 하게 되어 되던 검색이 나빠진다.
+// 원래 토큰이 하나도 안 남았을 때(3/25 질의)는 확장만으로도 FTS를 탈 수 있게 되어,
+// 랭킹이 아예 없는 LIKE 폴백을 면한다.
+func (s *sqliteStore) ftsMatchExpanded(ctx context.Context, q string) string {
+	base := ftsMatchQuery(q)
+	if s.newExpander == nil {
+		return base
+	}
+	e := s.newExpander(ctx)
+	if e == nil {
+		return base
+	}
+	tags := e.TagsInQuery(q)
+	if len(tags) == 0 {
+		return base
+	}
+	quoted := make([]string, 0, len(tags))
+	for _, t := range tags {
+		quoted = append(quoted, `"`+strings.ReplaceAll(t, `"`, `""`)+`"`)
+	}
+	expansion := strings.Join(quoted, " OR ")
+	if base == "" {
+		return expansion
+	}
+	// (원래 질의) OR (사전 태그) — 원문 일치가 bm25로 여전히 위에 온다.
+	return "(" + base + ") OR (" + expansion + ")"
+}
+
+// expandsToTags는 이 질의가 사전 태그로 넓혀지는지만 본다 — 짧은 질의를 FTS로 보낼지
+// 정하는 관문용이다.
+func (s *sqliteStore) expandsToTags(ctx context.Context, q string) bool {
+	if s.newExpander == nil {
+		return false
+	}
+	e := s.newExpander(ctx)
+	return e != nil && len(e.TagsInQuery(q)) > 0
+}

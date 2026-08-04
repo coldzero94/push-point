@@ -1,6 +1,7 @@
 package tagger
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -161,6 +162,41 @@ func (d *Dictionary) MatchedSurfaces(c Content) map[string]bool {
 					out[phraseKey(dt, ph.tail)] = true
 				}
 			}
+		}
+	}
+	return out
+}
+
+// TagsInQuery는 **검색 질의**에서 사전 태그를 뽑는다.
+//
+// 문서를 분류하는 그 사전에 질의도 통과시킨다. `고랭 제네릭 언제 쓰나`는 `golang`을,
+// `쿠버네티스 하드웨이`는 `kubernetes`를, `습관 만드는 법`은 `productivity`를 낸다.
+// 그 이름들을 FTS 질의에 얹으면 한국어 질의가 영어 문서에 닿는다 — 임베딩도 번역 API도
+// 없이, 태거가 이미 값을 치른 다리를 검색이 건너는 것뿐이다.
+//
+// **왜 필요한가.** 동결된 25개 질의 중 9개가 정답을 상위 10에도 못 올리고, 그중 7개가
+// 언어 경계다(한국어 질의 ↔ 영어 문서). 그리고 trigram의 3룬 하한이 질의 토큰의 52%를
+// 버리는데 하필 한국어 내용어가 2음절이다 — `습관 만드는 법`에서 주어인 `습관`이
+// 사라지고 어미 `만드는`만 남는다. 사전 표면은 그 하한을 지나가지 않으므로 2음절
+// 표면(`습관`, `도커`)도 살아서 태그 이름으로 바뀐다.
+//
+// 점수를 쓰지 않고 **매칭된 태그 이름만** 돌려준다 — 질의는 문서가 아니라 몇 낱말이고,
+// 거기서 TF-IDF를 계산하는 것은 통계가 아니라 소음이다. 순서는 사전 ID 순으로 고정한다
+// (같은 질의가 항상 같은 확장을 내야 캐시도 테스트도 성립한다).
+func (d *Dictionary) TagsInQuery(q string) []string {
+	hits := d.matchField(Tokenize(Normalize(q)))
+	if len(hits) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(hits))
+	for id := range hits {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if name := d.idToName[id]; name != "" {
+			out = append(out, name)
 		}
 	}
 	return out

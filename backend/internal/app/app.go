@@ -21,6 +21,7 @@ import (
 	"github.com/coby/push-point/backend/internal/queue"
 	"github.com/coby/push-point/backend/internal/scraper"
 	"github.com/coby/push-point/backend/internal/store"
+	"github.com/coby/push-point/backend/internal/tagger"
 	"github.com/coby/push-point/backend/internal/thumbs"
 )
 
@@ -95,7 +96,22 @@ func Start(cfg Config, logger *slog.Logger) (*App, error) {
 		return nil, err
 	}
 	q := queue.NewSQLite(db.Writer)
-	st := store.New(db, q)
+	// 검색 질의를 태그 사전으로 넓힌다 — `쿠버네티스`로 물어도 영어 문서에 닿는다.
+	// 사전을 못 읽으면 확장 없이 검색한다: 검색이 조금 나빠지는 것과 검색이 없는 것은
+	// 다르고, 여기서 실패해 앱이 안 뜨면 후자가 된다.
+	var st store.Store
+	st = store.New(db, q, store.WithQueryExpander(func(ctx context.Context) store.QueryExpander {
+		entries, err := st.LoadTagDict(ctx)
+		if err != nil {
+			logger.Warn("검색 질의 확장용 사전 로드 실패 — 확장 없이 검색한다", "err", err)
+			return nil
+		}
+		te := make([]tagger.TagEntry, len(entries))
+		for i, e := range entries {
+			te[i] = tagger.TagEntry{ID: e.ID, Name: e.Name, Aliases: e.Aliases, Facet: e.Facet}
+		}
+		return tagger.BuildDictionary(te)
+	}))
 
 	// 기본은 SSRF 가드 dial(사설/루프백/링크로컬 대상 거부) — 사용자 링크가 내부망으로
 	// 못 나가게 막는다. AllowPrivateHosts면 가드 없는 클라이언트를 주입한다
