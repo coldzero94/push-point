@@ -56,6 +56,17 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `DELETE /api/v1/links/{id}`.
     /// - Remark: Generated from `#/paths//api/v1/links/{id}/delete(deleteLink)`.
     func deleteLink(_ input: Operations.deleteLink.Input) async throws -> Operations.deleteLink.Output
+    /// 오늘의 한 건
+    ///
+    /// 잊고 있던 링크 **하나**를 돌려준다. 저장은 한 탭에 끝나는데 돌아오는 절반은 만든 적이 없었다 — 아카이브의 문은 하나뿐이고 그 문은 늘 최신 것부터 보여준다.
+    /// 고르는 규칙: 아직 한 번도 열지 않았고(`opened_at IS NULL`), 저장한 지 일주일이 지났고, 삭제되지 않은 것. 그중 **하루 동안 같은 하나**를 고른다 — 새로고침할 때마다 바뀌면 그건 추천이 아니라 슬롯머신이고, 오늘 안 읽고 넘긴 것이 내일 다시 오지 않으면 되살리는 의미가 없다.
+    /// 후보가 없으면 `204`다. 빈 카드를 그리지 않기 위해서다 — 아카이브가 작거나 전부 읽은 사용자에게 "오늘의 한 건: 없음"은 알려줄 것이 없는 자리다.
+    /// **횟수를 세거나 순환하지 않는다.** 상태를 새로 만들지 않고 이미 있는 열 (`opened_at`, `created_at`)만 본다. 저장을 열면 그 링크는 후보에서 자연히 빠진다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/links/resurfaced`.
+    /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)`.
+    func getResurfaced(_ input: Operations.getResurfaced.Input) async throws -> Operations.getResurfaced.Output
     /// 열람 기록
     ///
     /// 이 링크를 열었다는 사실만 기록한다(`opened_at`). 클라이언트는 fire-and-forget으로 부르고 실패해도 재시도하지 않는다 — 저장 경로 밖이라 p99 게이트와 무관하고, 한 번 놓친 열람 기록이 아카이브를 손상시키지 않는다.
@@ -233,6 +244,19 @@ extension APIProtocol {
             path: path,
             headers: headers
         ))
+    }
+    /// 오늘의 한 건
+    ///
+    /// 잊고 있던 링크 **하나**를 돌려준다. 저장은 한 탭에 끝나는데 돌아오는 절반은 만든 적이 없었다 — 아카이브의 문은 하나뿐이고 그 문은 늘 최신 것부터 보여준다.
+    /// 고르는 규칙: 아직 한 번도 열지 않았고(`opened_at IS NULL`), 저장한 지 일주일이 지났고, 삭제되지 않은 것. 그중 **하루 동안 같은 하나**를 고른다 — 새로고침할 때마다 바뀌면 그건 추천이 아니라 슬롯머신이고, 오늘 안 읽고 넘긴 것이 내일 다시 오지 않으면 되살리는 의미가 없다.
+    /// 후보가 없으면 `204`다. 빈 카드를 그리지 않기 위해서다 — 아카이브가 작거나 전부 읽은 사용자에게 "오늘의 한 건: 없음"은 알려줄 것이 없는 자리다.
+    /// **횟수를 세거나 순환하지 않는다.** 상태를 새로 만들지 않고 이미 있는 열 (`opened_at`, `created_at`)만 본다. 저장을 열면 그 링크는 후보에서 자연히 빠진다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/links/resurfaced`.
+    /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)`.
+    internal func getResurfaced(headers: Operations.getResurfaced.Input.Headers = .init()) async throws -> Operations.getResurfaced.Output {
+        try await getResurfaced(Operations.getResurfaced.Input(headers: headers))
     }
     /// 열람 기록
     ///
@@ -2685,6 +2709,203 @@ internal enum Operations {
             /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
             ///
             /// - Remark: Generated from `#/paths//api/v1/links/{id}/delete(deleteLink)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 오늘의 한 건
+    ///
+    /// 잊고 있던 링크 **하나**를 돌려준다. 저장은 한 탭에 끝나는데 돌아오는 절반은 만든 적이 없었다 — 아카이브의 문은 하나뿐이고 그 문은 늘 최신 것부터 보여준다.
+    /// 고르는 규칙: 아직 한 번도 열지 않았고(`opened_at IS NULL`), 저장한 지 일주일이 지났고, 삭제되지 않은 것. 그중 **하루 동안 같은 하나**를 고른다 — 새로고침할 때마다 바뀌면 그건 추천이 아니라 슬롯머신이고, 오늘 안 읽고 넘긴 것이 내일 다시 오지 않으면 되살리는 의미가 없다.
+    /// 후보가 없으면 `204`다. 빈 카드를 그리지 않기 위해서다 — 아카이브가 작거나 전부 읽은 사용자에게 "오늘의 한 건: 없음"은 알려줄 것이 없는 자리다.
+    /// **횟수를 세거나 순환하지 않는다.** 상태를 새로 만들지 않고 이미 있는 열 (`opened_at`, `created_at`)만 본다. 저장을 열면 그 링크는 후보에서 자연히 빠진다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/links/resurfaced`.
+    /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)`.
+    internal enum getResurfaced {
+        internal static let id: Swift.String = "getResurfaced"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/links/resurfaced/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.getResurfaced.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.getResurfaced.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.getResurfaced.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.getResurfaced.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/links/resurfaced/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/links/resurfaced/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.Link)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.Link {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.getResurfaced.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.getResurfaced.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 오늘의 한 건
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.getResurfaced.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.getResurfaced.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NoContent: Sendable, Hashable {
+                /// Creates a new `NoContent`.
+                internal init() {}
+            }
+            /// 되살릴 링크가 없다 (본문 없음)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            case noContent(Operations.getResurfaced.Output.NoContent)
+            /// 되살릴 링크가 없다 (본문 없음)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            internal static var noContent: Self {
+                .noContent(.init())
+            }
+            /// The associated value of the enum case if `self` is `.noContent`.
+            ///
+            /// - Throws: An error if `self` is not `.noContent`.
+            /// - SeeAlso: `.noContent`.
+            internal var noContent: Operations.getResurfaced.Output.NoContent {
+                get throws {
+                    switch self {
+                    case let .noContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "noContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)/responses/500`.
             ///
             /// HTTP response code: `500 internalServerError`.
             case internalServerError(Components.Responses.InternalError)

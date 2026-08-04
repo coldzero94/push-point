@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"time"
+
 	"github.com/coby/push-point/backend/internal/api/gen"
 	"github.com/coby/push-point/backend/internal/store"
 )
@@ -424,6 +426,21 @@ func (s *Server) MarkOpened(ctx context.Context, request gen.MarkOpenedRequestOb
 		return nil, err
 	}
 	return gen.MarkOpened204Response{}, nil
+}
+
+// GetResurfaced — 오늘의 한 건. 후보가 없으면 204다.
+//
+// **204이지 빈 카드가 아니다.** 아카이브가 작거나 다 읽은 사용자에게 "오늘의 한 건: 없음"은
+// 알려줄 것이 없는 자리를 차지하는 것이고, 그런 칸은 매일 보면 무시하게 된다.
+func (s *Server) GetResurfaced(ctx context.Context, _ gen.GetResurfacedRequestObject) (gen.GetResurfacedResponseObject, error) {
+	l, err := s.store.Resurfaced(ctx, time.Now().Unix())
+	if err != nil {
+		if errors.Is(err, store.ErrNoResurface) {
+			return gen.GetResurfaced204Response{}, nil
+		}
+		return nil, err
+	}
+	return gen.GetResurfaced200JSONResponse(s.toAPILink(l)), nil
 }
 
 // Search — q 3자 이상 FTS5(mode=fts) / 미만 LIKE 폴백(mode=like). 분기는 store 책임.

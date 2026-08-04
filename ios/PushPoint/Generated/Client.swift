@@ -874,6 +874,118 @@ internal struct Client: APIProtocol {
             }
         )
     }
+    /// 오늘의 한 건
+    ///
+    /// 잊고 있던 링크 **하나**를 돌려준다. 저장은 한 탭에 끝나는데 돌아오는 절반은 만든 적이 없었다 — 아카이브의 문은 하나뿐이고 그 문은 늘 최신 것부터 보여준다.
+    /// 고르는 규칙: 아직 한 번도 열지 않았고(`opened_at IS NULL`), 저장한 지 일주일이 지났고, 삭제되지 않은 것. 그중 **하루 동안 같은 하나**를 고른다 — 새로고침할 때마다 바뀌면 그건 추천이 아니라 슬롯머신이고, 오늘 안 읽고 넘긴 것이 내일 다시 오지 않으면 되살리는 의미가 없다.
+    /// 후보가 없으면 `204`다. 빈 카드를 그리지 않기 위해서다 — 아카이브가 작거나 전부 읽은 사용자에게 "오늘의 한 건: 없음"은 알려줄 것이 없는 자리다.
+    /// **횟수를 세거나 순환하지 않는다.** 상태를 새로 만들지 않고 이미 있는 열 (`opened_at`, `created_at`)만 본다. 저장을 열면 그 링크는 후보에서 자연히 빠진다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/links/resurfaced`.
+    /// - Remark: Generated from `#/paths//api/v1/links/resurfaced/get(getResurfaced)`.
+    internal func getResurfaced(_ input: Operations.getResurfaced.Input) async throws -> Operations.getResurfaced.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.getResurfaced.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/links/resurfaced",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.getResurfaced.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.Link.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 204:
+                    return .noContent(.init())
+                case 401:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Components.Responses.Unauthorized.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unauthorized(.init(body: body))
+                case 500:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Components.Responses.InternalError.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .internalServerError(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
     /// 열람 기록
     ///
     /// 이 링크를 열었다는 사실만 기록한다(`opened_at`). 클라이언트는 fire-and-forget으로 부르고 실패해도 재시도하지 않는다 — 저장 경로 밖이라 p99 게이트와 무관하고, 한 번 놓친 열람 기록이 아카이브를 손상시키지 않는다.

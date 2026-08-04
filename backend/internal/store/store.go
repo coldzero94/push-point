@@ -295,6 +295,11 @@ type Store interface {
 	// 목록 정렬과 "수정됨"의 의미가 함께 흔들린다.
 	MarkOpened(ctx context.Context, linkID int64) error
 
+	// Resurfaced는 잊고 있던 링크 하나를 고른다. 후보가 없으면 ErrNoResurface.
+	// now를 인자로 받는 이유는 "하루 동안 같은 하나"라는 규칙이 시계에 달려 있어서다 —
+	// 테스트가 날짜를 넘겨 가며 답이 바뀌는지 확인할 수 있어야 한다.
+	Resurfaced(ctx context.Context, now int64) (Link, error)
+
 	// CorpusDF는 자체 코퍼스의 문서 빈도 스냅샷을 돌려준다 (표면 → df, 그리고 문서 수).
 	// 태거 IDF의 입력이다.
 	CorpusDF(ctx context.Context) (docs int64, df map[string]int64, err error)

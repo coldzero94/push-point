@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import { useResurfaced } from '../hooks/useResurfaced'
 import { Search } from 'lucide-react'
 import { useLinks } from '../hooks/useLinks'
 import { useTags } from '../hooks/useTags'
@@ -75,6 +76,7 @@ export function ListScreen() {
   const create = useCreateLink()
   const toast = useToast()
   const queryClient = useQueryClient()
+  const resurfaced = useResurfaced()
 
   const facetOf = makeFacetResolver(tagsQuery.data)
   const links = data?.pages.flatMap((p) => p.links) ?? []
@@ -219,6 +221,29 @@ export function ListScreen() {
               {t('common.tryAgain')}
             </Button>
           </div>
+        ) : null}
+
+        {/* 오늘의 한 건 — 잊고 있던 링크 하나. 후보가 없으면 서버가 204를 주고 아무것도
+            그리지 않는다. **빈 자리를 만들지 않는 것이 규칙이다** — "오늘은 없습니다"는
+            매일 보면 무시하게 되는 칸이고, 그러면 진짜 있는 날에도 안 보인다.
+
+            필터나 검색이 걸린 화면에서는 숨긴다. 사용자가 좁혀 놓은 결과 맨 위에 그와
+            무관한 카드를 끼우면 그건 되살리기가 아니라 방해다. */}
+        {!isPending && !isError && !tag && resurfaced.data ? (
+          <section className="mb-32">
+            <TimeSpine label={t('resurface.spine')} count={1} />
+            <ul className={BOARD_GRID}>
+              <LinkCard
+                link={resurfaced.data}
+                resolveFacet={facetOf}
+                selected={link === resurfaced.data.id}
+                activeTag={tag}
+                onOpen={openInspector}
+                onTagClick={toggleTag}
+                onRetry={(x) => retry.mutate(x.id)}
+              />
+            </ul>
+          </section>
         ) : null}
 
         {/* Board — one section per time group: spine header, then cards. */}

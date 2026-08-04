@@ -110,9 +110,13 @@ final class BoardUITests: XCTestCase {
 
     /// 두 글자 이하는 400이 아니라 LIKE 폴백이고(계약), 화면은 그 사실을 말해야 한다.
     /// 결과가 적은 이유를 모르면 사용자는 "없구나"로 읽고 검색을 그만둔다.
+    ///
+    /// **사전에 없는 낱말을 써야 한다.** 예전에는 `쿠버`였는데, 그건 `kubernetes`의
+    /// 별칭이라 질의 확장이 생긴 뒤로는 정당하게 FTS를 탄다 — 안내가 안 뜨는 것이 맞다.
+    /// 사전이 아는 짧은 낱말은 이 규칙의 예외이고, 그걸로 규칙을 재면 예외를 재게 된다.
     func testShortQueryExplainsTheFallback() {
         XCTAssertTrue(waitForCard(Fixture.kube))
-        search(for: "쿠버")
+        search(for: "운영")
         XCTAssertTrue(element("search.likeNotice").waitForExistence(timeout: 5),
                       "LIKE 폴백 안내가 없다")
     }
