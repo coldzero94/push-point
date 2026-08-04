@@ -20,7 +20,8 @@ func (s *sqliteStore) Search(ctx context.Context, q, tag string, from, to *int64
 	// (LIKE 경로는 `ORDER BY created_at DESC`이고 tags 열도 안 본다).
 	if utf8.RuneCountInString(q) >= 3 || s.expandsToTags(ctx, q) {
 		if match := s.ftsMatchExpanded(ctx, q); match != "" {
-			items, next, err := s.searchFTS(ctx, match, tag, from, to, cursor, limit)
+			terms := s.coverageTerms(ctx, q)
+			items, next, err := s.searchFTSCovered(ctx, match, terms, tag, from, to, cursor, limit)
 			if err != nil {
 				return nil, "", SearchModeFTS, err
 			}
@@ -39,7 +40,7 @@ func (s *sqliteStore) Search(ctx context.Context, q, tag string, from, to *int64
 			// 재시도 판정은 질의만 보고 결정되므로 페이지를 넘어가도 같은 모드가 유지된다.
 			if len(items) == 0 && cursor == "" {
 				if orMatch := ftsMatchQueryAny(q); orMatch != match {
-					items, next, err = s.searchFTS(ctx, orMatch, tag, from, to, cursor, limit)
+					items, next, err = s.searchFTSCovered(ctx, orMatch, terms, tag, from, to, cursor, limit)
 					return items, next, SearchModeFTS, err
 				}
 			}
@@ -103,7 +104,22 @@ func ftsMatchQueryAny(q string) string {
 // ORDER BY rank, id ASC이므로 WHERE (rank, id) > (?, ?)로 이어 읽는다.
 // bm25는 코퍼스 전역 통계에 의존하므로 페이지 사이에 쓰기가 발생하면 페이지 경계가
 // 이동할 수 있다 (단일 사용자 규모에서 허용 — 06 §6 참조).
-func (s *sqliteStore) searchFTS(ctx context.Context, match, tag string, from, to *int64, cursor string, limit int) ([]SearchResult, string, error) {
+
+// coverageBoost는 커버리지 한 칸이 rank에서 갖는 무게다. bm25는 대략 -20~0 범위라
+// 이 값이면 **낱말을 하나라도 더 덮은 문서가 항상 앞선다** — 순위 안에서 커버리지가
+// 1차 기준, bm25가 동점 처리기가 된다.
+const coverageBoost = 1000.0
+
+// searchFTSCovered는 FTS 검색에 **커버리지 재랭킹**을 얹는다.
+//
+// **왜.** bm25는 한 낱말이 여러 번 나오는 문서를 여러 낱말을 한 번씩 덮는 문서보다 위에
+// 놓을 수 있다. 사람이 여러 낱말로 물을 때 원하는 건 그 반대다 — `판다스 10분 입문`에서
+// `10`만 스무 번 나오는 문서가 아니라 셋 다 스치는 문서다. 동결 25질의에서 정답이 상위
+// 10에는 있는데 1위가 아닌 경우가 6건이고, 그게 이 형태다.
+//
+// **rank 값 안에 넣는다.** 별도 정렬 키로 두면 커서((rank,id))를 바꿔야 하고, 그러면
+// 페이지 경계에서 순서가 흔들린다. 한 float 안에 접으면 기존 커서가 그대로 성립한다.
+func (s *sqliteStore) searchFTSCovered(ctx context.Context, match string, terms []string, tag string, from, to *int64, cursor string, limit int) ([]SearchResult, string, error) {
 	var (
 		sb   strings.Builder
 		args []any
@@ -112,9 +128,24 @@ func (s *sqliteStore) searchFTS(ctx context.Context, match, tag string, from, to
 	// 여기만 옛 목록으로 남는데, **두 사본의 개수가 서로 맞아떨어져서 Scan이 통과한다** —
 	// 목록은 새 값을 내고 검색만 조용히 빈 값을 낸다. 실측으로 그 상태를 재현했고
 	// 이 한 줄이면 같은 실수가 기존 테스트 4개에서 arity 불일치로 시끄럽게 터진다.
+	// 커버리지: 질의 낱말 중 몇 개가 이 문서의 색인 텍스트에 실제로 있는지.
+	// FTS5는 "몇 개의 서로 다른 낱말이 맞았나"를 안 알려주므로 낱말마다 instr을 센다.
+	rankExpr := "bm25(links_fts)"
+	var covArgs []any
+	if len(terms) > 0 {
+		var cov strings.Builder
+		for range terms {
+			cov.WriteString(` + (CASE WHEN instr(lower(links_fts.title || ' ' || links_fts.description || ' ' || links_fts.tags), ?) > 0 THEN 1 ELSE 0 END)`)
+		}
+		for _, t := range terms {
+			covArgs = append(covArgs, strings.ToLower(t))
+		}
+		rankExpr = fmt.Sprintf("bm25(links_fts) - %g * (0%s)", coverageBoost, cov.String())
+	}
 	sb.WriteString(`SELECT * FROM (
-		SELECT ` + linkCols + `, bm25(links_fts) AS rank
+		SELECT ` + linkCols + `, ` + rankExpr + ` AS rank
 		FROM links_fts JOIN links l ON l.id = links_fts.rowid`)
+	args = append(args, covArgs...)
 	if tag != "" {
 		sb.WriteString(` JOIN link_tags lt ON lt.link_id = l.id JOIN tags t ON t.id = lt.tag_id`)
 	}
@@ -439,4 +470,38 @@ func (s *sqliteStore) expandsToTags(ctx context.Context, q string) bool {
 	}
 	e := s.newExpander(ctx)
 	return e != nil && len(e.TagsInQuery(q)) > 0
+}
+
+// coverageTerms는 커버리지를 셀 낱말을 모은다: 질의의 원래 낱말 + 사전이 넓힌 태그 이름.
+//
+// **3룬 하한을 여기서는 적용하지 않는다.** 그 하한은 trigram 색인이 짧은 토큰을 못 찾기
+// 때문에 MATCH 쪽에 있는 것이고, 커버리지는 `instr`로 직접 세므로 2음절도 셀 수 있다.
+// `습관 만드는 법`에서 MATCH는 `만드는`만 쓰지만, 커버리지는 `습관`이 있는 문서를
+// 위로 올린다 — 하한이 버린 정보를 순위에서 되찾는 자리다.
+func (s *sqliteStore) coverageTerms(ctx context.Context, q string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(t string) {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if t == "" || seen[t] {
+			return
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	for _, tok := range strings.Fields(q) {
+		add(tok)
+	}
+	if s.newExpander != nil {
+		if e := s.newExpander(ctx); e != nil {
+			for _, t := range e.TagsInQuery(q) {
+				add(t)
+			}
+		}
+	}
+	// 낱말이 하나뿐이면 커버리지는 모든 결과에 같은 값이라 순서를 못 바꾼다 — 비용만 든다.
+	if len(out) < 2 {
+		return nil
+	}
+	return out
 }

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"slices"
 	"testing"
 )
 
@@ -118,3 +119,22 @@ func TestFtsMatchExpanded(t *testing.T) {
 type fakeExpander []string
 
 func (f fakeExpander) TagsInQuery(string) []string { return f }
+
+// 커버리지 낱말 모으기. **3룬 하한을 적용하지 않는 것이 요점이다** — MATCH가 버린
+// 2음절 낱말을 순위에서 되찾는 자리라, 여기서 같이 버리면 재랭킹이 할 일이 없어진다.
+func TestCoverageTerms(t *testing.T) {
+	s := &sqliteStore{newExpander: func(context.Context) QueryExpander {
+		return fakeExpander{"productivity"}
+	}}
+	got := s.coverageTerms(context.Background(), "습관 만드는 법")
+	want := []string{"습관", "만드는", "법", "productivity"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("coverageTerms = %v, want %v", got, want)
+	}
+
+	// 낱말이 하나면 모든 결과의 커버리지가 같아 순서를 못 바꾼다 — 비용만 든다.
+	s.newExpander = func(context.Context) QueryExpander { return fakeExpander(nil) }
+	if got := s.coverageTerms(context.Background(), "쿠버네티스"); got != nil {
+		t.Fatalf("낱말 하나면 재랭킹을 걸지 않아야 한다: %v", got)
+	}
+}
