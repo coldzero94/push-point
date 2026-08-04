@@ -57,6 +57,11 @@ enum UITestMode {
         // `droppedNotices`와 같은 부류이고 키만 다르다. 격리를 키마다 따로 기억해야 하는
         // 구조 자체가 위험이라, 새 `@AppStorage`를 추가하면 여기도 함께 늘려야 한다.
         UserDefaults.standard.removeObject(forKey: "pushpoint.density")
+        // **언어도 지운다.** `L.set`이 같은 suite에 쓰므로, 지우지 않으면 앱에서 마지막에
+        // 고른 언어로 테스트가 뜬다 — 실행마다 화면 언어가 달라지는 스위트가 된다.
+        // 지금은 어느 단정도 문구를 읽지 않아 결과가 흔들리진 않지만, 비결정성을 남겨 두면
+        // 다음에 문구를 읽는 케이스가 생겼을 때 원인을 찾는 데 시간이 든다.
+        UserDefaults.standard.removeObject(forKey: "pushpoint.lang")
 
         guard let d = AppGroup.defaults else { return }
         let seeded = ProcessInfo.processInfo.arguments
@@ -85,6 +90,11 @@ enum UITestMode {
     ///
     /// 일부러 서로 다르게 만든다: 태그가 붙는 것과 안 붙는 것, 한국어와 영어, 메모가
     /// 있는 것과 없는 것. 전부 같은 모양이면 화면이 무엇을 잘못 그려도 테스트가 못 잡는다.
+    ///
+    /// **순서가 곧 계약이다.** `dataDirectory()`가 매 실행 DB를 지우고 아래 순서대로
+    /// 한 건씩 POST하므로 id가 1부터 이 배열 순서로 붙는다. UI 테스트는 카드를 표시
+    /// 문구가 아니라 `link.card.<id>`로 겨냥하므로(§ui-verification), 이 배열의 순서를
+    /// 바꾸면 `BoardUITests.Fixture`도 함께 고쳐야 한다.
     static let fixtures: [(url: String, title: String, description: String, body: String, keywords: String)] = [
         ("https://uitest.example/kube",
          "쿠버네티스 프로덕션 운영 가이드",

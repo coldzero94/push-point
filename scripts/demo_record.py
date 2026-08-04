@@ -60,6 +60,12 @@ def drive(flow, udid, out):
             run(["axe", "tap", "-x", str(x), "-y", str(y), "--udid", udid])
             events.append({"t": at, "kind": "tap", "x": x, "y": y,
                            "dur": time.time() - t0 - at})
+        elif kind == "type_paste":
+            # **키보드를 안 거친다.** `axe type`은 US HID 키코드뿐이라 한글이 안 들어간다
+            # (scripts/sim_type.sh 주석 참고). 페이스트보드로 넣으면 IME를 지나가고,
+            # stream 모드는 한 글자씩 나타나 실제 타이핑처럼 보인다.
+            run(["bash", "scripts/sim_type.sh", "--mode", step.get("mode", "stream"),
+                 "--udid", udid, step["text"]])
         elif kind == "type":
             run(["axe", "type", step["text"], "--udid", udid])
         elif kind == "open":
@@ -161,6 +167,101 @@ def camera(t, acts, W, H):
         py = min(max(py, vh / 2), H - vh / 2)
         return (px, py, z)
     return None
+
+
+def window(c, W, H):
+    """카메라 값 하나(중심·배율)를 원본 위의 크롭 사각형으로 바꾼다.
+
+    **이 식은 `demo_check.to_source`가 그대로 뒤집는 식이다.** 검사기는 `<out>.camera.json`과
+    `<out>.zoom.json`만 보고 커서가 그려진 자리를 원본 좌표로 되돌리는데, 여기서 한 픽셀이라도
+    다른 규칙으로 자르면 검사기가 멀쩡한 영상을 틀렸다고 하거나(그럼 사람이 검사기를 끈다)
+    틀린 영상을 통과시킨다. 두 파일을 고칠 일이 있으면 이 함수부터 맞춰 보라.
+
+    딱 한 군데 어긋난다. 실제 확대율은 `W/w2`인데 검사기는 `z`로 나눈다 — `w2`를 짝수로
+    깎느라 생긴 0.2% 차이다. 탭 지점은 화면 한가운데 근처라 오차가 0.3pt 안쪽이고(실측),
+    허용치 12pt에 한참 못 미친다. `w2`를 반올림해 차이를 더 줄일 수도 있지만, 그러면 이
+    함수가 `to_source`와 한 줄씩 대조되지 않는다. 대조되는 쪽을 택했다.
+    """
+    cx, cy, z = c
+    w2 = int(W / z) // 2 * 2     # yuv420p가 홀수 크기를 안 받아서 짝수로 맞춘다
+    h2 = int(H / z) // 2 * 2
+    x0 = min(max(cx - w2 / 2, 0), W - w2)
+    y0 = min(max(cy - h2 / 2, 0), H - h2)
+    return x0, y0, w2, h2
+
+
+def render_camera(video, cursor_dir, cam, out, W, H, fps):
+    """커서를 얹은 화면을 카메라 궤적대로 잘라 키워서 최종 영상으로 낸다.
+
+    **ffmpeg 필터 한 줄로는 안 된다.** 두 갈래를 다 재 보고 남은 길이다(2026-08-04 실측).
+
+    - `sendcmd`+`crop`: `crop`은 `w`/`h`를 런타임 명령으로 못 바꾼다(exit 234). 크기를 고정하고
+      위치만 움직이면 명령은 받지만, 그러면 배율이 구간 내내 상수라 줌인·줌아웃이 아니라
+      컷 전환이 된다.
+    - `zoompan`: 줌 자체는 된다. 하지만 프레임마다 다른 중심·배율을 넣을 통로가 표현식밖에
+      없고, 1413프레임짜리 궤적을 `between(on,i,i)*v` 합으로 적으면 34KB 표현식이 되어
+      필터 초기화가 ENOMEM으로 죽는다(exit 244).
+
+    그래서 크롭을 PIL로 한다. ffmpeg는 잘하는 일(디코드·커서 합성·인코드)만 맡고, 프레임마다
+    달라지는 사각형은 파이썬이 계산한다. 원본에서 바로 자르므로 평면 영상을 한 번 인코딩했다가
+    다시 늘리는 세대 손실도 없다 — 830px 폭을 1206px로 키우는 그림이라 손실이 그대로 보인다.
+
+    `Image.transform`을 쓰는 이유는 크롭 좌표가 정수가 아니어서다. `crop()`은 정수만 받아
+    들어가고 나오는 동안 카메라가 1px씩 튀는데, 아핀 변환은 실수 좌표를 그대로 받아 한 번에
+    잘라 키운다.
+    """
+    from PIL import Image
+
+    dec = subprocess.Popen([
+        "ffmpeg", "-v", "error", "-i", video,
+        "-framerate", str(fps), "-i", str(cursor_dir / "c%05d.png"),
+        "-filter_complex", f"[0:v]fps={fps}[v];[v][1:v]overlay=0:0:shortest=0[o]",
+        "-map", "[o]", "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+    ], stdout=subprocess.PIPE)
+    enc = subprocess.Popen([
+        "ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24",
+        "-s", f"{W}x{H}", "-framerate", str(fps), "-i", "-",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+        "-pix_fmt", "yuv420p", out,
+    ], stdin=subprocess.PIPE)
+
+    size = W * H * 3
+    i, done = 0, False
+    try:
+        while True:
+            buf = dec.stdout.read(size)       # BufferedReader는 EOF가 아니면 size만큼 채운다
+            if len(buf) < size:
+                break
+            c = cam[i] if i < len(cam) else None
+            if c is None:
+                enc.stdin.write(buf)          # 줌이 없는 프레임은 손대지 않는다
+            else:
+                x0, y0, w2, h2 = window(c, W, H)
+                im = Image.frombuffer("RGB", (W, H), buf, "raw", "RGB", 0, 1)
+                enc.stdin.write(im.transform(
+                    (W, H), Image.AFFINE, (w2 / W, 0, x0, 0, h2 / H, y0),
+                    resample=Image.BICUBIC).tobytes())
+            i += 1
+        done = True
+    finally:
+        # 중간에 튕겨 나갈 때는 파이프를 닫기 **전에** 죽인다. 그냥 닫으면 디코더가
+        # broken pipe를 진짜 오류로 뱉어서, 되돌아갈 준비가 된 상황인데도 콘솔에는
+        # 무언가 망가진 것처럼 찍힌다.
+        if not done:
+            dec.kill()
+            enc.kill()
+        try:
+            enc.stdin.close()
+        except BrokenPipeError:
+            pass
+        dec.stdout.close()
+        dec.wait()
+        enc.wait()
+    if i == 0:
+        raise RuntimeError("디코더가 프레임을 하나도 안 냈다")
+    if dec.returncode or enc.returncode:
+        raise RuntimeError(f"ffmpeg 실패 (디코드 {dec.returncode}, 인코드 {enc.returncode})")
+    return i
 
 
 def measure_lag(video, events):
@@ -313,69 +414,41 @@ def overlay(video, events, out):
 
     # 카메라 궤적을 남긴다 — 검사기가 크롭을 되돌리려면 이 값이 필요하고, 눈으로
     # 확인할 때도 어느 프레임이 줌 상태인지 알아야 한다.
+    # 반올림한 값으로 렌더까지 한다 — 검사기가 읽는 숫자와 실제로 자른 숫자가 같아야
+    # 검증이 근사가 아니라 검증이 된다.
     cam = [camera(i / fps + lag, acts, W, H) for i in range(frames)]
-    pathlib.Path(out + ".camera.json").write_text(json.dumps(
-        [None if c is None else [round(c[0], 2), round(c[1], 2), round(c[2], 4)] for c in cam]))
+    cam = [None if c is None else [round(c[0], 2), round(c[1], 2), round(c[2], 4)] for c in cam]
+    pathlib.Path(out + ".camera.json").write_text(json.dumps(cam))
     zs_ = [c[2] for c in cam if c is not None]
     pathlib.Path(out + ".zoom.json").write_text(json.dumps(max(zs_) if zs_ else 1.0))
 
-    flat = "/tmp/pp-flat.mp4"
-    subprocess.run([
-        "ffmpeg", "-v", "error", "-y", "-i", video,
-        "-framerate", str(fps), "-i", str(tmp / "c%05d.png"),
-        "-filter_complex", "[0:v]fps=30[v];[v][1:v]overlay=0:0:shortest=0[o]",
-        "-map", "[o]", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
-        "-pix_fmt", "yuv420p", flat,
-    ], check=True)
+    def flatten():
+        """줌 없이 커서만 얹어 낸다 — 카메라가 실패했을 때 돌아갈 자리."""
+        subprocess.run([
+            "ffmpeg", "-v", "error", "-y", "-i", video,
+            "-framerate", str(fps), "-i", str(tmp / "c%05d.png"),
+            "-filter_complex", f"[0:v]fps={fps}[v];[v][1:v]overlay=0:0:shortest=0[o]",
+            "-map", "[o]", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+            "-pix_fmt", "yuv420p", out,
+        ], check=True)
 
     if not any(c is not None for c in cam):
-        pathlib.Path(flat).replace(out)
+        flatten()
         return
 
-    # 프레임마다 다른 크롭이라 ffmpeg 필터 한 줄로는 안 되고, sendcmd로 crop 파라미터를
-    # 매 프레임 바꾼다. 짝수로 맞추는 이유는 yuv420p가 홀수 크기를 받지 않아서다.
-    cmds = []
-    for i, c in enumerate(cam):
-        t = i / fps
-        if c is None:
-            w2, h2, x2, y2 = W, H, 0, 0
-        else:
-            cx, cy, z = c
-            w2 = int(W / z) // 2 * 2
-            h2 = int(H / z) // 2 * 2
-            x2 = int(min(max(cx - w2 / 2, 0), W - w2)) // 2 * 2
-            y2 = int(min(max(cy - h2 / 2, 0), H - h2)) // 2 * 2
-        cmds.append(f"{t:.4f} crop w {w2}, {t:.4f} crop h {h2}, "
-                    f"{t:.4f} crop x {x2}, {t:.4f} crop y {y2};")
-    # **크롭은 고정 크기로 하고 위치만 움직인다.** `sendcmd`는 crop의 w/h를 런타임에
-    # 바꾸지 못한다(실측: exit 234). 그래서 배율은 구간 안에서 일정하게 두고 부드러움은
-    # 위치 이동과 앞뒤 페이드에 맡긴다.
-    zs = [c[2] for c in cam if c is not None]
-    z = max(zs) if zs else 1.0
-    cw, ch = int(W / z) // 2 * 2, int(H / z) // 2 * 2
-    cmds = []
-    for i, c in enumerate(cam):
-        t = i / fps
-        if c is None:
-            x2, y2 = (W - cw) // 2, (H - ch) // 2
-        else:
-            cx, cy, _ = c
-            x2 = int(min(max(cx - cw / 2, 0), W - cw)) // 2 * 2
-            y2 = int(min(max(cy - ch / 2, 0), H - ch)) // 2 * 2
-        cmds.append(f"{t:.4f} crop x {x2}, {t:.4f} crop y {y2};")
-    cmd_file = "/tmp/pp-cam.cmd"
-    pathlib.Path(cmd_file).write_text("\n".join(cmds))
-    r = subprocess.run([
-        "ffmpeg", "-v", "error", "-y", "-i", flat,
-        "-vf", f"sendcmd=f={cmd_file},crop={cw}:{ch}:0:0,scale={W}:{H}:flags=bicubic",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", out,
-    ])
-    if r.returncode != 0:
+    try:
+        n = render_camera(video, tmp, cam, out, W, H, fps)
+        zoomed = sum(1 for c in cam if c is not None)
+        print(f"  카메라 합성 완료 · {n}프레임 중 {zoomed}프레임 줌 (최대 {max(zs_):.2f}배)")
+    except Exception as exc:
         # **줌이 실패하면 줌 없이 낸다.** 카메라는 장식이고 커서는 내용이다 —
-        # 장식 때문에 결과물이 없어지면 안 된다.
-        print("  경고: 카메라 합성 실패 — 줌 없이 낸다")
-        pathlib.Path(flat).replace(out)
+        # 장식 때문에 결과물이 없어지면 안 된다. 궤적 파일도 같이 비운다:
+        # 줌이 안 걸린 영상에 궤적이 남아 있으면 `demo_check`가 걸지도 않은 크롭을
+        # 되돌리면서 멀쩡한 커서를 틀렸다고 한다.
+        print(f"  경고: 카메라 합성 실패({exc}) — 줌 없이 낸다")
+        flatten()
         pathlib.Path(out + ".camera.json").write_text("[]")
+        pathlib.Path(out + ".zoom.json").write_text("1.0")
 
 
 if __name__ == "__main__":

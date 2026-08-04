@@ -29,7 +29,7 @@ export const COPY = {
 
     'demo.title': 'Reading something. Two taps. It is filed.',
     'demo.body':
-      'You never leave the page. A notification says it is saved and shows the tags it already worked out — frontend, javascript, dev — and Safari is exactly where you left it. Tap that notification and the link opens on its own screen, note field waiting. No app to open first, no form, nothing to come back to. The extension writes straight to the shared database, so it finishes in airplane mode too. This save took 71 ms.',
+      'You never leave the page. A notification says it is saved and shows the tags it already worked out — frontend, javascript, dev — and Safari is exactly where you left it. Tap that notification and the link opens on its own screen, where you add the one line about why you kept it. No app to open first, no form, nothing to come back to. The extension writes straight to the shared database, so it finishes in airplane mode too. This save took 71 ms.',
     'demo.caption': 'A real simulator recording. The app in it is running Korean — the screenshots beside it show both. Every tap in the video is checked against the recorded coordinates before it ships: the previous version drew its cursor somewhere other than where it tapped, and nobody caught it until a human watched.',
 
     'num.title': 'Numbers, measured',
@@ -108,7 +108,7 @@ export const COPY = {
 
     'demo.title': '보다가, 두 번 누르면, 정리까지 끝',
     'demo.body':
-      '페이지를 떠나지 않습니다. 알림이 저장됐다고 알려주면서 이미 붙은 태그(frontend · javascript · dev)까지 보여주고, 사파리는 있던 그대로입니다. 그 알림을 누르면 링크가 자기 화면으로 열리고 메모 칸이 기다립니다. 먼저 열 앱도, 채울 입력란도, 나중에 할 일도 없습니다. 확장이 공유 데이터베이스에 직접 쓰므로 비행기 모드에서도 끝납니다. 이 저장은 71 ms 걸렸습니다.',
+      '페이지를 떠나지 않습니다. 알림이 저장됐다고 알려주면서 이미 붙은 태그(frontend · javascript · dev)까지 보여주고, 사파리는 있던 그대로입니다. 그 알림을 누르면 링크가 자기 화면으로 열리고, 거기서 왜 담았는지 한 줄을 씁니다. 먼저 열 앱도, 채울 입력란도, 나중에 할 일도 없습니다. 확장이 공유 데이터베이스에 직접 쓰므로 비행기 모드에서도 끝납니다. 이 저장은 71 ms 걸렸습니다.',
     'demo.caption': '실제 시뮬레이터 녹화입니다. 영상 속 앱은 한국어로 돌고 있고, 옆의 스크린샷은 두 언어를 다 보여줍니다. 영상의 모든 탭은 올리기 전에 기록된 좌표와 대조합니다 — 이전 판본이 실제로 누른 자리와 다른 곳에 커서를 그렸고, 사람이 볼 때까지 아무도 못 잡았습니다.',
 
     'num.title': '숫자는 재서 넣었다',

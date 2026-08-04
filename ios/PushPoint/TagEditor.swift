@@ -60,6 +60,7 @@ struct TagEditor: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(t("common.cancel")) { dismiss() }
+                        .accessibilityIdentifier("tagEditor.cancel")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(t("common.done")) {
@@ -70,6 +71,10 @@ struct TagEditor: View {
                     }
                     .fontWeight(.semibold)
                     .disabled(selected == Set(current))
+                    // 시트가 열렸다는 것을 **네비게이션 바 제목("태그")이 아니라**
+                    // 이 버튼으로 판정한다. 바 제목은 곧 표시 문구라 언어를 타는데,
+                    // 확인 버튼은 이 시트에만 있고 잠김 여부까지 함께 볼 수 있다.
+                    .accessibilityIdentifier("tagEditor.done")
                 }
             }
         }

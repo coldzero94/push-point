@@ -67,19 +67,50 @@ Count the lines in `save-timing.jsonl` before and after. A missed tap and a cras
 extension both produce "no new row", and neither produces an error. Reading the last line
 without comparing counts will show you the *previous* run's success and you will believe it.
 
-## Typing does not work — stop trying it
+## Typing: `axe type` cannot, the pasteboard can
 
-`axe type` produced jamo for English text under a Korean IME, and then **nothing at all**
-for Korean text after `defaults write .GlobalPreferences AppleKeyboards` and a full
-simulator reboot. Three attempts, three different keyboard configurations, no text in the
-field either way.
+**Use `scripts/sim_type.sh`.** Text entry on camera works; three earlier attempts failed
+because they all went through `axe type`, and `axe type` is the one route that cannot work.
 
-**End the recording where the field opens.** Shipping `포ㅏ ㅣ ㄴㅁ으ㅐ` to demonstrate
-note-taking is worse than not demonstrating it, and that exact frame went out once.
+`axe type --help` says it outright: *"Only US keyboard characters are supported via HID
+keycodes."* It presses physical keys. So the simulator's hardware input mode decides what
+lands, and that is not something the text is consulted about:
 
-If text entry genuinely has to be on camera, the route to try is XCUITest
-(`app.textFields[...].typeText`) driving the app while `recordVideo` runs — it types
-through the accessibility layer rather than the keyboard. Not attempted yet.
+- English text with the Korean IME active → `axe type "Hello demo"` put `ㅗㄷ| |ㅐ ㅇㄷㅔ`
+  in the field. Verified again on 2026-08-04, so the old note was right about the symptom.
+- Korean text → nothing, ever. There is no HID keycode for `팀`. Rewriting
+  `AppleKeyboards` and rebooting cannot conjure one; the setting was never the problem.
+- `Ctrl+Space` (`axe key-combo --modifiers 224 --key 44`) does flip the input mode — once.
+  It is a cycle with no readable state, and the second attempt an hour later typed jamo
+  again. Do not build a flow on it.
+
+The way in is the **device pasteboard**, which does not touch the IME:
+`xcrun simctl pbcopy booted` then a paste. Korean, English, em-dash and emoji all arrive
+intact. The field must already be first responder — tap it first (**points**, 402×874).
+
+```
+scripts/sim_type.sh --tap 201,608 '나중에 팀에 공유할 것'          # paste   — instant, invisible
+scripts/sim_type.sh --mode menu --tap 201,608 '주말에 정리해서…'   # menu    — long-press → 붙여넣기
+scripts/sim_type.sh --mode stream '주말에 정리해서 팀 위키로'       # stream  — types out, 0.32 s/char
+scripts/sim_type.sh --mode stream-exact 'Read this later — 팀 공유'
+```
+
+**For the camera, `--mode menu`.** It long-presses the field, finds `붙여넣기` in the
+Maestro hierarchy (the menu follows the caret, so a fixed coordinate misses) and taps it —
+a real finger action the cursor compositor can point at. Everything else changes the field
+with no on-screen cause, and note that the software keyboard never appears at all while a
+hardware keyboard is connected, so there is nothing keyboard-shaped to film.
+
+`--mode stream` is the typing animation, and it is **Korean-only**: iOS smart-insert treats
+each pasted fragment as a word, adds a space before it and strips real space characters, so
+`Read this later` streams in as `R e a d t h i s l a t e r`. `--mode stream-exact` re-pastes
+the whole prefix each step and is correct for any script, but Cmd+A leaves the selection
+highlight and its green grab handles in the frame — 2 of 80 frames in a test recording.
+Latin text on camera: use `menu` or `paste`.
+
+Confirm it landed in the app, not just on the screen: after tapping `메모 저장`,
+`sqlite3 <AppGroup>/data/pushpoint.db "select note from links where id=21"` returned
+`Read this later — 팀 공유`.
 
 ## Language
 
@@ -106,12 +137,44 @@ rather than pumping in and out. The target sits slightly above centre so the sur
 screen is still readable — a finger pinned dead centre shows what was pressed but loses
 where it was.
 
-**The ffmpeg side is not finished.** `sendcmd` cannot change `crop`'s `w`/`h` at runtime
-(exit 234), so the crop is a fixed size and only its position moves; that still fails on
-this ffmpeg build and the compositor falls back to no zoom, with a warning. The fallback
-is deliberate — the camera is decoration and the cursor is content, and decoration must
-not cost you the artifact. Next thing to try is `zoompan` with `on`-based expressions, or
-doing the crop in PIL during compositing.
+**The crop is done in PIL, not by an ffmpeg filter.** `render_camera()` pipes the
+cursor-composited frames out of ffmpeg as `rawvideo`, applies the per-frame rectangle with
+`Image.transform(AFFINE, BICUBIC)`, and pipes them straight into a second ffmpeg encoding
+yuv420p H.264 at the source size. 47 s of 1206×2622 takes ~43 s.
+
+Two things this buys, both of which the filter routes gave up:
+
+- **Sub-pixel crop.** `crop()` takes integers, so the camera would step 1 px at a time going
+  in and out. The affine takes the float rectangle directly.
+- **No generation loss.** It crops the *raw* recording, so nothing is encoded twice. The
+  zoom blows an 830 px-wide region up to 1206 px and a first-pass crf-18 artifact would be
+  magnified along with it.
+
+Both ffmpeg-side routes were measured and neither works (2026-08-04):
+
+- `sendcmd` + `crop` — `crop` will not accept `w`/`h` as runtime commands (**exit 234**).
+  Pinning the size and moving only `x`/`y` is accepted, but then the magnification is
+  constant for the whole segment, so it is a cut, not a zoom.
+- `zoompan` — zooms correctly for a simple expression, but the only channel for a per-frame
+  trajectory is the expression itself. 1413 frames written as `between(on,i,i)*v` terms is a
+  34 KB expression and filter init dies with **exit 244 / ENOMEM**.
+
+**`demo_record.window()` and `demo_check.to_source()` are the same formula, one forward and
+one back.** The checker re-derives the crop rectangle from `<out>.camera.json` +
+`<out>.zoom.json` to undo the magnification; change how the frame is cut without changing
+both, and the checker either clears a wrong cursor or flags a right one — and a checker that
+cries wolf gets switched off. It un-projects with the segment's max zoom, which is exact at
+tap frames because `camera()` is at full magnification there by construction.
+
+Measured on `/tmp/pp-demo-raw.mp4` (6 taps, 4 zoom segments, 302 of 1414 frames zoomed): all
+six taps land within **0.3 pt**, and sampling every frame of a zoom-out ramp un-projects to
+the same source point to within 0.3 pt — so the trajectory is truthful frame by frame, not
+just where the checker looks.
+
+The fallback stayed: if the camera stage raises, the flat video is emitted with a warning —
+the camera is decoration and the cursor is content, and decoration must not cost you the
+artifact. It also **blanks `camera.json` and resets `zoom.json` to 1.0**, or the checker
+would undo a crop that was never applied and fail a perfectly good cursor.
 
 ## After recording
 

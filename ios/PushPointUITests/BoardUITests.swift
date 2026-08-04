@@ -10,22 +10,52 @@ import XCTest
 /// 화면만 틀린** 종류다.
 ///
 /// 앱은 `-uitest`로 띄운다 — 임시 디렉터리 + 자체 픽스처라 시뮬레이터 상태에 무관하다.
+///
+/// **표시 문구로 겨냥하지 않는다.** 이 스위트는 한때 "저장"·"태그"·"결과가 없습니다"를
+/// 그대로 찾았고, 앱을 영문화하자 네 케이스가 한꺼번에 깨졌다. 당시의 응급 처치는 실행
+/// 인자(`-AppleLanguages (ko)`)로 앱을 한국어에 못 박아 한국어 단정문을 살려 두는
+/// 것이었는데, 그건 다리이지 수리가 아니다 — 문구를 다듬기만 해도 같은 방식으로 다시
+/// 깨지고, 무엇보다 **테스트가 영어 화면을 한 번도 보지 않게 된다.**
+///
+/// 그래서 `.claude/rules/ui-verification.md`가 적어 둔 대로 `accessibilityIdentifier`로
+/// 겨냥한다. 식별자는 화면에 보이지 않으므로 번역되지 않고, 문구를 고쳐도 그대로다.
+/// 이제 이 스위트는 앱 언어를 **읽지도 고정하지도 않는다** — 어느 언어로 떠도 같은
+/// 단정문이 성립한다. 주장으로 두지 않고 양쪽에서 재 봤다(2026-08-04): 한국어 화면에서
+/// 10/10, 영어 화면에서 10/10. 영어 쪽은 `-pushpoint.lang en`을 실행 인자로 넘겨
+/// (NSArgumentDomain이 저장된 값을 덮는다) 한 번 돌려 확인했고, 그 인자는 검증이 끝난
+/// 뒤 지웠다 — 언어를 못 박는 순간 다시 한 언어만 보는 스위트가 되기 때문이다.
+///
+/// 문구 자체가 검증 대상인 케이스는 이 스위트에 없다 — 웹과 글자까지 맞춰야 하는 문자열은
+/// `PushPointTests`가 `testdata/status-labels.json`·`facet-labels.json`으로 고정한다.
+///
+/// **남은 언어 의존은 입력 쪽에 하나 있다.** XCTest의 `typeText`는 현재 키보드로 칠 수
+/// 없는 글자를 붙여넣기로 우회하므로, 한국어를 치는 것은 클립보드를 경유한다는 뜻이다
+/// (`testEditingNotePersists` 주석). 검색 테스트는 한국어 FTS 자체가 검증 대상이라
+/// 그대로 두고, 내용이 아무래도 좋은 메모만 ASCII로 친다.
 final class BoardUITests: XCTestCase {
 
-    /// 이 스위트의 단정문과 시드 픽스처가 **한국어**라 앱도 한국어로 띄운다. 시뮬레이터의
-    /// 선호 언어는 영어이므로, 고정하지 않으면 앱이 영어로 뜨고 "저장"을 찾다 실패한다 —
-    /// 실제로 영문화 직후 네 케이스가 그렇게 깨졌다.
+    /// 픽스처 링크의 **id**.
     ///
-    /// 더 나은 해법은 표시 문구가 아니라 `accessibilityIdentifier`로 겨냥하는 것이고
-    /// (`.claude/rules/ui-verification.md`가 그렇게 적고 있다), 그 전환은 별도 작업으로
-    /// 남긴다. 여기서 언어를 고정하는 것은 그때까지의 다리다.
-    static let koLaunch = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+    /// `UITestMode.dataDirectory()`가 매 실행 DB를 지우고 `UITestMode.fixtures`를 순서대로
+    /// 한 건씩 POST하므로 id는 항상 1부터 그 순서로 붙는다. 카드는 `link.card.<id>`로
+    /// 겨냥하므로, 픽스처 배열의 **순서**가 바뀌면 여기도 함께 고쳐야 한다.
+    private enum Fixture {
+        static let kube = 1
+        static let swiftConcurrency = 2
+        static let plain = 3
+
+        /// `-uitest-many`는 000…059를 순서대로 심는다 — 목록은 최신순이라 059(id 60)가
+        /// 맨 위, 000(id 1)이 맨 끝이다.
+        static let manyNewest = 60
+        static let manyOldest = 1
+    }
+
     private var app: XCUIApplication!
 
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = Self.koLaunch + ["-uitest"]
+        app.launchArguments = ["-uitest"]
         app.launch()
     }
 
@@ -48,41 +78,43 @@ final class BoardUITests: XCTestCase {
     /// 픽스처가 실제로 화면에 도착하는지. 이게 깨지면 아래 모든 테스트의 전제가 무너지므로
     /// 가장 먼저, 가장 단순하게 확인한다.
     func testBoardShowsSavedLinks() {
-        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"),
-                      "저장한 링크가 목록에 나타나지 않는다")
-        XCTAssertTrue(app.staticTexts["Swift Concurrency 정리"].exists)
+        XCTAssertTrue(waitForCard(Fixture.kube), "저장한 링크가 목록에 나타나지 않는다")
+        XCTAssertTrue(card(Fixture.swiftConcurrency).exists)
     }
 
     /// 검색 — 세 글자 이상이면 FTS 경로다.
     ///
     /// **좁혀지는 것까지** 확인한다. 검색창에 치기만 하고 결과가 그대로면 "검색이 된다"고
     /// 말할 수 없는데, 목록이 원래 짧으면 눈으로는 구분이 안 간다.
+    ///
+    /// 검색어는 픽스처 **본문**에 있는 말이다 — 화면 문구가 아니라 데이터라서 앱 언어와
+    /// 무관하다.
     func testSearchNarrowsTheBoard() {
-        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"))
+        XCTAssertTrue(waitForCard(Fixture.kube))
 
         search(for: "쿠버네티스")
 
-        XCTAssertTrue(app.staticTexts["쿠버네티스 프로덕션 운영 가이드"]
-            .waitForExistence(timeout: 5), "검색 결과에 맞는 링크가 없다")
-        XCTAssertFalse(app.staticTexts["Swift Concurrency 정리"].exists,
+        XCTAssertTrue(card(Fixture.kube).waitForExistence(timeout: 5),
+                      "검색 결과에 맞는 링크가 없다")
+        XCTAssertFalse(card(Fixture.swiftConcurrency).exists,
                        "검색이 목록을 좁히지 못했다 — 안 맞는 링크가 남아 있다")
     }
 
     /// 결과가 없을 때 빈 화면이 아니라 설명이 나와야 한다 — 빈칸을 만들지 않는다(R4).
     func testSearchWithNoMatchExplainsItself() {
-        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"))
+        XCTAssertTrue(waitForCard(Fixture.kube))
         search(for: "존재하지않는검색어입니다")
-        XCTAssertTrue(app.staticTexts["결과가 없습니다"].waitForExistence(timeout: 5))
+        XCTAssertTrue(element("search.empty").waitForExistence(timeout: 5),
+                      "빈 결과를 설명하는 화면이 없다")
     }
 
     /// 두 글자 이하는 400이 아니라 LIKE 폴백이고(계약), 화면은 그 사실을 말해야 한다.
     /// 결과가 적은 이유를 모르면 사용자는 "없구나"로 읽고 검색을 그만둔다.
     func testShortQueryExplainsTheFallback() {
-        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"))
+        XCTAssertTrue(waitForCard(Fixture.kube))
         search(for: "쿠버")
-        XCTAssertTrue(app.staticTexts.containing(
-            NSPredicate(format: "label CONTAINS %@", "세 글자부터")).firstMatch
-            .waitForExistence(timeout: 5), "LIKE 폴백 안내가 없다")
+        XCTAssertTrue(element("search.likeNotice").waitForExistence(timeout: 5),
+                      "LIKE 폴백 안내가 없다")
     }
 
     /// 태그 편집 — 기계가 붙인 태그를 사람이 고칠 수 있어야 한다.
@@ -90,16 +122,18 @@ final class BoardUITests: XCTestCase {
     /// 이 경로가 `tag_feedback`을 만드는 유일한 통로다(M5 재랭킹 학습 데이터). 화면이
     /// 조용히 망가지면 데이터가 안 쌓이는데, 그 사실은 몇 달 뒤에나 드러난다.
     func testEditingTagsPersists() {
-        XCTAssertTrue(waitForCard("Notes on a quiet afternoon"))
-        app.staticTexts["Notes on a quiet afternoon"].tap()
+        XCTAssertTrue(waitForCard(Fixture.plain))
+        card(Fixture.plain).tap()
 
-        let editButton = app.buttons["태그 붙이기"].firstMatch
+        let editButton = app.buttons["detail.tags.edit"].firstMatch
         XCTAssertTrue(editButton.waitForExistence(timeout: 5),
                       "태그가 없는 링크에 붙이는 자리가 없다")
         editButton.tap()
 
-        let sheetTitle = app.navigationBars["태그"]
-        XCTAssertTrue(sheetTitle.waitForExistence(timeout: 5), "태그 편집 시트가 열리지 않는다")
+        // 시트가 열렸는지는 **확인 버튼의 존재**로 본다. 네비게이션 바 제목으로 보면
+        // 그건 곧 표시 문구라 언어를 탄다.
+        let confirm = app.buttons["tagEditor.done"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "태그 편집 시트가 열리지 않는다")
 
         // 사전에서 하나 고른다. 자유 입력이 아니라 목록이라는 것 자체가 계약이다.
         // 사전이 40개가 넘어 화면 밖에 있을 수 있으므로 찾을 때까지 스크롤한다.
@@ -107,26 +141,32 @@ final class BoardUITests: XCTestCase {
         XCTAssertTrue(scrollToFind(candidate), "사전 태그가 목록에 없다")
         candidate.tap()
 
-        let confirm = app.buttons["확인"]
         XCTAssertTrue(confirm.isEnabled, "선택이 바뀌었는데 확인이 잠겨 있다")
         confirm.tap()
 
         // 상세로 돌아와 칩이 실제로 붙었는지. 시트가 닫히는 것만으로는 저장을 증명하지 못한다.
-        XCTAssertTrue(app.staticTexts["book"].waitForExistence(timeout: 5),
+        XCTAssertTrue(element("chip.book").waitForExistence(timeout: 5),
                       "고른 태그가 상세에 반영되지 않았다")
     }
 
     /// 메모 — 기계가 절대 만들어 줄 수 없는 유일한 필드라, 저장되지 않으면 대체재가 없다.
+    ///
+    /// **치는 글자는 ASCII다.** 예전에는 한국어를 쳤는데, XCTest는 지금 키보드로 칠 수 없는
+    /// 글자를 만나면 **붙여넣기로 우회한다** — 즉 한국어를 치려면 앱이 한국어로 떠 있어야
+    /// 하고(그래서 예전 스위트가 언어를 못 박았다), 그렇지 않으면 시뮬레이터의 클립보드
+    /// 내용이 대신 들어간다. 2026-08-04에 실제로 그렇게 깨졌다: 다른 세션이 클립보드에
+    /// 올려 둔 문자열이 메모 칸에 들어와 있었다. 메모 **내용**은 이 테스트의 검증 대상이
+    /// 아니므로, 키보드 언어를 타지 않는 글자로 친다.
     func testEditingNotePersists() {
-        XCTAssertTrue(waitForCard("Swift Concurrency 정리"))
-        app.staticTexts["Swift Concurrency 정리"].tap()
+        XCTAssertTrue(waitForCard(Fixture.swiftConcurrency))
+        card(Fixture.swiftConcurrency).tap()
 
-        let field = app.textFields["왜 담았는지 한 줄"]
+        let field = app.textFields["detail.note.field"]
         XCTAssertTrue(field.waitForExistence(timeout: 5), "메모 입력 칸이 없다")
         field.tap()
-        field.typeText("나중에 다시 읽기")
+        field.typeText("read this again later")
 
-        let save = app.buttons["메모 저장"]
+        let save = app.buttons["detail.note.save"]
         XCTAssertTrue(save.waitForExistence(timeout: 3), "저장 버튼이 나타나지 않는다")
         save.tap()
 
@@ -146,14 +186,14 @@ final class BoardUITests: XCTestCase {
     /// 보이는지로 판정한다. "많이 보인다"로는 두 번째 장이 왔는지 알 수 없다.
     func testListPagesPastTheFirstFifty() {
         app.terminate()
-        app.launchArguments = Self.koLaunch + ["-uitest", "-uitest-many"]
+        app.launchArguments = ["-uitest", "-uitest-many"]
         app.launch()
 
-        // 최신순이므로 059가 맨 위, 000이 맨 끝이다. 000은 두 번째 장에만 있다.
-        XCTAssertTrue(waitForCard("페이지 검증 링크 059", timeout: 60),
+        // 최신순이므로 059(id 60)가 맨 위, 000(id 1)이 맨 끝이다. 000은 두 번째 장에만 있다.
+        XCTAssertTrue(waitForCard(Fixture.manyNewest, timeout: 60),
                       "대량 픽스처가 목록에 오지 않았다")
 
-        let last = app.staticTexts["페이지 검증 링크 000"]
+        let last = card(Fixture.manyOldest)
         XCTAssertFalse(last.exists, "첫 장에 마지막 항목이 있다 — 픽스처가 50건을 못 넘겼다")
 
         // 끝까지 민다. 한 장(50건)을 지나야 다음 장이 붙으므로 넉넉히 준다.
@@ -174,30 +214,19 @@ final class BoardUITests: XCTestCase {
     ///
     /// 서버를 죽이는 대신 화면 분기의 **순서**를 고정한다: 오류 분기가 빈 결과 분기보다
     /// 앞에 있어야 하고, 그 순서가 뒤집히는 것이 실제로 일어나는 회귀다.
+    ///
+    /// 두 상태를 문구가 아니라 **식별자**로 가른다 — 번역된 화면에서도 같은 판정이
+    /// 성립해야 이 단언에 의미가 있다.
     func testSearchFailureIsNotDisguisedAsEmpty() {
-        XCTAssertTrue(waitForCard("쿠버네티스 프로덕션 운영 가이드"))
+        XCTAssertTrue(waitForCard(Fixture.kube))
         search(for: "존재하지않는검색어입니다")
 
-        // 정상 미스에서는 "결과가 없습니다"가 맞다.
-        XCTAssertTrue(app.staticTexts["결과가 없습니다"].waitForExistence(timeout: 5))
-        // 그리고 그 화면에 실패 문구가 섞여 있으면 안 된다 — 두 상태가 뒤엉키면
+        // 정상 미스에서는 빈 결과 화면이 맞다.
+        XCTAssertTrue(element("search.empty").waitForExistence(timeout: 5))
+        // 그리고 그 화면에 실패 상태가 섞여 있으면 안 된다 — 두 상태가 뒤엉키면
         // 어느 쪽인지 사용자가 판단할 수 없다.
-        XCTAssertFalse(app.staticTexts["검색하지 못했습니다"].exists,
-                       "정상 미스인데 실패 문구가 떴다")
-    }
-
-    // MARK: - 헬퍼
-
-    /// 서버가 프로세스 안에서 뜨고 픽스처가 들어가기까지 시간이 걸린다.
-    private func waitForCard(_ title: String, timeout: TimeInterval = 20) -> Bool {
-        app.staticTexts[title].waitForExistence(timeout: timeout)
-    }
-
-    private func search(for text: String) {
-        let field = app.searchFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5), "검색창이 없다")
-        field.tap()
-        field.typeText(text)
+        XCTAssertFalse(element("search.failed").exists,
+                       "정상 미스인데 실패 화면이 떴다")
     }
 
     /// 알림 배너가 **화면 폭을 가득 채우지 않아야** 한다.
@@ -215,7 +244,7 @@ final class BoardUITests: XCTestCase {
     /// 경로로 헤더가 물드는 회귀는 이 테스트를 통과한다. 그래도 값이 있는 이유는, 리팩토링이
     /// 되돌릴 가능성이 가장 높은 것이 정확히 이 형태이기 때문이다.
     func testNotificationBannerDoesNotSpanTheFullWidth() {
-        app.launchArguments = Self.koLaunch + ["-uitest", UITestModeFlags.dropped, "3"]
+        app.launchArguments = ["-uitest", UITestModeFlags.dropped, "3"]
         app.launch()
 
         let banner = app.buttons["notice.notifications"]
@@ -252,27 +281,68 @@ final class BoardUITests: XCTestCase {
         let toggle = app.buttons["density.toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 8), "밀도 전환 버튼이 없다")
 
-        let title = app.staticTexts["Swift Concurrency 정리"]
-        XCTAssertTrue(title.waitForExistence(timeout: 8), "카드가 안 뜬다")
-        // **셀을 재야 한다** — staticText의 높이는 제목 글자 높이(36pt)이지 행 높이가 아니다.
+        let target = card(Fixture.swiftConcurrency)
+        XCTAssertTrue(target.waitForExistence(timeout: 8), "카드가 안 뜬다")
+        // **셀을 재야 한다** — 카드 안 제목의 높이는 글자 높이(36pt)이지 행 높이가 아니다.
         // 처음엔 그걸 비교해서 단언이 무의미했다.
-        let cellOf = { self.app.cells
-            .containing(.staticText, identifier: "Swift Concurrency 정리").firstMatch }
-        XCTAssertTrue(cellOf().waitForExistence(timeout: 5), "셀을 못 찾았다")
-        let cardHeight = cellOf().frame.height
+        XCTAssertTrue(cell(Fixture.swiftConcurrency).waitForExistence(timeout: 5), "셀을 못 찾았다")
+        let cardHeight = cell(Fixture.swiftConcurrency).frame.height
 
         toggle.tap()
-        XCTAssertTrue(title.waitForExistence(timeout: 5), "조밀 모드에서 카드가 사라졌다")
+        XCTAssertTrue(target.waitForExistence(timeout: 5), "조밀 모드에서 카드가 사라졌다")
 
         // 기본값은 카드이므로 한 번 누르면 조밀이다. `@AppStorage`가 이전 실행에서 남으면
         // 방향이 반대가 되어 이 단언이 실패한다 — **실제로 그렇게 실패했고**, 그래서
         // `UITestMode.resetSharedDefaults`가 표준 defaults의 밀도 키까지 비운다.
-        XCTAssertLessThan(cellOf().frame.height, cardHeight * 0.75,
+        XCTAssertLessThan(cell(Fixture.swiftConcurrency).frame.height, cardHeight * 0.75,
                           "조밀 행이 카드의 3/4보다 낮지 않다 — 밀도가 바뀌지 않았거나 "
                               + "@AppStorage가 남았거나, 조밀이 조밀하지 않다")
     }
 
-    /// 목록이 길어 화면 밖에 있는 요소를 찾을 때까지 스크롤한다.    /// 목록이 길어 화면 밖에 있는 요소를 찾을 때까지 스크롤한다.
+    // MARK: - 헬퍼
+
+    /// 목록·검색 결과의 카드. 표시 문구가 아니라 링크 id로 겨냥한다 —
+    /// 카드에는 `link.card.<id>` 식별자가 붙어 있다(ContentView.row).
+    private func card(_ id: Int) -> XCUIElement {
+        app.buttons[cardID(id)]
+    }
+
+    private func cardID(_ id: Int) -> String { "link.card.\(id)" }
+
+    /// 카드를 담고 있는 `List` 셀. 행 높이를 재려면 카드가 아니라 셀이어야 한다.
+    ///
+    /// 식별자가 셀 자신에게 접히는지 안쪽 버튼에 남는지는 SwiftUI가 정하므로 둘 다 본다 —
+    /// 한쪽만 보면 접힘 방식이 바뀌는 날 "셀을 못 찾았다"로 실패하는데, 그건 밀도 회귀와
+    /// 구분되지 않는다.
+    private func cell(_ id: Int) -> XCUIElement {
+        let name = cardID(id)
+        let asSelf = app.cells.matching(identifier: name).firstMatch
+        return asSelf.exists ? asSelf : app.cells.containing(.button, identifier: name).firstMatch
+    }
+
+    /// 서버가 프로세스 안에서 뜨고 픽스처가 들어가기까지 시간이 걸린다.
+    private func waitForCard(_ id: Int, timeout: TimeInterval = 20) -> Bool {
+        card(id).waitForExistence(timeout: timeout)
+    }
+
+    /// 식별자로만 찾는다. `ContentUnavailableView` 안의 요소는 SwiftUI가 어떤 타입으로
+    /// 내보낼지(staticText / image / other)가 정해져 있지 않아, 타입을 고르지 않는다.
+    private func element(_ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    /// 검색어를 친다. 한국어 검색어는 **일부러** 한국어다 — 한국어 FTS 경로(세 글자 이상)와
+    /// LIKE 폴백(두 글자 이하)이 이 스위트가 지키는 계약이고, 그건 픽스처 본문에 대한
+    /// 질의이지 화면 문구가 아니다. 다만 앱이 영어 키보드로 떠 있으면 XCTest가 이 글자를
+    /// 클립보드로 넣으므로, 시뮬레이터를 다른 도구가 동시에 몰면 흔들릴 수 있다.
+    private func search(for text: String) {
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "검색창이 없다")
+        field.tap()
+        field.typeText(text)
+    }
+
+    /// 목록이 길어 화면 밖에 있는 요소를 찾을 때까지 스크롤한다.
     /// 못 찾으면 false — 무한히 밀면 실패가 타임아웃으로 위장된다.
     private func scrollToFind(_ element: XCUIElement, maxSwipes: Int = 8) -> Bool {
         if element.waitForExistence(timeout: 3), element.isHittable { return true }
