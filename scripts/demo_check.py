@@ -20,6 +20,31 @@ FID = (255, 0, 200)
 TOL = float(sys.argv[3]) if len(sys.argv) > 3 else 12.0
 
 
+CAM = None
+ZOOM_Z = 1.0
+
+
+def to_source(pt, t):
+    """줌된 프레임의 좌표를 원본 좌표계로 되돌린다.
+
+    커서는 원본 좌표계에 그려지고 그 위에서 크롭·확대가 일어난다. 되돌리지 않으면
+    줌 구간의 탭이 전부 어긋난 것으로 나온다 — 검사기가 거짓 경보를 내면 꺼지게 되고,
+    꺼진 검사기는 없는 것과 같다.
+    """
+    if CAM is None:
+        return pt
+    i = int(t * 30)
+    if i < 0 or i >= len(CAM) or CAM[i] is None:
+        return pt
+    cx, cy, _ = CAM[i]
+    W, H = 1206, 2622
+    z = ZOOM_Z          # 크롭은 구간 내내 같은 크기다(합성 쪽 주석 참고)
+    w2, h2 = int(W / z) // 2 * 2, int(H / z) // 2 * 2
+    x0 = min(max(cx - w2 / 2, 0), W - w2)
+    y0 = min(max(cy - h2 / 2, 0), H - h2)
+    return ((pt[0] * SCALE) / z + x0) / SCALE, ((pt[1] * SCALE) / z + y0) / SCALE
+
+
 def find_fiducial(video, t):
     from PIL import Image
     out = "/tmp/pp-check.png"
@@ -47,6 +72,15 @@ if sync is not None:
     from demo_record import measure_lag
     lag = measure_lag(video, events)
 
+cam_path = pathlib.Path(video + ".camera.json")
+if cam_path.exists():
+    CAM = json.loads(cam_path.read_text()) or None
+    zp = pathlib.Path(video + ".zoom.json")
+    if zp.exists():
+        ZOOM_Z = json.loads(zp.read_text())
+    if CAM:
+        print(f"  카메라 궤적 {sum(1 for c in CAM if c)} 프레임 줌 (배율 {ZOOM_Z:.2f})")
+
 taps = [e for e in events if e["kind"] == "tap"]
 fail = []
 for e in taps:
@@ -55,6 +89,7 @@ for e in taps:
     if got is None:
         fail.append(f"t={t:.2f}s 커서를 못 찾았다 (이벤트 {e['x']},{e['y']})")
         continue
+    got = to_source(got, t)
     d = ((got[0] - e["x"]) ** 2 + (got[1] - e["y"]) ** 2) ** 0.5
     mark = "ok  " if d <= TOL else "✗   "
     print(f"  {mark} t={t:5.2f}s  이벤트 ({e['x']},{e['y']})  그려진 곳 "

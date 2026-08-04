@@ -67,13 +67,19 @@ Count the lines in `save-timing.jsonl` before and after. A missed tap and a cras
 extension both produce "no new row", and neither produces an error. Reading the last line
 without comparing counts will show you the *previous* run's success and you will believe it.
 
-## Typing is not usable yet
+## Typing does not work — stop trying it
 
-`axe type` goes through the active IME. English text with a Korean keyboard comes out as
-jamo (`포ㅏ ㅣ ㄴㅁ으ㅐ`), and Korean text with an English keyboard types nothing at all.
-`defaults write .GlobalPreferences AppleKeyboards` does not take effect without a
-simulator reboot. Until that is solved, **end the recording where the field opens** rather
-than shipping garbled input to demonstrate text entry.
+`axe type` produced jamo for English text under a Korean IME, and then **nothing at all**
+for Korean text after `defaults write .GlobalPreferences AppleKeyboards` and a full
+simulator reboot. Three attempts, three different keyboard configurations, no text in the
+field either way.
+
+**End the recording where the field opens.** Shipping `포ㅏ ㅣ ㄴㅁ으ㅐ` to demonstrate
+note-taking is worse than not demonstrating it, and that exact frame went out once.
+
+If text entry genuinely has to be on camera, the route to try is XCUITest
+(`app.textFields[...].typeText`) driving the app while `recordVideo` runs — it types
+through the accessibility layer rather than the keyboard. Not attempted yet.
 
 ## Language
 
@@ -91,6 +97,21 @@ The link being saved must not already exist, or the save takes the duplicate pat
 notification says so. Delete it from the App Group database first — and delete `-wal`/`-shm`
 alongside `.db` when restoring a database, or a stale WAL replays over the copy and the app
 reads a file that is not the one you put there.
+
+## Auto-zoom
+
+`camera()` returns the centre and factor per frame: ease in 0.45 s before a tap, hold
+0.5 s after, ease out 0.5 s, and taps closer than ~1.2 s stay in one continuous move
+rather than pumping in and out. The target sits slightly above centre so the surrounding
+screen is still readable — a finger pinned dead centre shows what was pressed but loses
+where it was.
+
+**The ffmpeg side is not finished.** `sendcmd` cannot change `crop`'s `w`/`h` at runtime
+(exit 234), so the crop is a fixed size and only its position moves; that still fails on
+this ffmpeg build and the compositor falls back to no zoom, with a warning. The fallback
+is deliberate — the camera is decoration and the cursor is content, and decoration must
+not cost you the artifact. Next thing to try is `zoompan` with `on`-based expressions, or
+doing the crop in PIL during compositing.
 
 ## After recording
 

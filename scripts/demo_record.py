@@ -106,6 +106,63 @@ def locate_icon(udid, band, rgb):
     return (round(xs / n / SCALE), round(ys / n / SCALE))
 
 
+ZOOM = 1.45      # 배율. 1.6을 넘으면 402pt 폭에서 맥락이 잘려 어디를 눌렀는지 되레 흐려진다
+ZOOM_IN = 0.45   # 들어가는 데 걸리는 시간(초)
+ZOOM_HOLD = 0.5  # 탭 뒤 머무는 시간
+ZOOM_OUT = 0.5   # 나오는 데 걸리는 시간
+ZOOM_GAP = 1.2   # 이 간격 안에 다음 탭이 있으면 나왔다 다시 들어가지 않고 이어 간다
+
+
+def camera(t, acts, W, H):
+    """이 시각의 카메라(중심, 배율). 줌이 없으면 None.
+
+    **탭 지점을 화면 한가운데 두지 않는다.** 손가락이 중앙에 박히면 무엇을 눌렀는지는
+    보여도 그게 화면 어디쯤인지가 사라진다. 목표를 살짝 위로 올려(0.42) 아래쪽 맥락을
+    남기고, 가장자리에서는 프레임이 화면 밖으로 나가지 않게 잡아 둔다.
+    """
+    taps = [e for e in acts if e["kind"] == "tap"]
+    if not taps:
+        return None
+
+    # 가까이 붙은 탭들을 한 구간으로 묶는다 — 사이마다 줌아웃하면 화면이 펄떡인다
+    groups, cur = [], []
+    for e in taps:
+        if cur and e["t"] - cur[-1]["t"] > ZOOM_GAP + ZOOM_HOLD + ZOOM_OUT:
+            groups.append(cur); cur = []
+        cur.append(e)
+    groups.append(cur)
+
+    for g in groups:
+        a, b = g[0]["t"] - ZOOM_IN, g[-1]["t"] + ZOOM_HOLD
+        if t < a - 0.01 or t > b + ZOOM_OUT:
+            continue
+        if t < g[0]["t"]:
+            k = ease((t - a) / ZOOM_IN)
+        elif t <= b:
+            k = 1.0
+        else:
+            k = 1.0 - ease((t - b) / ZOOM_OUT)
+        # 구간 안에서는 현재/다음 탭 사이를 따라 카메라가 흐른다
+        cx, cy = g[0]["x"], g[0]["y"]
+        for i in range(len(g) - 1):
+            t0, t1 = g[i]["t"], g[i + 1]["t"]
+            if t0 <= t <= t1:
+                q = ease((t - t0) / max(t1 - t0, 1e-3))
+                cx = g[i]["x"] + (g[i + 1]["x"] - g[i]["x"]) * q
+                cy = g[i]["y"] + (g[i + 1]["y"] - g[i]["y"]) * q
+            elif t > t1:
+                cx, cy = g[i + 1]["x"], g[i + 1]["y"]
+        z = 1.0 + (ZOOM - 1.0) * k
+        if z <= 1.001:
+            return None
+        vw, vh = W / z, H / z
+        px, py = cx * SCALE, cy * SCALE - vh * 0.08   # 목표를 살짝 위로
+        px = min(max(px, vw / 2), W - vw / 2)
+        py = min(max(py, vh / 2), H - vh / 2)
+        return (px, py, z)
+    return None
+
+
 def measure_lag(video, events):
     """영상 시계가 이벤트 시계보다 얼마나 뒤처졌는지 잰다.
 
@@ -254,13 +311,71 @@ def overlay(video, events, out):
             d.ellipse([px - FR, py - FR, px + FR, py + FR], fill=(255, 0, 200, 255))
         img.save(tmp / f"c{i:05d}.png")
 
+    # 카메라 궤적을 남긴다 — 검사기가 크롭을 되돌리려면 이 값이 필요하고, 눈으로
+    # 확인할 때도 어느 프레임이 줌 상태인지 알아야 한다.
+    cam = [camera(i / fps + lag, acts, W, H) for i in range(frames)]
+    pathlib.Path(out + ".camera.json").write_text(json.dumps(
+        [None if c is None else [round(c[0], 2), round(c[1], 2), round(c[2], 4)] for c in cam]))
+    zs_ = [c[2] for c in cam if c is not None]
+    pathlib.Path(out + ".zoom.json").write_text(json.dumps(max(zs_) if zs_ else 1.0))
+
+    flat = "/tmp/pp-flat.mp4"
     subprocess.run([
         "ffmpeg", "-v", "error", "-y", "-i", video,
         "-framerate", str(fps), "-i", str(tmp / "c%05d.png"),
         "-filter_complex", "[0:v]fps=30[v];[v][1:v]overlay=0:0:shortest=0[o]",
-        "-map", "[o]", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-        "-pix_fmt", "yuv420p", out,
+        "-map", "[o]", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+        "-pix_fmt", "yuv420p", flat,
     ], check=True)
+
+    if not any(c is not None for c in cam):
+        pathlib.Path(flat).replace(out)
+        return
+
+    # 프레임마다 다른 크롭이라 ffmpeg 필터 한 줄로는 안 되고, sendcmd로 crop 파라미터를
+    # 매 프레임 바꾼다. 짝수로 맞추는 이유는 yuv420p가 홀수 크기를 받지 않아서다.
+    cmds = []
+    for i, c in enumerate(cam):
+        t = i / fps
+        if c is None:
+            w2, h2, x2, y2 = W, H, 0, 0
+        else:
+            cx, cy, z = c
+            w2 = int(W / z) // 2 * 2
+            h2 = int(H / z) // 2 * 2
+            x2 = int(min(max(cx - w2 / 2, 0), W - w2)) // 2 * 2
+            y2 = int(min(max(cy - h2 / 2, 0), H - h2)) // 2 * 2
+        cmds.append(f"{t:.4f} crop w {w2}, {t:.4f} crop h {h2}, "
+                    f"{t:.4f} crop x {x2}, {t:.4f} crop y {y2};")
+    # **크롭은 고정 크기로 하고 위치만 움직인다.** `sendcmd`는 crop의 w/h를 런타임에
+    # 바꾸지 못한다(실측: exit 234). 그래서 배율은 구간 안에서 일정하게 두고 부드러움은
+    # 위치 이동과 앞뒤 페이드에 맡긴다.
+    zs = [c[2] for c in cam if c is not None]
+    z = max(zs) if zs else 1.0
+    cw, ch = int(W / z) // 2 * 2, int(H / z) // 2 * 2
+    cmds = []
+    for i, c in enumerate(cam):
+        t = i / fps
+        if c is None:
+            x2, y2 = (W - cw) // 2, (H - ch) // 2
+        else:
+            cx, cy, _ = c
+            x2 = int(min(max(cx - cw / 2, 0), W - cw)) // 2 * 2
+            y2 = int(min(max(cy - ch / 2, 0), H - ch)) // 2 * 2
+        cmds.append(f"{t:.4f} crop x {x2}, {t:.4f} crop y {y2};")
+    cmd_file = "/tmp/pp-cam.cmd"
+    pathlib.Path(cmd_file).write_text("\n".join(cmds))
+    r = subprocess.run([
+        "ffmpeg", "-v", "error", "-y", "-i", flat,
+        "-vf", f"sendcmd=f={cmd_file},crop={cw}:{ch}:0:0,scale={W}:{H}:flags=bicubic",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", out,
+    ])
+    if r.returncode != 0:
+        # **줌이 실패하면 줌 없이 낸다.** 카메라는 장식이고 커서는 내용이다 —
+        # 장식 때문에 결과물이 없어지면 안 된다.
+        print("  경고: 카메라 합성 실패 — 줌 없이 낸다")
+        pathlib.Path(flat).replace(out)
+        pathlib.Path(out + ".camera.json").write_text("[]")
 
 
 if __name__ == "__main__":
