@@ -39,6 +39,7 @@ final class FeedModelTests: XCTestCase {
         func deleteLink(_: Operations.deleteLink.Input) async throws -> Operations.deleteLink.Output { fatalError() }
         func retryLink(_: Operations.retryLink.Input) async throws -> Operations.retryLink.Output { fatalError() }
         func markOpened(_: Operations.markOpened.Input) async throws -> Operations.markOpened.Output { fatalError() }
+        func getResurfaced(_: Operations.getResurfaced.Input) async throws -> Operations.getResurfaced.Output { fatalError() }
         func search(_: Operations.search.Input) async throws -> Operations.search.Output { fatalError() }
         func getThumb(_: Operations.getThumb.Input) async throws -> Operations.getThumb.Output { fatalError() }
         func listTags(_: Operations.listTags.Input) async throws -> Operations.listTags.Output { fatalError() }

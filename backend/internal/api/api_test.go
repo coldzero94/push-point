@@ -23,15 +23,16 @@ import (
 // 핸들러 계층 테스트가 sqlite 구현과 결합하지 않도록 store.Store 계약만 흉내 낸다.
 
 type fakeStore struct {
-	mu        sync.Mutex
-	nextID    int64
-	nextTag   int64
-	links     map[int64]*store.LinkDetail
-	byURL     map[string]int64
-	deleted   map[int64]bool
-	tags      map[int64]*store.Tag
-	lastSave  store.SaveInput  // 핸들러가 마지막으로 넘긴 SaveInput (테스트 관찰용)
-	savedBody map[int64]string // 링크별 클라이언트 캡처 본문
+	resurfaced *store.Link
+	mu         sync.Mutex
+	nextID     int64
+	nextTag    int64
+	links      map[int64]*store.LinkDetail
+	byURL      map[string]int64
+	deleted    map[int64]bool
+	tags       map[int64]*store.Tag
+	lastSave   store.SaveInput  // 핸들러가 마지막으로 넘긴 SaveInput (테스트 관찰용)
+	savedBody  map[int64]string // 링크별 클라이언트 캡처 본문
 }
 
 var _ store.Store = (*fakeStore)(nil)
@@ -1170,6 +1171,15 @@ func TestCreateLinkCleansCaptureFields(t *testing.T) {
 
 func (f *fakeStore) CorpusDF(ctx context.Context) (int64, map[string]int64, error) {
 	return 0, nil, nil
+}
+
+// 되살리기. 테스트가 후보를 심지 않으면 "없음"이다 — 빈손이 정상 상태이므로
+// 여기서 오류를 내면 그 경로를 못 재게 된다.
+func (f *fakeStore) Resurfaced(context.Context, int64) (store.Link, error) {
+	if f.resurfaced == nil {
+		return store.Link{}, store.ErrNoResurface
+	}
+	return *f.resurfaced, nil
 }
 
 func (f *fakeStore) MarkOpened(ctx context.Context, linkID int64) error { return nil }
