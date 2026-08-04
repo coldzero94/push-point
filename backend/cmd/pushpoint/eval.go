@@ -28,7 +28,10 @@ import (
 	"github.com/coby/push-point/backend/internal/tagger"
 )
 
-const evalTopK = 3 // Recall@3 및 태그별 P/R의 예측 상위 k
+// evalTopK는 채점에 쓰는 상위 k. **런타임 topK와 같아야 한다** — 다르면 eval이
+// 출하되지 않는 순위를 채점하거나, 출하되는 순위를 안 본다. 2026-08-04까지 런타임이
+// 5, 여기가 3이었고 그 두 칸이 채점 밖에서 화면에 나가고 있었다.
+const evalTopK = 3
 
 // goldenSnapshot은 태거 입력 필드(런타임 links에서 읽는 것과 동일 표면).
 type goldenSnapshot struct {
