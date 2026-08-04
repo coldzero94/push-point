@@ -27,6 +27,10 @@ struct Chip: View {
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, 3)
             .background(background, in: Capsule())
+            // 태그 이름은 사전에서 온 **데이터**라 번역되지 않지만, 칩을 겨냥하는
+            // 쿼리가 라벨을 타면 "book"이라는 단어가 본문·제목에 있을 때 엉뚱한
+            // 요소를 잡는다. 식별자는 칩만 가리킨다.
+            .accessibilityIdentifier("chip.\(name)")
     }
 
     private var foreground: Color {

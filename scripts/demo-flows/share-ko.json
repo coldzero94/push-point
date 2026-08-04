@@ -68,9 +68,11 @@
       "wait": 7.0
     },
     {
-      "do": "type",
-      "text": "왜 저장했는지 한 줄",
-      "wait": 1.5
+      "do": "type_paste",
+      "mode": "stream",
+      "text": "나중에 다시 읽기",
+      "wait": 1.2
     }
-  ]
+  ],
+  "_note": "메모 입력은 `axe type`이 아니라 페이스트보드를 쓴다 — axe는 US HID 키코드뿐이라 한글이 들어가지 않는다."
 }

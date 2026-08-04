@@ -112,6 +112,10 @@ struct LinkDetailView: View {
                         .foregroundStyle(PP.Palette.fg3)
                 }
                 .buttonStyle(.plain)
+                // **문구가 둘이다** — 태그가 없으면 "태그 붙이기", 있으면 "고치기".
+                // 그래서 표시 문구로 겨냥하면 언어뿐 아니라 링크 상태에 따라서도
+                // 셀렉터가 달라진다. 식별자는 둘 다에서 같다.
+                .accessibilityIdentifier("detail.tags.edit")
             }
 
             Text(d.value1.domain)
@@ -193,12 +197,18 @@ struct LinkDetailView: View {
                         .strokeBorder(PP.Palette.line1, lineWidth: 1)
                 )
                 .onSubmit { Task { await saveNoteIfChanged() } }
+                // 플레이스홀더가 곧 접근성 라벨이라, 그것으로 찾으면 문구를 다듬는
+                // 순간 테스트가 칸을 못 찾는다.
+                .accessibilityIdentifier("detail.note.field")
             if noteDraft != (detail?.value1.note ?? "") {
                 // 아직 안 보냈다는 사실을 숨기지 않는다. 저장 버튼을 따로 두지 않는 대신
                 // "언제 저장되는지"는 말해 줘야 한다.
                 Button(t("detail.saveNote")) { Task { await saveNoteIfChanged() } }
                     .font(PP.Typo.label)
                     .foregroundStyle(PP.Palette.accent)
+                    // 이 버튼의 **존재 여부**가 "초안이 서버 값과 다르다"는 신호라,
+                    // UI 테스트가 사라지는 것을 저장 성공의 증거로 쓴다.
+                    .accessibilityIdentifier("detail.note.save")
             }
         }
     }

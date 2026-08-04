@@ -340,7 +340,10 @@ struct ContentView: View {
             // 거짓말이 된다 — 아카이브에서 가장 나쁜 실패 방식이다.
             refreshableState {
                 ContentUnavailableView {
+                    // 실패와 빈 결과를 **식별자로** 가른다. 문구로 가르면 언어를 바꾸는
+                    // 순간 테스트가 두 상태를 구분하지 못한다.
                     Label(t("search.failed"), systemImage: "wifi.exclamationmark")
+                        .accessibilityIdentifier("search.failed")
                 } description: {
                     Text(searchError)
                 } actions: {
@@ -353,6 +356,7 @@ struct ContentView: View {
                 // 다음 동작인데, 그걸 사용자가 스스로 알아내게 두면 화면이 막힌다.
                 ContentUnavailableView {
                     Label(t("search.noResults"), systemImage: "magnifyingglass")
+                        .accessibilityIdentifier("search.empty")
                 } description: {
                     Text(t("search.noMatch", ["q": query]))
                 } actions: {
@@ -367,6 +371,7 @@ struct ContentView: View {
                     Text(t("search.likeNotice"))
                         .font(PP.Typo.meta)
                         .foregroundStyle(PP.Palette.fg3)
+                        .accessibilityIdentifier("search.likeNotice")
                         .plainRow(top: 10, bottom: 2)
                 }
                 ForEach(results, id: \.id) { link in
@@ -472,6 +477,11 @@ struct ContentView: View {
                      dayStated: true)
         }
         .buttonStyle(.plain)
+        // UI 테스트가 카드를 **표시 문구가 아니라 링크 id로** 집는 손잡이.
+        // 제목으로 찾으면 픽스처 문구를 다듬거나 표시 폴백(제목 없음 → domain)이
+        // 걸리는 순간 테스트가 깨진다 — 식별자는 화면에 보이지 않으므로 언어에도
+        // 문구에도 흔들리지 않는다(.claude/rules/ui-verification.md).
+        .accessibilityIdentifier("link.card.\(link.id)")
         // 스와이프와 길게 누르기 둘 다 둔다(§8.4). 스와이프는 빠르지만 발견되지 않고,
         // 컨텍스트 메뉴는 느리지만 항상 찾을 수 있다.
         // 끝까지 밀면 버튼을 거치지 않고 바로 지운다 — 메시지 앱과 같은 동작이고,
