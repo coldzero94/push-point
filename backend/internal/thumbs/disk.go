@@ -21,7 +21,7 @@ import (
 	"github.com/coby/push-point/backend/internal/safedial"
 )
 
-// 다운로드 제약 (스펙 docs/v2/05 §5): timeout 10s, 최대 10MB, image/* 만 허용.
+// 다운로드 제약 (스펙 docs/v2/ko/05 §5): timeout 10s, 최대 10MB, image/* 만 허용.
 const (
 	fetchTimeout  = 10 * time.Second
 	maxImageBytes = 10 << 20 // 10MB

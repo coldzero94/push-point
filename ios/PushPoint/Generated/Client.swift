@@ -12,7 +12,7 @@ import struct Foundation.Date
 import HTTPTypes
 /// Push-Point v2 HTTP API의 기계 원본(contract-first). 단일 사용자 앱이며 정적 Bearer API 키 1개(`PUSHPOINT_API_KEY`)로 인증한다.
 ///
-/// 이 문서가 API의 단일 진실 원천이다 — `docs/v2/06-API-SPECIFICATION.md`(사람용 해설)와 다르면 이 파일이 우선한다.
+/// 이 문서가 API의 단일 진실 원천이다 — `docs/v2/ko/06-API-SPECIFICATION.md`(사람용 해설)와 다르면 이 파일이 우선한다.
 /// 시간 필드는 전부 unix epoch 초 단위 정수다. `GET /debug/pprof/*`(Go 표준 프로파일링)는 서버가 서빙하지만 계약 대상이 아니다.
 ///
 internal struct Client: APIProtocol {

@@ -2,7 +2,7 @@
 
 > Push-Point v2.1 — 마지막 업데이트: 2026-07-22
 
-> 이 문서는 사람용 해설·예시다. **기계가 읽는 원본은 [api/openapi.yaml](../../api/openapi.yaml)**이며 백엔드·iOS 클라이언트 코드가 여기서 생성된다. 두 문서가 다르면 openapi.yaml이 우선하고, 스펙 변경 시 이 문서를 같은 커밋에서 갱신한다.
+> 이 문서는 사람용 해설·예시다. **기계가 읽는 원본은 [api/openapi.yaml](../../../api/openapi.yaml)**이며 백엔드·iOS 클라이언트 코드가 여기서 생성된다. 두 문서가 다르면 openapi.yaml이 우선하고, 스펙 변경 시 이 문서를 같은 커밋에서 갱신한다.
 
 Push-Point v2의 HTTP API 전체 명세다. 서버는 단일 Go 바이너리(`pushpoint`) 하나이며, 모든 엔드포인트는 이 프로세스가 직접 서빙한다. 스키마 필드 정의는 [05-DATA-SCHEMA.md](05-DATA-SCHEMA.md), 저장 이후 비동기 처리 흐름은 [04-DATA-FLOW.md](04-DATA-FLOW.md)를 참고한다.
 

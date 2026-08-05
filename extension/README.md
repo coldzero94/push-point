@@ -19,7 +19,7 @@ src/options.html/.js   서버 주소·API 키 입력, 해당 origin 권한 요�
 iOS `WKWebView.evaluateJavaScript`가 값을 받는 방식이 정확히 같으므로, **같은 파일을 그대로**
 다른 플랫폼에서 실행할 수 있다. 플랫폼을 더할 때 새로 쓰는 것은 전송 코드뿐이고, 빼려면
 그 폴더만 지우면 된다. 서버는 어느 플랫폼이 보냈는지 알지 못한다 — `body_text`가 왔다는
-사실만 본다(`docs/v2/04-DATA-FLOW.md` §7.3).
+사실만 본다(`docs/v2/ko/04-DATA-FLOW.md` §7.3).
 
 ## 설치 (Chrome)
 

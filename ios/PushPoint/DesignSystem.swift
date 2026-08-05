@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 디자인 토큰 — **값의 출처는 `docs/v2/10-DESIGN-SYSTEM.md`이고 이 파일은 이름만 갖는다.**
+/// 디자인 토큰 — **값의 출처는 `docs/v2/ko/10-DESIGN-SYSTEM.md`이고 이 파일은 이름만 갖는다.**
 /// 값이 어긋나면 10번 문서가 옳다(`ios/design/README.md`의 규칙).
 ///
 /// 색은 여기에 hex로 적지 않고 **Asset Catalog**(`ios/PushPoint/Assets.xcassets`)에서 온다

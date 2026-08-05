@@ -6,7 +6,7 @@
 //
 // scraper를 import하지 않는 것이 이 패키지의 불변식이다. scraper는 호출하지 않고
 // 링크만 해도 패키지 init()이 정규식·셀렉터 테이블을 만들어 RSS를 +51MB 올리는데,
-// iOS Share Extension 예산(~120MB)에서는 감당할 수 없다(실측 근거는 docs/v2/08).
+// iOS Share Extension 예산(~120MB)에서는 감당할 수 없다(실측 근거는 docs/v2/ko/08).
 package tagjob
 
 import (

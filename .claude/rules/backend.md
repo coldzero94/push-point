@@ -40,6 +40,6 @@ paths:
 
 ## Sources and generated output
 
-To change the API, edit `api/openapi.yaml` (the machine source of truth) first, then regenerate `backend/internal/api/gen/` with `just gen` — keep `docs/v2/06-API-SPECIFICATION.md` in sync as commentary. For the schema, `docs/v2/05-DATA-SCHEMA.md` is the source — update it first, then make the code match.
+To change the API, edit `api/openapi.yaml` (the machine source of truth) first, then regenerate `backend/internal/api/gen/` with `just gen` — keep `docs/v2/ko/06-API-SPECIFICATION.md` in sync as commentary. For the schema, `docs/v2/ko/05-DATA-SCHEMA.md` is the source — update it first, then make the code match.
 
 - `backend/internal/api/gen/` is generated — **never edit it directly**. Even compile errors and type mismatches are fixed only by editing `api/openapi.yaml` and re-running `just gen`.

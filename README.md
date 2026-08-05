@@ -25,10 +25,10 @@
 
 <p align="center">
   <a href="https://coldzero94.github.io/push-point/">Site</a> ·
-  <a href="docs/v2/00-README.md">Docs</a> ·
+  <a href="docs/v2/en/00-README.md">Docs</a> ·
   <a href="api/openapi.yaml">API contract</a> ·
   <a href="nlu/golden/README.md">Tagging evaluation</a> ·
-  <a href="docs/v2/08-DEVELOPMENT-PLAN.md">Roadmap</a> ·
+  <a href="docs/v2/en/08-DEVELOPMENT-PLAN.md">Roadmap</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
@@ -100,7 +100,7 @@ Two of those rows exist to be uncomfortable.
 
 The open-web tagging set is built deliberately from the rest of the internet — commerce, communities, app stores, video, wikis — because a tagger evaluated only on developer blogs scores well and tells you nothing. It scores lower on purpose: **it is the number that is allowed to be disappointing.**
 
-Search is the other one. 0.640 means the right link is first two times in three, which is the weakest thing here and the one the other three rows exist to serve — an archive you cannot retrieve from is a write-only journal. It was 0.520 a day ago. Six of the remaining nine misses need semantic matching that no dictionary reaches, and the embedding approach that would reach them was measured and cut (`docs/v2/12-BACKLOG.md`).
+Search is the other one. 0.640 means the right link is first two times in three, which is the weakest thing here and the one the other three rows exist to serve — an archive you cannot retrieve from is a write-only journal. It was 0.520 a day ago. Six of the remaining nine misses need semantic matching that no dictionary reaches, and the embedding approach that would reach them was measured and cut (`docs/v2/en/12-BACKLOG.md`).
 
 ## Features
 - **Instant save** — `POST /api/v1/links` commits two INSERTs and returns 201. Scraping, tagging and thumbnails run in a SQLite-backed queue that recovers from `kill -9`; nothing slow ever sits on the request path.
@@ -135,7 +135,7 @@ curl -X POST http://localhost:8420/api/v1/links \
 
 A busy port never blocks a run: `just dev` scans upward from 8420 and prints the port it took, `just web-dev` proxies to the backend in the same checkout, and Vite moves off 8421 by itself. Several worktrees can run side by side.
 
-`just release` produces one binary at `backend/bin/pushpoint` with the web UI embedded. Always-on setup (launchd/systemd), iPhone access over Tailscale, bookmark import and backups are in [the deployment guide](docs/v2/07-DEPLOYMENT.md).
+`just release` produces one binary at `backend/bin/pushpoint` with the web UI embedded. Always-on setup (launchd/systemd), iPhone access over Tailscale, bookmark import and backups are in [the deployment guide](docs/v2/en/07-DEPLOYMENT.md).
 
 ## Configuration
 
@@ -222,16 +222,16 @@ polish, and bringing the daily resurfaced link to iOS — the contract is in pla
 the client work is left.
 
 The full plan, with completion criteria per stage, is in
-[the development plan](docs/v2/08-DEVELOPMENT-PLAN.md).
+[the development plan](docs/v2/en/08-DEVELOPMENT-PLAN.md).
 
 ## Documentation
 
-Project docs are written in Korean and live in `docs/v2/`, the single source of truth. This README is the English entry point.
+Docs live in `docs/v2/` in both languages — [English](docs/v2/en/) and [한국어](docs/v2/ko/). The Korean side is the source of truth; `just docs-parity` fails when the two drift in structure, tables, code blocks or numbers.
 
-- [Project intro and table of contents](docs/v2/00-README.md)
-- [System architecture](docs/v2/03-SYSTEM-ARCHITECTURE.md) — single-process design, package roles
-- [API specification](docs/v2/06-API-SPECIFICATION.md) — REST endpoints, auth, cursor pagination
-- [Deployment guide](docs/v2/07-DEPLOYMENT.md) — running it, operating it, measured benchmarks
+- [Project intro and table of contents](docs/v2/en/00-README.md)
+- [System architecture](docs/v2/en/03-SYSTEM-ARCHITECTURE.md) — single-process design, package roles
+- [API specification](docs/v2/en/06-API-SPECIFICATION.md) — REST endpoints, auth, cursor pagination
+- [Deployment guide](docs/v2/en/07-DEPLOYMENT.md) — running it, operating it, measured benchmarks
 - [Tagging evaluation](nlu/golden/README.md) — the protocol and every measurement to date
 - [Rewrite comparison](docs/README.md) — what changed from the first version and why
 

@@ -1,5 +1,5 @@
 // Package queue는 SQLite jobs 테이블 기반의 내구성 있는 인프로세스 잡 큐 계약을 정의한다.
-// (v1 Redis Streams 대체 — 스펙 docs/v2/05 §4, 04-DATA-FLOW 참조)
+// (v1 Redis Streams 대체 — 스펙 docs/v2/ko/05 §4, 04-DATA-FLOW 참조)
 //
 // 동작 계약 (구현체가 반드시 지킬 것):
 //   - enqueue는 항상 호출자의 트랜잭션 안에서 일어난다 (EnqueueTx). 링크 저장과

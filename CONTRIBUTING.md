@@ -17,7 +17,7 @@ just dev-all      # both of the above in one split-screen TUI (mprocs)
 just --list       # every recipe with its description
 ```
 
-Operational topics — environment variables, launchd/systemd, Tailscale access from the phone, bookmark/Takeout import, backup and restore — are documented in [docs/v2/07-DEPLOYMENT.md](docs/v2/07-DEPLOYMENT.md).
+Operational topics — environment variables, launchd/systemd, Tailscale access from the phone, bookmark/Takeout import, backup and restore — are documented in [docs/v2/ko/07-DEPLOYMENT.md](docs/v2/ko/07-DEPLOYMENT.md).
 
 Working in git worktrees (one per agent) needs no manual setup: `frontend/node_modules` is the only ignored path a fresh worktree cannot rebuild on demand, and `orca.yaml` restores it — cloned from the primary checkout when the lockfile matches, `just web-install` otherwise (Go modules come from the global cache and are only pre-warmed). Dev servers pick free ports per worktree, so several can run at once: `just dev` records its port and PID for the checkout, and `just web-dev` proxies to that backend rather than to whichever one answers first. The file is [Orca](https://www.onorca.dev)-specific but readable as the checklist for any worktree tool; `.orca/` holds per-user overrides and is ignored.
 

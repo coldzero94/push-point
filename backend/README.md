@@ -47,5 +47,5 @@ just dev    # cd backend && PUSHPOINT_API_KEY=dev-key go run ./cmd/pushpoint
 
 ## 더 보기
 
-- 아키텍처: [../docs/v2/03-SYSTEM-ARCHITECTURE.md](../docs/v2/03-SYSTEM-ARCHITECTURE.md)
-- 스키마: [../docs/v2/05-DATA-SCHEMA.md](../docs/v2/05-DATA-SCHEMA.md)
+- 아키텍처: [../docs/v2/ko/03-SYSTEM-ARCHITECTURE.md](../docs/v2/ko/03-SYSTEM-ARCHITECTURE.md)
+- 스키마: [../docs/v2/ko/05-DATA-SCHEMA.md](../docs/v2/ko/05-DATA-SCHEMA.md)

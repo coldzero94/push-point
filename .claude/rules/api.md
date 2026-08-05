@@ -5,8 +5,8 @@ paths:
 
 # API contract rules (contract-first)
 
-- `api/openapi.yaml` is the **machine source of truth for the API**. `docs/v2/06-API-SPECIFICATION.md` is human-facing commentary — when the spec changes, update 06 in the **same commit**. If the two disagree, openapi.yaml wins.
-- Field types and status enums (`content_type`, `status`, `source`, etc.) must stay consistent with the schema in `docs/v2/05-DATA-SCHEMA.md`.
+- `api/openapi.yaml` is the **machine source of truth for the API**. `docs/v2/ko/06-API-SPECIFICATION.md` is human-facing commentary — when the spec changes, update 06 in the **same commit**. If the two disagree, openapi.yaml wins.
+- Field types and status enums (`content_type`, `status`, `source`, etc.) must stay consistent with the schema in `docs/v2/ko/05-DATA-SCHEMA.md`.
 - All time fields are **integer unix epoch seconds** (`created_at`, `published_at`, etc.). No `format: date-time` strings.
 - After adding or changing an endpoint, re-run `just gen` and commit the generated output (`backend/internal/api/gen/`) alongside. `just gen-check` blocks drift in CI.
 - This contract has **three consumers**: backend (oapi-codegen v2.8.0), iOS (swift-openapi-generator), and web (openapi-typescript, `just web-gen`). A spec change is done only when all three generated outputs are regenerated and committed — web specifics in `.claude/rules/frontend.md`.

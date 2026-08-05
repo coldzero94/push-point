@@ -20,7 +20,7 @@ func writeJSONError(w http.ResponseWriter, status int, code gen.ErrorErrorCode, 
 }
 
 // authExempt는 인증 면제 경로 여부. 계약상 면제는 GET /healthz, GET /thumbs/* 2개뿐
-// (docs/v2/06 §1). /debug/pprof는 계약 밖 — 인증 대신 pprofLoopbackOnly가 루프백을
+// (docs/v2/ko/06 §1). /debug/pprof는 계약 밖 — 인증 대신 pprofLoopbackOnly가 루프백을
 // 강제하므로 여기서도 통과시킨다.
 func authExempt(r *http.Request) bool {
 	if r.Method == http.MethodGet && r.URL.Path == "/healthz" {

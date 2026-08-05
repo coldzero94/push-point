@@ -4,7 +4,7 @@
 
 `api/openapi.yaml`(OpenAPI 3.1)이 **Push-Point API의 기계 원본**이다.
 백엔드 서버 인터페이스와 클라이언트 코드는 전부 이 파일에서 생성한다.
-`docs/v2/06-API-SPECIFICATION.md`는 사람용 해설·예시 문서로 유지하며,
+`docs/v2/ko/06-API-SPECIFICATION.md`는 사람용 해설·예시 문서로 유지하며,
 둘이 다르면 **openapi.yaml이 우선**한다 — 발견 즉시 06을 스펙에 맞춰 고친다.
 
 ## 소비자 (코드 생성 대상 3곳)
@@ -27,7 +27,7 @@
 
 ## 스펙 작성 규칙 요약
 
-- 필드 타입·상태 enum은 `docs/v2/05-DATA-SCHEMA.md` 스키마와 일치.
+- 필드 타입·상태 enum은 `docs/v2/ko/05-DATA-SCHEMA.md` 스키마와 일치.
   시각 필드는 전부 **integer unix epoch 초** (date-time 문자열 금지).
 - 인증: bearer (`PUSHPOINT_API_KEY`). 면제는 `GET /healthz`·`GET /thumbs/{path}` 2개뿐 (`security: []`).
 - `POST /api/v1/links`는 url_hash 멱등 — 중복 저장 시 `200 {id, duplicate:true}` (Share Extension 재시도의 근거).

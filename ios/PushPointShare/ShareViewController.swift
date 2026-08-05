@@ -9,7 +9,7 @@ import UIKit
 /// 않아도 저장이 완결된다.
 ///
 /// scraper가 빠진 최소 프레임워크(PPShare)만 링크한다 — 확장의 메모리 예산이 이유다
-/// (docs/v2/08-DEVELOPMENT-PLAN.md M4 선행 검증).
+/// (docs/v2/ko/08-DEVELOPMENT-PLAN.md M4 선행 검증).
 final class ShareViewController: UIViewController {
     /// 확장은 화면이 곧 닫히고 Go 쪽은 반환 JSON 말고 통로가 없다 — os_log가 사후에
     /// 무슨 일이 있었는지 알 수 있는 유일한 수단이다(콘솔.app에서 조회).
@@ -72,7 +72,7 @@ final class ShareViewController: UIViewController {
 
     // MARK: - 입력
 
-    /// 공유 출처에 따라 받는 것이 다르다(docs/v2/04-DATA-FLOW.md §7.3.1). 어느 갈래로
+    /// 공유 출처에 따라 받는 것이 다르다(docs/v2/ko/04-DATA-FLOW.md §7.3.1). 어느 갈래로
     /// 오든 계약 필드로 바꾸는 규칙은 `SharePayload`에 있다 — 뷰에 두면 테스트가 부를 수
     /// 없어서 떼어 냈다.
     private func extractPayload() async throws -> (fields: [String: String], source: SharePayload.Source) {
