@@ -80,8 +80,19 @@ export function ListScreen() {
 
   const facetOf = makeFacetResolver(tagsQuery.data)
   const links = data?.pages.flatMap((p) => p.links) ?? []
-  const groups = groupByTime(links)
-  const hasFilter = Boolean(tag || status)
+  // All three narrowing controls, not two. `unopened` was missing, and it matters more
+  // than it looks now that the card is a move rather than a copy: filter to unopened and
+  // one of those links silently leaves the time-ordered list for a section of its own, so
+  // the list the user asked for is no longer complete. It also decides the empty state
+  // below — with `?unopened=true` and no matches, "you have not saved anything yet" was
+  // a lie about an archive that is full.
+  const hasFilter = Boolean(tag || status || unopened)
+  // The forgotten link is shown as its own card above the board (below). It has to be
+  // *moved* there, not copied: it is picked from the whole archive, and a link that is
+  // seven days old is still commonly inside page one — the smaller the archive, the more
+  // certain the overlap. With five links seeded, the same card rendered twice on one page.
+  const resurfacedCard = hasFilter ? undefined : resurfaced.data
+  const groups = groupByTime(links.filter((l) => l.id !== resurfacedCard?.id))
   const showSkeleton = useDelayed(isPending)
 
   const openInspector = (id: number) =>
@@ -140,7 +151,12 @@ export function ListScreen() {
   const boardRef = useRef<HTMLDivElement>(null)
   useRowKeyboard({
     containerRef: boardRef,
-    links,
+    // The forgotten-link card is a row on this board, so the keyboard has to know it. It is
+    // not always inside `links`: it is picked from the whole archive and may sit past the
+    // loaded pages, and then `links.find` misses. J/K would move focus onto it and every
+    // action key — delete, retry, edit, note — would do nothing while the focus ring said
+    // otherwise.
+    links: resurfacedCard ? [resurfacedCard, ...links.filter((l) => l.id !== resurfacedCard.id)] : links,
     inspectorOpen: link != null,
     onOpen: openInspector,
     onOpenWithFocus: (id, focus) => {
@@ -228,15 +244,17 @@ export function ListScreen() {
             매일 보면 무시하게 되는 칸이고, 그러면 진짜 있는 날에도 안 보인다.
 
             필터나 검색이 걸린 화면에서는 숨긴다. 사용자가 좁혀 놓은 결과 맨 위에 그와
-            무관한 카드를 끼우면 그건 되살리기가 아니라 방해다. */}
-        {!isPending && !isError && !tag && resurfaced.data ? (
+            무관한 카드를 끼우면 그건 되살리기가 아니라 방해다. **태그만이 아니라 상태
+            필터도 마찬가지다** — 처음에는 `!tag`만 봤는데, 그러면 "실패"로 좁힌 목록
+            맨 위에 멀쩡한 링크 한 장이 얹힌다. 좁혔다는 사실은 `hasFilter`가 안다. */}
+        {!isPending && !isError && resurfacedCard ? (
           <section className="mb-32">
             <TimeSpine label={t('resurface.spine')} count={1} />
             <ul className={BOARD_GRID}>
               <LinkCard
-                link={resurfaced.data}
+                link={resurfacedCard}
                 resolveFacet={facetOf}
-                selected={link === resurfaced.data.id}
+                selected={link === resurfacedCard.id}
                 activeTag={tag}
                 onOpen={openInspector}
                 onTagClick={toggleTag}

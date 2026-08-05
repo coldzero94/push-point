@@ -32,6 +32,14 @@ final class FeedModel {
     private(set) var links: [Components.Schemas.Link] = []
     private(set) var loadError: String?
 
+    /// 오늘의 한 건 — 잊고 있던 링크 하나. 후보가 없으면 서버가 204를 주고 여기는 `nil`이다.
+    ///
+    /// **뷰가 아니라 여기에 두는 이유**는 이 파일 맨 위 문단 그대로다. 이건 화면의 세 번째
+    /// 목록이고, 목록이 하나 더 생겼는데 변경이 그걸 안 건드리면 나는 사고는 이미 한 번
+    /// 났다 — 카드를 밀어 지우면 토스트는 뜨는데 카드가 남고, 눌러 들어가면 404다.
+    /// `apply(_:)` 안에 두면 그 사고가 20초짜리 UI 테스트가 아니라 밀리초에 잡힌다.
+    private(set) var resurfaced: Components.Schemas.Link?
+
     private var nextCursor: String?
     private var loadingMore = false
 
@@ -67,6 +75,29 @@ final class FeedModel {
             loadError = nil
         } catch {
             loadError = error.localizedDescription
+        }
+    }
+
+    /// 오늘의 한 건을 받아 둔다. **실패는 조용히 넘긴다** — 이건 목록이 아니라 덤이고,
+    /// 없으면 카드 한 장이 안 보일 뿐이다. 여기서 `loadError`를 쓰면 목록이 멀쩡히 있는
+    /// 화면에 "불러오지 못했습니다"가 뜬다.
+    ///
+    /// 서버가 하루 동안 같은 답을 주므로 자주 부를 이유가 없지만, 부른다고 답이 흔들리지도
+    /// 않는다 — 웹의 1시간 staleTime과 같은 판단이고 여기서는 새로고침에 얹는 것으로 족하다.
+    func loadResurfaced(_ client: any APIProtocol) async {
+        guard let out = try? await client.getResurfaced(.init()) else { return }
+        switch out {
+        case let .ok(r):
+            // 방금 지운 링크가 되살림 자리로 돌아오는 것을 막는다. 서버는 삭제를 아직
+            // 모를 수 있고(요청이 엇갈리면), 그러면 되돌리기 토스트가 떠 있는 채로 같은
+            // 링크가 맨 위에 카드로 뜬다 — `pollRefresh`가 막는 것과 같은 사고다.
+            if let link = try? r.body.json, !recentlyDeleted.contains(link.id) {
+                resurfaced = link
+            }
+        case .noContent:
+            resurfaced = nil
+        default:
+            break
         }
     }
 
@@ -115,14 +146,34 @@ final class FeedModel {
         switch change {
         case let .removed(id):
             links.removeAll { $0.id == id }
+            if resurfaced?.id == id { resurfaced = nil }
             recentlyDeleted.insert(id)
         case let .replaced(link):
             if let i = links.firstIndex(where: { $0.id == link.id }) { links[i] = link }
+            if resurfaced?.id == link.id { resurfaced = link }
         }
     }
 
     /// 되돌리기가 성공했을 때 — 그 id는 다시 살아 있으므로 폴러가 가져와야 한다.
     func forgetDeletion(of id: Int) { recentlyDeleted.remove(id) }
+
+    // MARK: - 보드가 그리는 것
+
+    /// 보드가 실제로 그릴 목록. 되살림 카드로 올라간 한 건은 뺀다.
+    ///
+    /// **사본이 아니라 이동이다.** 빼지 않으면 같은 카드가 한 화면에 두 번 나온다 —
+    /// 되살림은 아카이브 전체에서 고르는데 7일 지난 링크도 1장 안에 흔히 들어 있어서,
+    /// 아카이브가 작을수록 반드시 겹친다(5건짜리 웹 아카이브에서 실제로 두 번 나왔다).
+    ///
+    /// **뷰가 아니라 여기 있는 이유는 페이지네이션이다.** 다음 장을 당기는 조건이
+    /// "마지막 카드가 보이면"인데, 그 마지막은 `links`의 끝이 아니라 **보드가 그린 것**의
+    /// 끝이어야 한다. 되살림으로 올라간 링크가 하필 `links`의 끝이면 그 id를 가진 카드가
+    /// 보드에 없어 조건이 영영 성립하지 않고, iOS에는 더보기 버튼도 없어서 **목록이 1장에서
+    /// 조용히 끝난다** — 오류도 스피너도 없이. 뷰 안에 두면 이걸 검사할 방법이 없다.
+    func board(hidingCard card: Components.Schemas.Link?) -> [Components.Schemas.Link] {
+        guard let id = card?.id else { return links }
+        return links.filter { $0.id != id }
+    }
 
     /// 변경(삭제·재시도)이 실패했을 때 목록 오류 자리를 쓰지 않기 위해 뷰가 지운다.
     func clearLoadError() { loadError = nil }

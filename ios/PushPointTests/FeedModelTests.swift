@@ -18,6 +18,11 @@ final class FeedModelTests: XCTestCase {
         /// 실제로 나간 요청의 커서들. 페이지네이션이 정말 커서를 태우는지 본다.
         let recorder: Recorder
 
+        /// 오늘의 한 건. `nil`을 돌려주면 204(후보 없음)로 답한다. 기본값은 `nil`을
+        /// 돌려주는 것이 아니라 **없음**이라, 이 기능을 안 보는 테스트에서 `getResurfaced`를
+        /// 부르면 여전히 터진다 — 부르지 않는다는 사실도 검사 대상이다.
+        var resurfaced: (@Sendable () async -> Components.Schemas.Link?)?
+
         final class Recorder: @unchecked Sendable {
             private(set) var cursors: [String?] = []
             private(set) var filters: [String?] = []
@@ -39,7 +44,12 @@ final class FeedModelTests: XCTestCase {
         func deleteLink(_: Operations.deleteLink.Input) async throws -> Operations.deleteLink.Output { fatalError() }
         func retryLink(_: Operations.retryLink.Input) async throws -> Operations.retryLink.Output { fatalError() }
         func markOpened(_: Operations.markOpened.Input) async throws -> Operations.markOpened.Output { fatalError() }
-        func getResurfaced(_: Operations.getResurfaced.Input) async throws -> Operations.getResurfaced.Output { fatalError() }
+        func getResurfaced(_: Operations.getResurfaced.Input) async throws
+            -> Operations.getResurfaced.Output {
+            guard let resurfaced else { fatalError("getResurfaced를 기대하지 않은 테스트가 불렀다") }
+            if let link = await resurfaced() { return .ok(.init(body: .json(link))) }
+            return .noContent(.init())
+        }
         func search(_: Operations.search.Input) async throws -> Operations.search.Output { fatalError() }
         func getThumb(_: Operations.getThumb.Input) async throws -> Operations.getThumb.Output { fatalError() }
         func listTags(_: Operations.listTags.Input) async throws -> Operations.listTags.Output { fatalError() }
@@ -203,5 +213,124 @@ final class FeedModelTests: XCTestCase {
         await feed.load(client, filter: nil)
         await feed.loadMore(client, filter: nil)
         XCTAssertEqual(feed.links.map(\.id), [1, 2, 3], "같은 링크가 두 장 생겼다")
+    }
+
+    // MARK: - 오늘의 한 건
+    //
+    // 이건 화면의 **세 번째 목록**이고, 이 파일 맨 위 문단이 예고한 자리다: 목록이 하나
+    // 더 생겼는데 변경이 그걸 안 건드리면 카드가 유령으로 남는다. 아래 둘은 그 사고를
+    // 만들어 두고 막혔는지 본다.
+
+    /// 목록에 7이 **들어 있는** 스텁. 되살림 링크는 아카이브의 일부이므로 이게 실제
+    /// 형편이고, 빈 목록에서 돌리면 `links.removeAll`과 `resurfaced = nil`이 같은 링크에
+    /// 대해 함께 도는 경로를 한 번도 안 밟는다 — "카드가 지워진다"만 보고 "목록에서도
+    /// 지워진다"는 안 보게 된다.
+    private static func resurfacing(_ id: Int?) -> StubClient {
+        var c = Self.stub { _ in Self.page([1, 7, 2], next: nil) }.0
+        c.resurfaced = { id.map { Self.link($0) } }
+        return c
+    }
+
+    /// **유령 카드.** 되살림 카드를 밀어 지우면 토스트는 뜨는데 카드가 남고, 눌러
+    /// 들어가면 404다 — 검색 결과에서 이미 한 번 난 사고를 목록 하나 더로 재현한 것.
+    func testDeletingTheResurfacedLinkClearsTheCard() async {
+        let client = Self.resurfacing(7)
+        let feed = FeedModel()
+        await feed.load(client, filter: nil)
+        await feed.loadResurfaced(client)
+        XCTAssertEqual(feed.resurfaced?.id, 7)
+        XCTAssertTrue(feed.links.contains { $0.id == 7 }, "전제가 틀렸다 — 목록에 7이 없다")
+
+        feed.apply(.removed(7))
+
+        XCTAssertNil(feed.resurfaced, "지운 링크가 되살림 카드로 화면에 남았다")
+        XCTAssertFalse(feed.links.contains { $0.id == 7 }, "목록에서는 안 지워졌다")
+    }
+
+    /// 재시도로 상태가 바뀌면 카드도 같이 바뀌어야 한다. 안 바뀌면 목록의 같은 링크는
+    /// `done`인데 맨 위 카드만 `failed`로 남아, 한 화면이 자기 자신과 모순된다.
+    func testRetryingTheResurfacedLinkUpdatesTheCard() async {
+        let client = Self.resurfacing(7)
+        let feed = FeedModel()
+        await feed.load(client, filter: nil)
+        await feed.loadResurfaced(client)
+        XCTAssertEqual(feed.resurfaced?.status, .done)
+
+        feed.apply(.replaced(Self.link(7, status: .failed)))
+
+        XCTAssertEqual(feed.resurfaced?.status, .failed, "카드가 옛 상태로 남았다")
+        XCTAssertEqual(feed.links.first { $0.id == 7 }?.status, .failed, "목록 쪽이 안 바뀌었다")
+    }
+
+    /// 후보가 없으면 서버가 204를 준다. 그때 **직전 답을 붙들고 있으면 안 된다** —
+    /// 오늘 그 링크를 열어서 후보에서 빠졌는데 카드가 그대로 있으면, 되살리기는
+    /// "이미 본 것"을 매일 다시 들이미는 기능이 된다.
+    func testNoContentClearsTheCard() async {
+        let feed = FeedModel()
+        await feed.loadResurfaced(Self.resurfacing(7))
+        XCTAssertNotNil(feed.resurfaced)
+
+        await feed.loadResurfaced(Self.resurfacing(nil))
+
+        XCTAssertNil(feed.resurfaced, "204를 받고도 옛 카드를 들고 있다")
+    }
+
+    /// 방금 지운 링크가 되살림 자리로 돌아오는 것을 막는다. 서버는 삭제를 아직 모를 수
+    /// 있고(요청이 엇갈리면), 그러면 되돌리기 토스트가 떠 있는 채로 같은 링크가 맨 위에
+    /// 카드로 뜬다 — `pollRefresh`가 막는 것과 같은 사고다.
+    func testDeletedLinkDoesNotComeBackAsTheCard() async {
+        let feed = FeedModel()
+        feed.apply(.removed(7))
+
+        await feed.loadResurfaced(Self.resurfacing(7))
+
+        XCTAssertNil(feed.resurfaced, "지운 링크가 되살림 카드로 되돌아왔다")
+    }
+
+    /// **되살림 링크가 목록의 꼬리일 때 페이지네이션이 멈추지 않아야 한다.**
+    ///
+    /// 화면에서 이게 회귀하면 아무 표시 없이 목록이 1장에서 끝난다 — 오류도, 스피너도,
+    /// 더보기 버튼도 없다(iOS에는 그 폴백이 아예 없어서, `onAppear` 조건이 한 번 안 걸리면
+    /// 2장에 도달할 경로가 하나도 남지 않는다). 되살림 후보는 `created_at <= now-7d`라
+    /// 1장의 **꼬리 쪽에 몰리므로**, 하필 끝이 되는 것은 드문 경우가 아니다.
+    ///
+    /// 그래서 확인하는 것은 트리거가 쓰는 상수가 아니라 **두 꼬리가 실제로 다르다는 것**이다.
+    func testBoardTailMovesWhenTheResurfacedLinkIsLast() async {
+        let (client, _) = Self.stub { _ in Self.page([1, 2, 3], next: "c1") }
+        let feed = FeedModel()
+        await feed.load(client, filter: nil)
+        let card = Self.link(3)
+
+        let board = feed.board(hidingCard: card)
+
+        XCTAssertEqual(board.map(\.id), [1, 2], "되살림 링크가 보드에 남았다 — 카드가 두 번 그려진다")
+        XCTAssertEqual(board.last?.id, 2, "트리거가 걸릴 카드가 사라졌다 — 다음 장을 영영 못 받는다")
+        XCTAssertNotEqual(board.last?.id, feed.links.last?.id,
+                          "두 꼬리가 같으면 이 테스트는 아무것도 안 본다")
+    }
+
+    /// 카드가 없으면(204·필터 중) 보드는 목록 그대로다 — 여기서 한 건이라도 빠지면
+    /// 그건 링크가 화면에서 사라지는 것이다.
+    func testBoardIsUntouchedWithoutACard() async {
+        let (client, _) = Self.stub { _ in Self.page([1, 2, 3], next: nil) }
+        let feed = FeedModel()
+        await feed.load(client, filter: nil)
+
+        XCTAssertEqual(feed.board(hidingCard: nil).map(\.id), [1, 2, 3])
+    }
+
+    /// 되돌리면 그 보호도 풀려야 한다. 안 풀면 그 id는 세션 내내 "방금 지운 것"으로 남아
+    /// 되살림 카드가 하루 종일 빈다 — 링크는 목록에 멀쩡히 돌아와 있는데.
+    ///
+    /// `forgetDeletion`은 이 테스트가 생기기 전에도 있었고 통과했지만, **앱은 그걸 부르지
+    /// 않았다.** 모델이 맞는 것과 앱이 거기 배선된 것은 다른 사실이다.
+    func testUndoLetsTheCardComeBackToo() async {
+        let feed = FeedModel()
+        feed.apply(.removed(7))
+        feed.forgetDeletion(of: 7)
+
+        await feed.loadResurfaced(Self.resurfacing(7))
+
+        XCTAssertEqual(feed.resurfaced?.id, 7, "되돌린 링크가 되살림 카드로 안 돌아온다")
     }
 }

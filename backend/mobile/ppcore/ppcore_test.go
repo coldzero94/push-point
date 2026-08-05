@@ -73,6 +73,18 @@ func TestInProcessServerServesContract(t *testing.T) {
 	if !strings.Contains(body, "https://example.com/ios") {
 		t.Errorf("저장한 링크가 목록에 없다: %s", body)
 	}
+
+	// 되살리기 — 라우트가 **붙어 있는지**를 본다. 방금 저장한 링크는 7일이 안 됐으므로
+	// 후보가 없어 204가 정상이고, 200도 계약상 맞다(다른 후보가 있을 수는 없지만).
+	//
+	// 이 두 줄이 있는 이유는 이 기능의 실패가 조용하기 때문이다. iOS는 응답을 못 받으면
+	// 카드를 안 그리는데, "오늘은 후보가 없다"와 "라우트가 없어서 404"가 화면에서 완전히
+	// 같다 — 낡은 gomobile 바인딩이 정확히 그 404를 만들고, 그건 이 저장소가 이미 한 번
+	// 당한 사고다(사전 30/42로 이틀). 여기가 빨개지지 않으면 아무도 모른다.
+	code, body = req(t, addr, http.MethodGet, "/api/v1/links/resurfaced", testKey, "")
+	if code != http.StatusNoContent && code != http.StatusOK {
+		t.Errorf("되살리기가 204나 200이어야 한다 (라우트 누락?): %d %s", code, body)
+	}
 }
 
 // 루프백은 iOS 앱 샌드박스를 넘어 공유되므로 인증이 실제로 걸려 있어야 한다 —

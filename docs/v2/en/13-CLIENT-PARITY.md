@@ -93,6 +93,7 @@ would do on the other client?** If you cannot, it is ③; if you can and it simp
 | Stats: paragraph · streak · rhythm across 30 days | ① | ✅ | ✅ | **added to the web 2026-07-27** |
 | Stats: day-of-week pattern | ① | ✅ | ✅ | **added to the web 2026-07-28** |
 | **Stats: failed-link CTA** | ① | ✅ | ❌ | **the remaining hole — below** |
+| One a day (resurfacing) | ① | ✅ | ✅ | **added to iOS 2026-08-05** — contract, backend and web landed in #119; the iOS screen was two weeks behind |
 | Save: share sheet | ② | ✅ | — | OS feature |
 | Save: URL field · bookmarklet | ② | — | ✅ | |
 | Keyboard shortcuts | ② | — | ✅ | |
