@@ -63,6 +63,7 @@ struct LinkDetailView: View {
                       current: detail?.value1.tags.map(\.name) ?? []) { names in
                 Task { await save(tags: names) }
             }
+            .pushPointTheme()
         }
         // `id:` 없이 두면 서버가 준비되기 전에 열렸을 때 영원히 스피너가 된다
         // (StatsView 주석 참조).

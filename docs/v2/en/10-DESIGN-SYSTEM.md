@@ -1326,6 +1326,7 @@ enum DS {
 | Inspector | `.sheet` + `.presentationDetents([.medium, .large])` + a drag indicator | |
 | CommandPalette | `.searchable` + `.searchScopes` | Search, not a palette, is the native idiom |
 | Tooltip | **None** | Put a label next to the icon, or replace it with `.contextMenu` |
+| Segment (3-state) | `Picker` + `.pickerStyle(.segmented)` | Used for the theme only. **Take the system segment as it is and do not paint it** — this is the screen that changes the theme, so a colour of ours that half-follows the new theme reads as a fault |
 
 ### 8.5 What follows platform idiom (deliberately different)
 
