@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import UserNotifications
 
 /// 설정 — 지금은 **모양 둘**뿐이다.
 ///
@@ -18,6 +20,32 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var theme = Theme.Store.shared
     @AppStorage("pushpoint.density") private var density: ListDensity = .card
+    @State private var notifyStatus: UNAuthorizationStatus = .notDetermined
+
+    private var remedy: SaveNotifier.Remedy { SaveNotifier.remedy(for: notifyStatus) }
+
+    private var notifyLabel: String {
+        switch notifyStatus {
+        case .notDetermined: t("settings.notifyNotAsked")
+        case .denied: t("settings.notifyOff")
+        default: t("settings.notifyOn")
+        }
+    }
+
+    /// 배너와 **같은 동작**이다. 여기서 갈라지면 두 자리가 같은 상태에 다르게 반응한다.
+    private func applyRemedy() async {
+        switch remedy {
+        case .ask:
+            await SaveNotifier.requestAuthorization()
+            notifyStatus = await SaveNotifier.status()
+        case .openSettings:
+            let target = URL(string: UIApplication.openNotificationSettingsURLString)
+                ?? URL(string: UIApplication.openSettingsURLString)
+            if let target { await UIApplication.shared.open(target) }
+        case .none:
+            break
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -58,7 +86,32 @@ struct SettingsSheet: View {
                     // 따라가는지가 라벨 하나에만 걸려 있다.
                     Text(t("settings.themeFooter"))
                 }
+
+                // 알림. **여기 오기 전에는 볼 자리가 없었다** — 목록의 배너는 확장이
+                // 알림을 버렸을 때(`droppedNotices > 0`)만 뜨므로, 한 번 허용하고 나면
+                // 지금 켜져 있는지 확인할 방법도, 끄고 다시 켤 방법도 없었다.
+                //
+                // 상태별로 무엇을 할지는 `SaveNotifier.remedy(for:)`가 정한다 — 배너와
+                // 같은 판단이어야 해서 그쪽으로 모았다.
+                Section {
+                    LabeledContent(t("settings.notifications")) {
+                        Text(notifyLabel).foregroundStyle(PP.Palette.fg2)
+                    }
+                    .accessibilityIdentifier("settings.notify.state")
+
+                    if remedy != .none {
+                        Button(remedy == .ask ? t("settings.notifyAllow") : t("settings.notifyOpen")) {
+                            Task { await applyRemedy() }
+                        }
+                        .accessibilityIdentifier("settings.notify.action")
+                    }
+                } header: {
+                    Text(t("settings.notifyHeader"))
+                } footer: {
+                    Text(t("settings.notifyFooter"))
+                }
             }
+            .task { notifyStatus = await SaveNotifier.status() }
             .navigationTitle(t("settings.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

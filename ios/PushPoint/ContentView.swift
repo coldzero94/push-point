@@ -229,20 +229,18 @@ struct ContentView: View {
         } else if droppedNotices > 0 {
             Button {
                 Task {
-                    // **아직 안 물어봤으면 여기서 물어본다.** 설정 앱으로 내보내는 것은
-                    // 이미 거부한 사용자에게만 맞는 동작이고, 그 경우에도 iOS가 어디로
-                    // 떨어뜨릴지는 앱이 정하지 못한다(권한을 한 번도 요청하지 않은 앱은
-                    // 설정에 항목 자체가 없어 최상위로 간다 — 실제로 그렇게 나왔다).
-                    //
-                    // notDetermined에서 시스템 프롬프트를 띄우는 쪽이 **한 번에 끝난다.**
-                    if notifyStatus == .notDetermined {
+                    // 무엇을 할지는 `SaveNotifier.remedy(for:)`가 정한다 — 설정 시트의
+                    // 알림 섹션이 같은 판단을 해야 해서 그쪽으로 모았다. 여기에만 있던
+                    // 동안에는 권한을 허용하고 나면 이 분기에 도달할 방법이 없었다.
+                    switch SaveNotifier.remedy(for: notifyStatus) {
+                    case .ask:
                         await SaveNotifier.requestAuthorization()
                         await refreshNotifyState()
-                        return
+                    case .openSettings, .none:
+                        let target = URL(string: UIApplication.openNotificationSettingsURLString)
+                            ?? URL(string: UIApplication.openSettingsURLString)
+                        if let target { await UIApplication.shared.open(target) }
                     }
-                    let target = URL(string: UIApplication.openNotificationSettingsURLString)
-                        ?? URL(string: UIApplication.openSettingsURLString)
-                    if let target { await UIApplication.shared.open(target) }
                 }
             } label: {
                 HStack(spacing: 8) {
@@ -620,16 +618,18 @@ struct ContentView: View {
         let links: [Components.Schemas.Link]
     }
 
-    /// 맨 위에 얹을 오늘의 한 건. 필터가 걸린 화면에서는 숨긴다 — 사용자가 좁혀 놓은
-    /// 결과 맨 위에 그와 무관한 카드를 끼우면 그건 되살리기가 아니라 방해다.
+    /// 화면이 그릴 것. 규칙 둘(좁혀진 화면에는 카드를 안 그린다 / 카드로 간 링크는
+    /// 보드에서 뺀다)은 `FeedModel.boardView(filtered:)`에 있고, 웹의 `lib/board.ts`와
+    /// **같은 픽스처로 대조된다**(`testdata/resurface-board-cases.json`).
+    ///
+    /// 여기서 좁혀졌다는 것은 `filter != nil`이다 — 웹은 tag·status·unopened 셋을 그렇게
+    /// 접는데, 이쪽 필터는 tag·failed 둘뿐이라 그 대응은 클라이언트마다 자기 것을 본다.
     private var resurfacedCard: Components.Schemas.Link? {
-        filter == nil ? feed.resurfaced : nil
+        feed.boardView(filtered: filter != nil).card
     }
 
-    /// 보드가 실제로 그리는 링크. 규칙과 그 이유는 `FeedModel.board(hidingCard:)`에 있다 —
-    /// 페이지네이션이 이 값의 꼬리에 달려 있어서 검사할 수 있는 자리에 둬야 했다.
     private var boardLinks: [Components.Schemas.Link] {
-        feed.board(hidingCard: resurfacedCard)
+        feed.boardView(filtered: filter != nil).board
     }
 
     /// 오늘 · 어제 · 이번 주 · 이전. 절대 날짜가 아니라 상대 구간인 이유는, 찾을 때
@@ -785,6 +785,32 @@ struct ContentView: View {
         // 필터가 걸려 있어도 받아 둔다. 서버 답은 필터와 무관하고(아카이브 전체에서 고른다),
         // 여기서 건너뛰면 필터를 껐을 때 카드가 비어 있다가 다음 새로고침에 뒤늦게 나타난다.
         await feed.loadResurfaced(client)
+        seedResurfacedForUITest()
+    }
+
+    /// `-uitest-resurface N`이 있으면 목록의 N번째 링크를 카드로 세운다.
+    ///
+    /// **`load()` 뒤에 부른다** — 서버는 7일이 안 지난 픽스처에 204를 주므로
+    /// `loadResurfaced`가 카드를 `nil`로 되돌린다. 그 다음에 세워야 남는다.
+    ///
+    /// 목록에서 고르는 이유는, 카드가 **보드에서 빠졌는지**가 이 테스트의 절반이기
+    /// 때문이다. 목록에 없는 링크를 세우면 뺄 것이 없어 그 절반이 사라진다.
+    private func seedResurfacedForUITest() {
+        guard let target = UITestMode.resurfaceTarget else { return }
+        let link: Components.Schemas.Link?
+        switch target {
+        case let .id(id): link = feed.links.first { $0.id == id }
+        case .tail: link = feed.links.last
+        }
+        // **찾지 못하면 조용히 넘어가지 않는다.** 처음에 그렇게 뒀더니 목록에 없는 id를
+        // 세우려다 카드가 아예 안 섰고, 그 테스트는 되살림 없이 도는 평범한 테스트가 되어
+        // **변이를 넣어도 초록이었다.** 시드 실패는 기능 부재와 화면에서 구별되지 않으므로
+        // 여기서 멈춰 세운다.
+        guard let link else {
+            assertionFailure("되살림 시드 대상을 목록에서 못 찾았다: \(target)")
+            return
+        }
+        feed.seedResurfaced(link)
     }
 
     private func loadMore() async {

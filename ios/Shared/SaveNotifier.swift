@@ -42,6 +42,30 @@ enum SaveNotifier {
 
     /// 현재 권한 상태. **아직 물어본 적 없음(.notDetermined)과 거부됨(.denied)은 다르다** —
     /// 전자는 앱이 그 자리에서 물어보면 되고, 후자만 설정으로 보내야 한다.
+    /// 알림 권한을 손볼 때 **무엇을 해야 하는가.** 상태마다 갈 곳이 다르다.
+    ///
+    /// 두 화면(목록의 배너, 설정 시트)이 같은 판단을 해야 해서 여기 둔다. 배너 쪽에만
+    /// 있던 동안에는 권한을 허용하고 나면 그 분기 자체에 도달할 방법이 없었다 —
+    /// 배너는 `droppedNotices > 0`일 때만 뜬다.
+    enum Remedy {
+        /// 아직 안 물어봤다. **여기서 물어보는 쪽이 한 번에 끝난다** — 설정 앱으로
+        /// 내보내면, 권한을 한 번도 요청하지 않은 앱은 설정에 항목 자체가 없어 최상위로
+        /// 떨어진다(실제로 그렇게 나왔다).
+        case ask
+        /// 이미 결정했다. 바꾸려면 iOS 설정으로 간다.
+        case openSettings
+        /// 켜져 있고 할 일이 없다.
+        case none
+    }
+
+    static func remedy(for status: UNAuthorizationStatus) -> Remedy {
+        switch status {
+        case .notDetermined: .ask
+        case .denied: .openSettings
+        default: .none
+        }
+    }
+
     static func status() async -> UNAuthorizationStatus {
         await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }

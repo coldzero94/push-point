@@ -30,6 +30,7 @@ import { Button, Chip, EmptyState, Icon, useToast } from '../components/ui'
 import { makeFacetResolver } from '../lib/tags/facet'
 import { errorMessage } from '../lib/api/client'
 import { t } from '../lib/i18n'
+import { boardView } from '../lib/board'
 import { timeGroup } from '../lib/time'
 import type { Link as LinkItem, LinkStatus, Tag } from '../lib/api/types'
 
@@ -87,12 +88,18 @@ export function ListScreen() {
   // below — with `?unopened=true` and no matches, "you have not saved anything yet" was
   // a lie about an archive that is full.
   const hasFilter = Boolean(tag || status || unopened)
-  // The forgotten link is shown as its own card above the board (below). It has to be
-  // *moved* there, not copied: it is picked from the whole archive, and a link that is
-  // seven days old is still commonly inside page one — the smaller the archive, the more
-  // certain the overlap. With five links seeded, the same card rendered twice on one page.
-  const resurfacedCard = hasFilter ? undefined : resurfaced.data
-  const groups = groupByTime(links.filter((l) => l.id !== resurfacedCard?.id))
+  // Both rules — the card is a move, and a narrowed view gets no card — live in
+  // `lib/board.ts` because iOS implements the same two. A shared fixture pins the
+  // OUTPUT of both (testdata/resurface-board-cases.json); when this was written
+  // inline here, the web checked `!tag` and iOS checked "no filter" and the two
+  // screens looked fine apart. Call the function — a rule the app does not run is
+  // a rule the fixture is not measuring.
+  const { card: resurfacedCard, board: boardLinks } = boardView({
+    links,
+    resurfaced: resurfaced.data,
+    filtered: hasFilter,
+  })
+  const groups = groupByTime(boardLinks)
   const showSkeleton = useDelayed(isPending)
 
   const openInspector = (id: number) =>
