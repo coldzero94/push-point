@@ -94,6 +94,11 @@ targets:
         buildPhase: resources
       - path: ../testdata/facet-labels.json
         buildPhase: resources
+      # 되살림 카드가 보드에 미치는 영향 — 웹 src/lib/board.test.ts와 같은 파일.
+      # 이 규칙은 이미 한 번 갈렸고(웹 `!tag` vs iOS `필터 없음`), 양쪽 화면이 각각은
+      # 멀쩡해 보였다. 결과를 나란히 놓는 것 말고 잡을 방법이 없었다.
+      - path: ../testdata/resurface-board-cases.json
+        buildPhase: resources
       # facet 라벨을 **직접 부르기 위해** 넣는다. 상태 라벨은 뷰의 private var라 소스를
       # 훑는 약한 검사였는데, 이쪽은 열거형이라 실제 함수를 호출할 수 있다.
       - path: PushPoint/DesignSystem.swift

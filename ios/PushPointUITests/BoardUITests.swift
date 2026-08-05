@@ -325,6 +325,74 @@ final class BoardUITests: XCTestCase {
     }
 
     /// 서버가 프로세스 안에서 뜨고 픽스처가 들어가기까지 시간이 걸린다.
+    // MARK: - 오늘의 한 건
+
+    /// **카드가 뜨고, 같은 링크가 보드에 두 번 나오지 않는다.**
+    ///
+    /// 중복은 화면에서만 보이는 종류다. 계약도 타입도 맞고, 두 섹션이 각각은 옳게
+    /// 그려진다 — 한 화면에 같이 있다는 것만 틀렸다. 실제로 웹에서 5건짜리 아카이브에
+    /// 그렇게 나왔고, 그때도 잡은 것은 스크린샷이었다.
+    ///
+    /// `link.card.<id>`가 **정확히 하나**인지로 판정한다. "보인다"로는 두 장이어도 통과한다.
+    func testResurfacedCardShowsOnceNotTwice() {
+        app.terminate()
+        app.launchArguments = ["-uitest", UITestModeFlags.resurface, "\(Fixture.swiftConcurrency)"]
+        app.launch()
+
+        XCTAssertTrue(waitForCard(Fixture.plain), "목록이 오지 않았다")
+        // 카드로 올라갔으므로 보드에는 없어야 하고, 화면 전체에서 하나다.
+        let matches = app.descendants(matching: .any)
+            .matching(identifier: "link.card.\(Fixture.swiftConcurrency)")
+        XCTAssertEqual(matches.count, 1,
+                       "되살림 링크가 \(matches.count)번 그려졌다 — 카드는 사본이 아니라 이동이다")
+    }
+
+    /// **되살림 링크가 목록의 꼬리여도 다음 장이 온다.**
+    ///
+    /// 이게 회귀하면 아무 표시 없이 목록이 1장에서 끝난다 — 오류도 스피너도 없고,
+    /// iOS에는 더보기 버튼이라는 폴백조차 없다. `-uitest-many`는 000(id 1)을 맨 끝에
+    /// 두므로, 그 id를 카드로 올리면 보드의 꼬리가 옮겨진 상태가 된다. 트리거가 옛
+    /// 기준(`feed.links.last`)을 보면 그 카드는 보드에 없어 조건이 영영 성립하지 않는다.
+    func testPagesPastTheFirstFiftyWhileTheTailIsOnTheCard() {
+        app.terminate()
+        // `tail` — **받아 둔 장의 마지막**을 카드로 올린다. 이 조건이 이 이음매를 만든
+        // 이유다: 그 카드가 보드에서 빠지면 트리거가 걸릴 대상이 사라지고, 옛 기준
+        // (`feed.links.last`)을 보는 코드는 다음 장을 영영 못 받는다. 숫자 id로 적으면
+        // 이 조건이 limit=50과 픽스처 건수에 딸린 우연이 된다.
+        app.launchArguments = ["-uitest", "-uitest-many", UITestModeFlags.resurface, "tail"]
+        app.launch()
+
+        XCTAssertTrue(waitForCard(Fixture.manyNewest, timeout: 60), "대량 픽스처가 오지 않았다")
+
+        // 1장에 있을 수 없는 항목까지 내려간다. 000(id 1)은 두 번째 장에만 있다.
+        let secondPage = card(Fixture.manyOldest)
+        for _ in 0..<40 where !secondPage.exists {
+            app.swipeUp(velocity: .fast)
+        }
+        XCTAssertTrue(secondPage.waitForExistence(timeout: 20),
+                      "두 번째 장이 오지 않았다 — 페이지네이션 기준이 보드가 아니라 원본 목록을 본다")
+    }
+
+    // MARK: - 설정
+
+    /// **기어 → 시트가 열리고 두 섹션이 다 있다.**
+    ///
+    /// 진입점이 툴바 버튼 하나뿐이라, 그게 사라지면 설정에 도달할 방법이 아예 없어진다.
+    /// 그런데 툴바 항목이 넷이라 리팩토링 때 조용히 밀려나기 쉬운 자리이기도 하다.
+    ///
+    /// 알림 섹션은 **상태 행이 있는지**만 본다. 값(켜짐/꺼짐)은 시뮬레이터의 권한 상태에
+    /// 딸린 것이라 여기서 단정하면 실행 환경에 따라 흔들린다 — 그건 이 스위트가 스스로
+    /// 금지한 종류다(픽스처 밖 데이터에 기대지 않는다).
+    func testSettingsSheetOpensWithBothSections() {
+        element("settings.open").tap()
+
+        XCTAssertTrue(element("settings.theme").waitForExistence(timeout: 8),
+                      "테마 세그먼트가 없다 — 시트가 안 열렸거나 모양 섹션이 사라졌다")
+        XCTAssertTrue(element("settings.density").exists, "밀도 세그먼트가 없다")
+        XCTAssertTrue(element("settings.notify.state").exists,
+                      "알림 상태 행이 없다 — 허용 후에는 이 자리 말고 볼 곳이 없다")
+    }
+
     private func waitForCard(_ id: Int, timeout: TimeInterval = 20) -> Bool {
         card(id).waitForExistence(timeout: timeout)
     }

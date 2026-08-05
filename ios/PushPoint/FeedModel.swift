@@ -157,6 +157,16 @@ final class FeedModel {
     /// 되돌리기가 성공했을 때 — 그 id는 다시 살아 있으므로 폴러가 가져와야 한다.
     func forgetDeletion(of id: Int) { recentlyDeleted.remove(id) }
 
+    /// UI 테스트가 되살림 카드를 세운다. **`-uitest`로 뜬 앱에서만 동작한다.**
+    ///
+    /// 서버를 거치지 않는 유일한 상태 설정이라 문을 좁게 낸다. 왜 이 문이 필요한지는
+    /// `UITestMode.seedResurfaceFlag`에 있다 — 실제 시간으로는 이 상태를 만들 수 없고,
+    /// 네 가지 우회로가 전부 막혀 있다.
+    func seedResurfaced(_ link: Components.Schemas.Link) {
+        guard UITestModeFlags.isActive else { return }
+        resurfaced = link
+    }
+
     // MARK: - 보드가 그리는 것
 
     /// 보드가 실제로 그릴 목록. 되살림 카드로 올라간 한 건은 뺀다.
@@ -173,6 +183,31 @@ final class FeedModel {
     func board(hidingCard card: Components.Schemas.Link?) -> [Components.Schemas.Link] {
         guard let id = card?.id else { return links }
         return links.filter { $0.id != id }
+    }
+
+    /// 화면이 그릴 것 — 위에 얹을 카드 하나와 보드가 그리는 목록.
+    ///
+    /// **규칙 둘이 여기 함께 있어야 한다.** 카드를 고르는 규칙(좁혀진 화면에는 안 그린다)이
+    /// 뷰에, 빼는 규칙이 모델에 나뉘어 있으면 공유 픽스처가 절반만 잰다. 웹의
+    /// `lib/board.ts`가 같은 두 규칙을 한 함수로 들고 있고,
+    /// `testdata/resurface-board-cases.json`이 **두 구현의 결과**를 대조한다.
+    ///
+    /// `filtered`만 받고 무엇으로 좁혔는지는 묻지 않는다 — 웹은 tag·status·unopened
+    /// 셋이고 여기는 tag·failed 둘이라, 공유할 수 있는 것은 "좁혀졌다"까지다.
+    func boardView(filtered: Bool) -> (card: Components.Schemas.Link?,
+                                       board: [Components.Schemas.Link]) {
+        Self.boardView(links: links, resurfaced: resurfaced, filtered: filtered)
+    }
+
+    /// 규칙 자체. **상태를 안 읽는 순수 함수인 것이 핵심이다** — 픽스처 테스트가
+    /// 이걸 그대로 부르므로 모델에 테스트 전용 setter를 뚫지 않아도 되고, 웹의
+    /// `boardView`와 모양이 같아 두 구현을 나란히 읽을 수 있다.
+    nonisolated static func boardView(links: [Components.Schemas.Link],
+                                      resurfaced: Components.Schemas.Link?,
+                                      filtered: Bool)
+        -> (card: Components.Schemas.Link?, board: [Components.Schemas.Link]) {
+        guard !filtered, let card = resurfaced else { return (nil, links) }
+        return (card, links.filter { $0.id != card.id })
     }
 
     /// 변경(삭제·재시도)이 실패했을 때 목록 오류 자리를 쓰지 않기 위해 뷰가 지운다.

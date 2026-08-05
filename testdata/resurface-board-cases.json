@@ -1,0 +1,62 @@
+{
+  "_comment": "되살림 카드가 보드에 미치는 영향 — 웹 src/lib/board.ts와 iOS FeedModel.boardView(filtered:)가 같이 읽는다. 이 규칙은 이미 한 번 갈렸다: 웹이 `!tag`를, iOS가 `필터 없음`을 봤고 양쪽 화면이 각각은 멀쩡해 보였다. 고정하는 것은 입력이 아니라 결과다(cardId·boardIds) — cover-cases.json이 파라미터를 통과시키는 동안 cover-ops.json이 잡아낸 것과 같은 이유다.",
+  "_filtered": "`filtered`는 '좁혀졌는가'만 말한다. 무엇으로 좁혔는지는 클라이언트마다 다르므로(웹 tag·status·unopened / iOS tag·failed) 그 대응은 각자의 테스트가 본다.",
+  "cases": [
+    {
+      "name": "필터 없음 · 되살림이 1장 안에 있다 — 카드로 올리고 보드에서 뺀다",
+      "links": [5, 4, 3, 2, 1],
+      "resurfaced": 2,
+      "filtered": false,
+      "cardId": 2,
+      "boardIds": [5, 4, 3, 1]
+    },
+    {
+      "name": "필터 없음 · 되살림이 받아 둔 장 밖이다 — 보드는 그대로",
+      "links": [5, 4, 3],
+      "resurfaced": 99,
+      "filtered": false,
+      "cardId": 99,
+      "boardIds": [5, 4, 3]
+    },
+    {
+      "name": "되살림이 목록의 꼬리 — 보드의 꼬리가 옮겨져야 페이지네이션이 산다",
+      "links": [3, 2, 1],
+      "resurfaced": 1,
+      "filtered": false,
+      "cardId": 1,
+      "boardIds": [3, 2]
+    },
+    {
+      "name": "좁혀진 화면 — 카드를 그리지 않고, 그 링크는 보드에 남는다",
+      "links": [5, 4, 3, 2, 1],
+      "resurfaced": 2,
+      "filtered": true,
+      "cardId": null,
+      "boardIds": [5, 4, 3, 2, 1]
+    },
+    {
+      "name": "후보 없음(204) — 카드도 없고 보드도 그대로",
+      "links": [3, 2, 1],
+      "resurfaced": null,
+      "filtered": false,
+      "cardId": null,
+      "boardIds": [3, 2, 1]
+    },
+    {
+      "name": "아카이브가 한 건이고 그게 되살림 — 보드는 비지만 빈 상태를 띄우면 안 된다",
+      "links": [1],
+      "resurfaced": 1,
+      "filtered": false,
+      "cardId": 1,
+      "boardIds": []
+    },
+    {
+      "name": "좁혀졌는데 후보도 없다 — 두 규칙이 겹쳐도 결과는 하나다",
+      "links": [2, 1],
+      "resurfaced": null,
+      "filtered": true,
+      "cardId": null,
+      "boardIds": [2, 1]
+    }
+  ]
+}

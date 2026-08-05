@@ -17,15 +17,13 @@ import Foundation
 /// 인자는 XCUITest의 `launchArguments`로만 들어온다. 사용자가 앱 아이콘을 눌러 이 상태에
 /// 들어갈 방법은 없다.
 enum UITestMode {
-    static let flag = "-uitest"
+    static let flag = UITestModeFlags.uitest
     /// 한 페이지(50건)를 넘기는 분량을 심는다. 커서 페이지네이션은 **경계를 넘겨야만**
     /// 검증되는 종류라, 픽스처 3건으로는 무한 스크롤이 깨져 있어도 화면이 멀쩡해 보인다.
     /// 기본 픽스처와 분리한 이유는 속도다 — 60건 심기를 매 테스트가 치를 이유가 없다.
     static let manyFlag = "-uitest-many"
 
-    static var isActive: Bool {
-        ProcessInfo.processInfo.arguments.contains(flag)
-    }
+    static var isActive: Bool { UITestModeFlags.isActive }
 
     static var wantsMany: Bool {
         ProcessInfo.processInfo.arguments.contains(manyFlag)
@@ -57,6 +55,11 @@ enum UITestMode {
         // `droppedNotices`와 같은 부류이고 키만 다르다. 격리를 키마다 따로 기억해야 하는
         // 구조 자체가 위험이라, 새 `@AppStorage`를 추가하면 여기도 함께 늘려야 한다.
         UserDefaults.standard.removeObject(forKey: "pushpoint.density")
+        // **외관도 같은 부류다.** 손으로 다크를 켜 두면 다음 UI 테스트가 다크로 시작하고,
+        // 실패 시 첨부되는 스크린샷이 다른 앱처럼 보인다 — "안 그려짐"과 "다르게 그려짐"을
+        // 가르려고 붙이는 증거인데 그게 흔들린다. 이 줄은 위 문단이 예고한 바로 그 일이다:
+        // 2026-08-05에 테마 키를 추가하면서 여기를 같이 안 늘렸다.
+        UserDefaults.standard.removeObject(forKey: "pushpoint.theme")
         // **언어도 지운다.** `L.set`이 같은 suite에 쓰므로, 지우지 않으면 앱에서 마지막에
         // 고른 언어로 테스트가 뜬다 — 실행마다 화면 언어가 달라지는 스위트가 된다.
         // 지금은 어느 단정도 문구를 읽지 않아 결과가 흔들리진 않지만, 비결정성을 남겨 두면
@@ -64,18 +67,54 @@ enum UITestMode {
         UserDefaults.standard.removeObject(forKey: "pushpoint.lang")
 
         guard let d = AppGroup.defaults else { return }
-        let seeded = ProcessInfo.processInfo.arguments
-            .firstIndex(of: seedDroppedFlag)
-            .flatMap { i -> Int? in
-                let next = i + 1
-                return next < ProcessInfo.processInfo.arguments.count
-                    ? Int(ProcessInfo.processInfo.arguments[next]) : nil
-            }
-        d.set(seeded ?? 0, forKey: SaveNotifier.droppedKey)
+        d.set(intArgument(after: seedDroppedFlag) ?? 0, forKey: SaveNotifier.droppedKey)
     }
 
     /// `-uitest-dropped N` — 알림 배너를 띄운 상태를 만든다.
-    static let seedDroppedFlag = "-uitest-dropped"
+    static let seedDroppedFlag = UITestModeFlags.dropped
+
+    /// `-uitest-resurface N` — N번째 픽스처를 "오늘의 한 건"으로 만든다.
+    ///
+    /// **실제 시간으로는 이 상태에 도달할 수 없다.** 되살림 후보는 저장 후 7일이 지나야
+    /// 하는데(`sqlite_resurface.go`), 시딩은 `POST /api/v1/links`로 하고 `created_at`은
+    /// 서버가 `time.Now()`로 박는다. 계약에 그 필드가 없고, `store.Resurfaced`의 `now`에
+    /// 주입점도 없고, 테스트 러너는 앱 컨테이너의 SQLite에 손이 닿지 않는다 — 네 방향이
+    /// 전부 막혀 있다.
+    ///
+    /// 그래서 `-uitest-dropped`와 **같은 모양**으로 만든다: 실제 경로로는 못 만드는
+    /// 상태를 플래그가 직접 세운다. 대신 정직하게 적어 둔다 — **이 경로는 서버 질의를
+    /// 한 줄도 타지 않는다.** 질의 자체(후보 규칙·하루 고정·회전·빈손)는
+    /// `sqlite_resurface_test.go`가 넷으로 덮고, 라우트가 붙어 있는지는
+    /// `ppcore_test.go`가 본다. 여기가 맡는 것은 **그 값이 화면에 어떻게 나오는가**뿐이다.
+    static let seedResurfaceFlag = UITestModeFlags.resurface
+
+    /// 되살림 카드로 무엇을 세울지. 없으면 카드는 안 뜬다.
+    ///
+    /// **`tail`이 따로 있는 이유**는 이 이음매를 만든 결함이 정확히 그 자리이기 때문이다:
+    /// 되살림 링크가 **받아 둔 장의 마지막**이면 그 카드가 보드에서 빠지면서 페이지네이션
+    /// 트리거가 걸릴 대상이 사라진다. id를 숫자로 적으면 그 조건이 `limit=50`과 픽스처
+    /// 건수에 딸린 우연이 되고, 둘 중 하나만 바뀌어도 **테스트는 통과하는데 아무것도 안
+    /// 재게 된다** — 실제로 처음에 그렇게 썼고 변이를 넣어도 초록이었다.
+    enum ResurfaceTarget {
+        case id(Int)
+        case tail
+    }
+
+    static var resurfaceTarget: ResurfaceTarget? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: seedResurfaceFlag), i + 1 < args.count else { return nil }
+        let v = args[i + 1]
+        if v == "tail" { return .tail }
+        return Int(v).map { .id($0) }
+    }
+
+    /// `-flag N` 꼴에서 N을 읽는다. 두 플래그가 같은 방식을 쓰는데 파싱이 각자 있으면
+    /// 한쪽만 고쳐지는 자리가 된다.
+    private static func intArgument(after flag: String) -> Int? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return Int(args[i + 1])
+    }
 
     /// 테스트용 데이터 디렉터리. 매 실행 비운다 — 이전 실행이 남긴 링크가 보이면
     /// "N건이 보여야 한다"는 단언이 실행 순서에 따라 흔들린다.
