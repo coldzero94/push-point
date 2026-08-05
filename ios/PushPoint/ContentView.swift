@@ -67,6 +67,7 @@ struct ContentView: View {
     /// 앱 안에서 링크를 저장하는 시트. 공유 시트만 있던 시절에는 앱을 켜 놓고도
     /// 링크를 넣을 방법이 없었다(SaveSheet 주석).
     @State private var saving = false
+    @State private var settingsOpen = false
 
     var body: some View {
         NavigationStack {
@@ -122,9 +123,20 @@ struct ContentView: View {
                         .accessibilityLabel(t("settings.switchLanguage"))
                         .accessibilityIdentifier("lang.menu")
                     }
+                    // 설정. **언어를 여기로 옮기지 않는다** — 위 주석의 순환 때문이고,
+                    // 웹도 같은 이유로 헤더에 둔다. 담기는 것은 모양(테마·밀도)뿐이다.
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { settingsOpen = true } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .accessibilityLabel(t("settings.title"))
+                        .accessibilityIdentifier("settings.open")
+                    }
                 }
+            .sheet(isPresented: $settingsOpen) { SettingsSheet().pushPointTheme() }
             .sheet(isPresented: $saving) {
                 SaveSheet(onSave: saveLink)
+                .pushPointTheme()
             }
             // 저장 알림을 눌러 들어온 경우 그 링크를 연다. 값을 소비하면 되돌려 놓는다 —
             // 남겨 두면 다음에 앱을 열 때 지난 알림의 링크가 또 열린다.

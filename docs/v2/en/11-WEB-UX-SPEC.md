@@ -765,7 +765,7 @@ The stage-two response goes straight into the tag query cache (`['tags']`) — i
 
 **(7) Motion** — theme switching gets **no** color transition (a full-screen crossfade feels slow and collides with the `data-loading` seal). Only the connection-check result text is replaced over `--dur-2`(180ms).
 
-**(8) iOS difference** — in standalone mode there is no key for the user to enter (the app generates a random one per launch and hands it to its own in-process server). In home-server mode the key goes into the App Group's shared Keychain rather than localStorage, and **no theme toggle is offered** (HIG: avoid per-app appearance settings — an explicit exception for an otherwise equal client).
+**(8) iOS difference** — in standalone mode there is no key for the user to enter (the app generates a random one per launch and hands it to its own in-process server). In home-server mode the key goes into the App Group's shared Keychain rather than localStorage, and **the theme toggle is offered as the same 3-state as the web** (lifted 2026-08-05, 10 §1.3 / §8.5). The default is `system`, so the point of the HIG guidance — the system setting already does that job — is kept.
 
 ---
 

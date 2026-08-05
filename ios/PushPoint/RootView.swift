@@ -20,6 +20,7 @@ struct RootView: View {
     /// 부분 갱신으로는 두 언어가 섞인 화면이 남는다.
     @ObservedObject private var langStore = L.Store.shared
 
+
     enum Tab { case list, stats }
 
     var body: some View {
@@ -38,6 +39,10 @@ struct RootView: View {
         }
         .id(langStore.lang)
         .tint(PP.Palette.accent)
+        // 루트에 걸지만 **여기서 끝이 아니다** — 시트는 별도 표현 컨텍스트라 각자
+        // 걸어야 한다(`Theme.Applying`). 처음에는 여기 한 곳이면 된다고 적어 뒀는데,
+        // 화면을 보니 뜬 시트가 안 따라왔다.
+        .pushPointTheme()
         .task(id: backend.state) { await loadFacets() }
     }
 

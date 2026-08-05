@@ -94,6 +94,10 @@ would do on the other client?** If you cannot, it is ③; if you can and it simp
 | Stats: day-of-week pattern | ① | ✅ | ✅ | **added to the web 2026-07-28** |
 | **Stats: failed-link CTA** | ① | ✅ | ❌ | **the remaining hole — below** |
 | One a day (resurfacing) | ① | ✅ | ✅ | **added to iOS 2026-08-05** — contract, backend and web landed in #119; the iOS screen was two weeks behind |
+| Theme choice (light/dark/system) | ① | ✅ | ✅ | **added to iOS 2026-08-05.** Until then 10 §8.5 banned it on iOS alone — the reason was HIG, and a `system` default keeps that intent |
+| List density | ② | ✅ | — | On the web the window width already does it (10 §1.3). **If the web ever loses that handle, revisit this** |
+| Language switch | ① | ✅ | ✅ | Both put it **in the chrome, not inside settings** — it avoids the loop of having to find a screen written in a language you cannot read |
+| Settings screen | ② | sheet | route (`/settings`) | What goes in differs: iOS holds two appearance controls, and the web's key, extension and sheets entries are ③, so nothing of them comes to iOS |
 | Save: share sheet | ② | ✅ | — | OS feature |
 | Save: URL field · bookmarklet | ② | — | ✅ | |
 | Keyboard shortcuts | ② | — | ✅ | |
