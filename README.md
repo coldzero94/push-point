@@ -45,17 +45,25 @@ Everything runs in one process on your own machine. A backup is `cp -r data/`.
 ## What it looks like
 
 <p align="center">
-  <img src="site/assets/ios-list-en.png" width="240" alt="The board on iPhone">
+  <video src="https://raw.githubusercontent.com/coldzero94/push-point/main/site/assets/demo-ko.mp4"
+         poster="site/assets/demo-ko-poster.jpg" width="260" muted></video>
+</p>
+
+<p align="center">
+  <em>Reading in Safari → share sheet → a notification with the tags already attached →
+  tap it and the link opens on its own screen. 18 seconds, real recording.</em>
 </p>
 
 <p align="center">
   <img src="site/assets/web-list-en.png" width="760" alt="The link board in the web app">
 </p>
 
-You never leave the page: a notification confirms the save and shows the tags it
-worked out. Covers on links without a thumbnail are generated from the domain, so the
-same source always draws the same mark. The app follows your system language — Korean
-screens and more of them on the [site](https://coldzero94.github.io/push-point/).
+You never leave the page: a notification confirms the save and shows the tags it worked
+out. Covers on links without a thumbnail are generated from the domain, so the same
+source always draws the same mark — and both clients now draw it *identically*, which
+they did not until a shared fixture started comparing the marks rather than the
+parameters that produce them. Language follows the system and can be switched inside
+the app. More screens on the [site](https://coldzero94.github.io/push-point/).
 
 ## What it does
 
@@ -80,23 +88,29 @@ screens and more of them on the [site](https://coldzero94.github.io/push-point/)
 
 Every number below has a command that reproduces it. No figure enters this README without one.
 
-| | Target | Measured (2026-07-31) | Command |
+| | Target | Measured (2026-08-05) | Command |
 |---|---|---|---|
-| Save API p99 | < 50 ms | **1.25 ms** (p50 0.26 / p95 0.37, n=2000) | `just bench-http` |
-| Save p99, client-capture path | < 50 ms | **4.42 ms** (p50 0.67 / p95 1.11, n=500) | `just bench-http` |
-| Cold start → serving | < 1 s | **401 ms** | `scripts/coldstart.sh` |
+| Save API p99 | < 50 ms | **1.41 ms** (p50 0.28 / p95 0.40, n=2000) | `just bench-http` |
+| Save p99, client-capture path | < 50 ms | **4.87 ms** (p50 0.72 / p95 1.27, n=500) | `just bench-http` |
+| Cold start → serving | < 1 s | **407 ms** | `scripts/coldstart.sh` |
 | Tagging, frozen test set | — | **0.905** top-3 recall (84 links) | `just eval` |
 | Tagging, open-web set | — | **0.821** (28 links) | `just eval` |
-| Share-sheet save, end to end | < 2 s | **92 ms** — scrape, tag and all | `just save-timing` |
+| Search, answer ranked first | — | **0.640** hit@1 · 0.666 MRR@10 (25 queries) | `just eval-search` |
+| Share-sheet save, end to end | < 2 s | **76 ms** median (n=13, worst 116 ms) | `just save-timing` |
 
-That last row is the one that matters. A tagger evaluated only on developer blogs scores well and tells you nothing, so there is a second set built deliberately from the rest of the web — commerce, communities, app stores, video, wikis. It scores lower, on purpose: **it is the number that is allowed to be disappointing.**
+Two of those rows exist to be uncomfortable.
+
+The open-web tagging set is built deliberately from the rest of the internet — commerce, communities, app stores, video, wikis — because a tagger evaluated only on developer blogs scores well and tells you nothing. It scores lower on purpose: **it is the number that is allowed to be disappointing.**
+
+Search is the other one. 0.640 means the right link is first two times in three, which is the weakest thing here and the one the other three rows exist to serve — an archive you cannot retrieve from is a write-only journal. It was 0.520 a day ago. Six of the remaining nine misses need semantic matching that no dictionary reaches, and the embedding approach that would reach them was measured and cut (`docs/v2/12-BACKLOG.md`).
 
 ## Features
-
 - **Instant save** — `POST /api/v1/links` commits two INSERTs and returns 201. Scraping, tagging and thumbnails run in a SQLite-backed queue that recovers from `kill -9`; nothing slow ever sits on the request path.
 - **Auto-tagging without an LLM** — a rule engine over a 42-tag controlled dictionary. Korean is handled by NFC normalization, particle stripping, and word-boundary matching at *both* ends of a compound, because Korean compounds are head-final and `대박식당` has to reach `식당`. Ties break on evidence volume rather than alphabetical order.
-- **Search that works in Korean** — FTS5 trigram with bm25 ranking, no morphological analyzer required. Queries under 3 characters fall back to LIKE instead of returning nothing.
+- **Search that answers the question you asked** — FTS5 trigram with bm25, no morphological analyzer. Two things sit on top of it. Ranking counts *how many of your words a link actually contains* before it consults bm25, because bm25 will otherwise put a page that repeats one word twenty times above one that touches all three. And the query goes through the same 42-tag dictionary the documents do, so `쿠버네티스` reaches an English Kubernetes post and `도커` — two syllables, too short for a trigram index — reaches FTS instead of falling to an unranked LIKE scan. Both bridges were already paid for by the tagger; search simply had not been asking.
+- **One forgotten link a day** — the archive has one door and it always shows the newest thing first, so a link you meant to read is buried by the next twenty. `GET /api/v1/links/resurfaced` returns one you have never opened and saved over a week ago, and returns the *same one all day* — a suggestion that changes on refresh is a slot machine. It stores nothing: opening the link removes it from the pool by itself.
 - **Three clients, one contract** — a React SPA, a SwiftUI app with a Share Extension, and a browser extension. All three generate their types from `api/openapi.yaml`; CI blocks drift in every one.
+- **Korean and English, kept in step** — both apps ship in both languages, from one dictionary each. CI fails if a key exists in one locale and not the other, if the source calls a key nobody defined, or if the two clients word the *same* key differently — the one allowed exception is `Click`/`Tap`, and the allowlist itself is checked so the exemption cannot outlive its reason.
 - **Pages a server can't fetch** — bot walls and login walls are captured from the browser that is already rendering them, not by pretending to be a browser. A blocked link fails honestly with an actionable message instead of storing the wall's text as content.
 - **Single binary** — Go with a CGO-free SQLite driver. Migrations are embedded; `just release` bakes the web bundle in too. No container runtime, no external database, no Redis.
 - **Private by default** — one static API key, all data on local disk, reachable from a phone over Tailscale rather than the public internet.
@@ -160,8 +174,9 @@ The harness reports what a single recall number cannot: how many misses are reco
 
 Daily use works. Save from the iOS share sheet, the web app or the browser
 extension; scraping with per-site adapters; tagging; full-text search; thumbnails;
-bookmark import; export to a Google Sheet. **A share-sheet save finishes in 92 ms**,
-scraping and tagging included, against a 2-second budget.
+bookmark import; export to a Google Sheet. **A share-sheet save finishes in 76 ms**
+(median of 13, worst 116), scraping and tagging included, against a 2-second budget.
+Both apps run in Korean or English.
 
 What is being worked on, and honestly:
 
@@ -183,6 +198,20 @@ at all the average swing is 2.4 links and the direction word reverses one day in
 Both are gone. What is left — active days and the current streak — are counts of facts
 rather than inferences, so when they move, something really happened.
 
+**Search was the weak half, and now has a harness that says so.** `just eval-search`
+scores 25 frozen queries; building it immediately found that it had been *understating*
+the shipped product, because it indexed a column the runtime fills differently. Fixing
+that, then putting the query through the tag dictionary, then ranking on how much of
+the question a link answers, moved hit@1 from 0.520 to 0.640. The nine queries that
+still fail need semantic matching — the same wall the embedding experiment hit.
+
+**The tagger was attaching two tags per link that rescued nothing.** It emitted five
+and the harness scored three, so two ranks reached the tag filter, the facet counts
+and the search index without ever being measured. Measuring them settled it: link-level
+recall at 3 and at 5 is identical on all three sets, and ranks 4–5 are right 16% of the
+time against 55% for the top three. Both constants are 3 now, with a comment on each
+saying they have to agree.
+
 **Pages behind a login are only half-solved.** The browser extension captures them,
 and the server accepts and stores what it sends — but no such page has made it into
 the evaluation sets yet, so the tagging quality on exactly the pages that need this
@@ -190,9 +219,9 @@ path the most is still unmeasured. The harness says so out loud rather than stay
 quiet about it.
 
 The one remaining bar for the iOS milestone is seven consecutive days of real use,
-which is calendar time and nothing else. Not started after that: a widget,
-performance polish, and an evaluation harness for search quality to match the one
-tagging has.
+which is calendar time and nothing else. Not started after that: a widget, performance
+polish, and bringing the daily resurfaced link to iOS — the contract is in place, only
+the client work is left.
 
 The full plan, with completion criteria per stage, is in
 [the development plan](docs/v2/08-DEVELOPMENT-PLAN.md).
