@@ -20,7 +20,7 @@
 | 06 API 명세 | [v1](v1/06-API-SPECIFICATION.md) | [ko](v2/ko/06-API-SPECIFICATION.md) | [en](v2/en/06-API-SPECIFICATION.md) | JWT·회원가입·sync·Rate Limiting → 정적 API 키 1개, keyset 커서 페이지네이션, FTS5 검색 |
 | 07 배포 | [v1](v1/07-K8S-SETTINGS.md) | [ko](v2/ko/07-DEPLOYMENT.md) | [en](v2/en/07-DEPLOYMENT.md) | Minikube k8s 배포 YAML → 로컬 실행·운영 (Go 1.25 + just가 전부), k8s 매니페스트는 `deploy/k8s-future/`에 보존 |
 | 08 개발 계획 | [v1](v1/08-DEVLOPMENT-PLAN.md) | [ko](v2/ko/08-DEVELOPMENT-PLAN.md) | [en](v2/en/08-DEVELOPMENT-PLAN.md) | 8-10주 4 Phase (OpenAI 연동·k8s 배포 포함) → 6개월 M1~M6, golden set 정확도·벤치 등 측정 가능한 DoD |
-| 09 계획 점검 | — (v2 전용) | [ko](v2/ko/09-PLAN-REVIEW.md) | [en](v2/en/09-PLAN-REVIEW.md) | 2026-07-20 적대적 점검 결과: 팩트체크 요약 + 보류 중인 수정 권고 8건 |
+| 09 계획 점검 | — (v2 전용) | [ko](v2/ko/09-PLAN-REVIEW.md) | [en](v2/en/09-PLAN-REVIEW.md) | 2026-07-20 적대적 점검 결과: 팩트체크 요약 + 수정 권고 8건(v2.1에 반영 완료) |
 | 10 디자인 시스템 | — (v2 전용) | [ko](v2/ko/10-DESIGN-SYSTEM.md) | [en](v2/en/10-DESIGN-SYSTEM.md) | v1에는 디자인 명세가 없었음 → 웹·iOS가 공유하는 토큰/컴포넌트/모션/접근성 단일 원본 |
 | 11 웹 UX 명세 | — (v2 전용) | [ko](v2/ko/11-WEB-UX-SPEC.md) | [en](v2/en/11-WEB-UX-SPEC.md) | v1에는 클라이언트 UX 명세가 없었음 → 웹 화면 7개의 레이아웃·계약 필드 매핑·단축키·구현 우선순위 |
 | 12 백로그 | — (v2 전용) | [ko](v2/ko/12-BACKLOG.md) | [en](v2/en/12-BACKLOG.md) | v1에는 백로그가 없었음 → 08 다음에 볼 후보 4건과 착수·폐기 조건, 그리고 자른 20건의 이유(재논의 방지) |

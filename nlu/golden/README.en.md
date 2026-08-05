@@ -849,7 +849,7 @@ Measured on **2026-07-27 (after the defect E fix)**, with the pre-fix figures in
 
 **dev and test swapped places.** The defect E fix turned test's one pushed-down entry into a hit and thereby **exhausted**
 its reranking room (+1.6pp → +0.000), while creating dev's first pushed-down entry
-(`nomadcoders.co/wetube` — the "Fixing defect E" section below). It means which set still holds room for
+(`nomadcoders.co/wetube` — the "Fixing defect E" section above). It means which set still holds room for
 reranking-class improvements flipped outright.
 
 **Boundary ties** are what hit@3 cannot see in principle — anything inside the top three passes. Yet touch the weights
