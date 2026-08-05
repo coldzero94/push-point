@@ -181,10 +181,21 @@ would undo a crop that was never applied and fail a perfectly good cursor.
 - Cut dead time with `trim` + `concat`, and `setpts=PTS/1.25`–`1.5` for pace.
 - h264 at crf 26, 440 px wide: ~0.8 MB for 18 s. A GIF of the same clip needs 9 fps to fit
   2 MB and looks slow because of it.
-- **GitHub's README renderer deletes `<video>` entirely** — leaving an empty paragraph
-  where the demo was. `POST /markdown` keeps the tag, so testing there and concluding it
-  works is wrong; that mistake shipped a README with a blank hero. Verify against the
-  real thing: `curl -H "Accept: application/vnd.github.html" .../repos/OWNER/REPO/readme`.
-  Link a poster image to the site instead.
+- **A README video has to be hosted by GitHub itself.** `<video src>` pointing at
+  `raw.githubusercontent.com` is deleted by the README renderer — tag and all, leaving an
+  empty paragraph. Pointing at `https://github.com/user-attachments/assets/<uuid>`
+  survives and renders as a collapsible player. The file content is irrelevant; only the
+  host is.
+
+  That URL is only produced by dragging the file into an issue or PR comment box in the
+  browser — there is no CLI endpoint for it. Ask for it rather than trying to link the
+  copy in the repo.
+
+  **`POST /markdown` cannot answer this question.** It keeps every variant, including the
+  ones the README renderer strips, so it has no discriminating power at all. Testing there
+  produced both wrong conclusions in a row: first "video works", which shipped a blank
+  hero, then "GitHub strips video", which was the opposite and equally wrong. Test against
+  the renderer that actually runs, on a branch:
+  `curl -H "Accept: application/vnd.github.html" ".../repos/OWNER/REPO/readme?ref=BRANCH"`
 - Look at the last few seconds before publishing. Both shipped defects were visible in a
   single frame.
