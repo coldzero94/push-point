@@ -423,6 +423,21 @@ struct ContentView: View {
             if let filter {
                 filterBar(filter).plainRow(top: 8, bottom: 0)
             }
+            // 오늘의 한 건 — 잊고 있던 링크 하나를 맨 위에. 후보가 없으면 서버가 204를
+            // 주고 여기는 아무것도 그리지 않는다. **빈 자리를 만들지 않는 것이 규칙이다** —
+            // "오늘은 없습니다"는 매일 보면 무시하게 되는 칸이고, 그러면 진짜 있는 날에도
+            // 안 보인다.
+            if let link = resurfacedCard {
+                Section {
+                    // 페이지네이션 트리거를 여기 달지 않는다. 이 카드는 목록의 일부가
+                    // 아니라 위에 얹힌 한 장이고, 맨 위에 있으므로 첫 화면에서 곧바로
+                    // 보인다 — 트리거가 붙으면 아직 필요 없는 다음 장을 즉시 당겨 온다.
+                    row(link).plainRow(top: 5, bottom: 5)
+                } header: {
+                    spine(DaySection(title: t("resurface.spine"), links: [link]))
+                        .plainHeaderRow(top: 14, bottom: 6)
+                }
+            }
             ForEach(sections, id: \.title) { section in
                 Section {
                     ForEach(section.links, id: \.id) { link in
@@ -431,8 +446,13 @@ struct ContentView: View {
                             // 마지막 카드가 보이면 다음 장을 받는다. **날짜 구간이 아니라
                             // 전체 목록의 마지막**을 기준으로 삼는다 — 구간 단위로 보면
                             // "오늘" 섹션 끝에서도 발동해 아직 필요 없는 장을 당겨 온다.
+                            //
+                            // 기준은 `feed.links`가 아니라 **보드가 실제로 그린 것**의
+                            // 마지막이다. 되살림 카드로 올라간 링크가 하필 `feed.links`의
+                            // 끝이면, 그 id를 가진 카드가 보드에 없어 트리거가 영영 안
+                            // 걸리고 **다음 장을 못 받는다** — 화면은 멀쩡해 보인다.
                             .onAppear {
-                                if link.id == feed.links.last?.id { Task { await loadMore() } }
+                                if link.id == boardLinks.last?.id { Task { await loadMore() } }
                             }
                     }
                 } header: {
@@ -588,6 +608,18 @@ struct ContentView: View {
         let links: [Components.Schemas.Link]
     }
 
+    /// 맨 위에 얹을 오늘의 한 건. 필터가 걸린 화면에서는 숨긴다 — 사용자가 좁혀 놓은
+    /// 결과 맨 위에 그와 무관한 카드를 끼우면 그건 되살리기가 아니라 방해다.
+    private var resurfacedCard: Components.Schemas.Link? {
+        filter == nil ? feed.resurfaced : nil
+    }
+
+    /// 보드가 실제로 그리는 링크. 규칙과 그 이유는 `FeedModel.board(hidingCard:)`에 있다 —
+    /// 페이지네이션이 이 값의 꼬리에 달려 있어서 검사할 수 있는 자리에 둬야 했다.
+    private var boardLinks: [Components.Schemas.Link] {
+        feed.board(hidingCard: resurfacedCard)
+    }
+
     /// 오늘 · 어제 · 이번 주 · 이전. 절대 날짜가 아니라 상대 구간인 이유는, 찾을 때
     /// 떠오르는 것이 "며칠 전"이지 "7월 12일"이 아니기 때문이다.
     private var sections: [DaySection] {
@@ -597,7 +629,7 @@ struct ContentView: View {
             (t("time.today"), []), (t("time.yesterday"), []),
             (t("time.thisWeek"), []), (t("time.earlier"), []),
         ]
-        for link in feed.links {
+        for link in boardLinks {
             let date = Date(timeIntervalSince1970: TimeInterval(link.created_at))
             let index: Int
             if cal.isDateInToday(date) {
@@ -738,6 +770,9 @@ struct ContentView: View {
     private func load() async {
         guard case .running = backend.state, let client = backend.client else { return }
         await feed.load(client, filter: filter)
+        // 필터가 걸려 있어도 받아 둔다. 서버 답은 필터와 무관하고(아카이브 전체에서 고른다),
+        // 여기서 건너뛰면 필터를 껐을 때 카드가 비어 있다가 다음 새로고침에 뒤늦게 나타난다.
+        await feed.loadResurfaced(client)
     }
 
     private func loadMore() async {
@@ -785,6 +820,11 @@ struct ContentView: View {
             switch try await client.createLink(.init(body: .json(.init(url: link.url)))) {
             case .created, .ok:
                 justDeleted = nil
+                // **삭제 보호를 푼다.** 이게 없으면 그 id는 세션이 끝날 때까지 "방금 지운
+                // 것"으로 남고, 되살림 카드가 그 링크를 골라도 조용히 버려서 카드가 하루
+                // 내내 빈다. `forgetDeletion`은 이 줄이 생기기 전까지 테스트에서만
+                // 불렸다 — 모델은 맞게 동작했고 앱이 거기 배선돼 있지 않았다.
+                feed.forgetDeletion(of: link.id)
                 await load()
             case let .badRequest(r):
                 actionError = APIOutcome.message(try? r.body.json, fallback: t("list.undoFailed"))

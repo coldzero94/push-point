@@ -41,6 +41,7 @@ export function useRetryLink() {
     onSuccess: (_d, id) => {
       qc.invalidateQueries({ queryKey: ['links'] })
       qc.invalidateQueries({ queryKey: ['link', id] })
+      qc.invalidateQueries({ queryKey: ['resurfaced'] })
     },
   })
 }
@@ -57,6 +58,12 @@ export function useDeleteLink() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['links'] })
+      // The forgotten-link card is a third list on the same screen and it caches for an
+      // hour (useResurfaced), so it does not follow ['links']. Without this the card
+      // survives its own link: delete it and the toast appears while the card stays,
+      // and clicking it 404s. iOS blocks this in FeedModel.apply — the same rule has to
+      // be written twice because the two clients hold the card in different places.
+      qc.invalidateQueries({ queryKey: ['resurfaced'] })
     },
   })
 }
