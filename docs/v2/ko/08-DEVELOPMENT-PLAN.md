@@ -295,7 +295,7 @@ hit@3는 그걸 거의 못 본다. **조타 장치 없이 4주를 시작하는 �
 
 부수로, 원안과 무관한 **현재 결함**을 하나 찾았다: 유니코드 정규화가 백엔드에 없어 NFD
 입력에서 dev 0.952 → 0.710, test 0.885 → 0.689였다. 2026-07-26 수정 완료
-([nlu/golden/README.md](../../nlu/golden/README.md)).
+([nlu/golden/README.md](../../../nlu/golden/README.md)).
 
 #### 재범위 — 세 단계, 각 단계에 폐기 기준
 
@@ -346,7 +346,7 @@ hit@3는 그걸 거의 못 본다. **조타 장치 없이 4주를 시작하는 �
 > **비용·이득**: 색인 수정 두 개가 이미 +12pp를 냈고 모델도 디스크도 안 썼다. 임베딩의
 > 상한이 같은 +12pp인데 출하 가능한 크기에서는 +4pp다.
 >
-> 전체 수치·재현 방법·다시 열 조건은 [`nlu/models/README.md`](../../nlu/models/README.md).
+> 전체 수치·재현 방법·다시 열 조건은 [`nlu/models/README.md`](../../../nlu/models/README.md).
 > 아래 원안은 **실행된 그대로** 남긴다 — 무엇을 걸고 무엇으로 판정했는지가 기록이다.
 
 **Phase 1 — 오프라인 타당성 스파이크 (1주). 코드 통합 0, 폐기 전제.**
@@ -376,7 +376,7 @@ hit@3는 그걸 거의 못 본다. **조타 장치 없이 4주를 시작하는 �
 - **추출식 요약 Phase A (구현 완료, LLM 없이)**: 본문에서 핵심 문장 2~3개를 고르는 extractive 요약 — 생성이 아니라 원문 문장 선택이라 환각 0, 순수 Go(`backend/internal/summarizer`). **TextRank**(어휘 겹침 유사도 기반 문장 그래프 PageRank) + **description-aware MMR**로 중심 문장을 뽑되 설명과 겹치는 문장을 눌러, 인스펙터에서 같은 말을 두 번 하지 않게 한다. M3의 `tagger.Tokenize`(조사 정규화)를 재사용하고, tag 잡이 이미 본문을 읽으므로 **한 번의 본문 처리로 태깅+요약**을 함께 한다(추가 I/O 0).
   - 저장·노출: `links.summary`(마이그레이션 0005) + 계약 **`LinkDetail.summary`만** — 목록(`Link`)·검색(`SearchResult`)에는 싣지 않는다. 웹은 **인스펙터의 「요약」 섹션**(설명 바로 위)에만 그리고 **카드는 바꾸지 않는다**: 요약은 원문 대체재가 아니라 "열까 말까"의 판단 보조이고, 목록 응답을 가볍게 유지한다. 계약이 좁은 덕에 목록·검색 store 경로(`linkCols`/`scanLink`/`sqlite_search.go`)를 한 글자도 건드리지 않는다. `links_fts` 미색인(가상 테이블 재생성 위험 — 재검토는 아래 stage 2).
   - 품질 가드 5겹: 본문 200룬 미만 / 산문 3문장 미만 / 문장별 산문 게이트(목차·코드·이메일 목록 제거) / 총 450룬 캡 / description과 0.8 이상 겹치면 통째로 폐기. 불통과면 빈 문자열이고 UI는 아무것도 그리지 않는다.
-  - 측정(`just eval-summary`, golden dev/test 각 50건): **정답 요약이 없어 ROUGE는 불가**하므로 lead-3 베이스라인 대비 상대 게이트만 건다(desc 중복도 · 태그 신호 보존 · 결정성). 실측은 [nlu/golden/README.md](../../nlu/golden/README.md)에 기록한다.
+  - 측정(`just eval-summary`, golden dev/test 각 50건): **정답 요약이 없어 ROUGE는 불가**하므로 lead-3 베이스라인 대비 상대 게이트만 건다(desc 중복도 · 태그 신호 보존 · 결정성). 실측은 [nlu/golden/README.md](../../../nlu/golden/README.md)에 기록한다.
   - **stage 2 후보**(이번 범위 밖): Phase B 임베딩으로 문장 유사도 교체(골격은 그대로 — `similarity()` 하나만 바뀐다), `links_fts`에 summary 색인(desc-aware MMR 덕에 요약 토큰의 대부분이 description 밖이라 진짜 새 검색 표면이다), 카드 본문 슬롯 백필(`description || summary`) — 재검토 트리거는 "description 빈 링크 25% 초과 또는 요약 커버리지 85% 초과".
 
   - **stage 2 진행 상황(2026-07-26)**: `links_fts`에 summary 색인은 **완료**했다(백로그 B1,

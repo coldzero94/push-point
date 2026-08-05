@@ -19,7 +19,7 @@
 //
 // 페이로드는 HTTP 계약(api/openapi.yaml의 LinkInput)과 **같은 JSON**이다. 저장의 단위가
 // HTTP 호출이 아니라 페이로드라서, 같은 문자열이 서버 모드에서는 POST 본문으로,
-// 자립 모드에서는 이 함수의 인자로 간다(docs/v2/04-DATA-FLOW.md §7.4).
+// 자립 모드에서는 이 함수의 인자로 간다(docs/v2/ko/04-DATA-FLOW.md §7.4).
 package ppshare
 
 import (

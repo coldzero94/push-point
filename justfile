@@ -333,6 +333,10 @@ streak-selftest:
 site-check:
     python3 scripts/site_copy_check.py
 
+# docs/v2의 ko·en 두 벌이 갈라지지 않는지 (구조·표·코드·숫자 — 본문의 뜻은 사람이 본다)
+docs-parity:
+    python3 scripts/docs_parity_check.py
+
 # 웹 앱 UI 문자열이 ko·en에서 갈라지지 않는지 (site-check와 같은 규칙, 대상만 앱)
 web-i18n-check:
     python3 scripts/web_i18n_check.py

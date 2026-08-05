@@ -4,7 +4,7 @@
 
 이 디렉터리는 v1의 Kubernetes 매니페스트 보존소다. **현재 사용하지 않는다.**
 v2는 단일 Go 바이너리(`pushpoint`)로 동작하며, `just dev` 한 번으로 전체 스택이 뜬다.
-배경과 로드맵은 [docs/v2/08-DEVELOPMENT-PLAN.md](../../docs/v2/08-DEVELOPMENT-PLAN.md) 참고.
+배경과 로드맵은 [docs/v2/ko/08-DEVELOPMENT-PLAN.md](../../docs/v2/ko/08-DEVELOPMENT-PLAN.md) 참고.
 
 ## 왜 접었나
 

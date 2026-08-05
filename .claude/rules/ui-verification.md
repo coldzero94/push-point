@@ -13,7 +13,7 @@ Three tools now cover this. They are **not alternatives**; they do different job
 
 **Web screens can be inspected.** `list_devices` returns a `chromium` device; point a flow
 at a URL instead of an `appId`. Do not repeat the claim that they cannot — it sat in
-`docs/v2/13-CLIENT-PARITY.md` §4 for a day without anyone calling `list_devices`, and it
+`docs/v2/ko/13-CLIENT-PARITY.md` §4 for a day without anyone calling `list_devices`, and it
 was used to justify shipping web UI on "it typechecks and builds".
 
 ## Reach for these in this order

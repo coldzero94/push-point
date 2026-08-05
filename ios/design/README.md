@@ -13,7 +13,7 @@ M4에서 SwiftUI로 옮길 화면의 시각 기준이다. Xcode 프로젝트를 
 
 ## 읽는 법
 
-- 색·타입·간격 값의 **출처는 [`../../docs/v2/10-DESIGN-SYSTEM.md`](../../docs/v2/10-DESIGN-SYSTEM.md)**
+- 색·타입·간격 값의 **출처는 [`../../docs/v2/ko/10-DESIGN-SYSTEM.md`](../../docs/v2/ko/10-DESIGN-SYSTEM.md)**
   이고, 이 파일은 사본이다. 값이 어긋나면 10번 문서가 옳다.
 - 웹(`frontend/`)과 공유하는 것: 카드, 생성 커버(R4), 시간 척추, 칩 채움 3단,
   상태 획(S1). iOS에만 있는 것은 **공유 시트** 하나다.
@@ -26,6 +26,6 @@ M4에서 SwiftUI로 옮길 화면의 시각 기준이다. Xcode 프로젝트를 
 프로토타입은 화면만 말한다. 동작의 제약은 아래에 있다.
 
 - [`../README.md`](../README.md) — 2초 저장, App Group 큐, Keychain 공유
-- [`../../docs/v2/09-PLAN-REVIEW.md`](../../docs/v2/09-PLAN-REVIEW.md) ⑥·⑦ —
+- [`../../docs/v2/ko/09-PLAN-REVIEW.md`](../../docs/v2/ko/09-PLAN-REVIEW.md) ⑥·⑦ —
   큐 설계와 ATS·저전력 모드·On-Demand VPN·개발자 계정
 - [`../../.claude/rules/ios.md`](../../.claude/rules/ios.md) — 워크스페이스 규칙

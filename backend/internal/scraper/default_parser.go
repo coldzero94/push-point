@@ -17,7 +17,7 @@ import (
 	"github.com/coby/push-point/backend/internal/textutil"
 )
 
-// 스크랩 요청 공통 상수 (스펙 docs/v2/05 §4·§6).
+// 스크랩 요청 공통 상수 (스펙 docs/v2/ko/05 §4·§6).
 const (
 	// defaultUserAgent은 대상 서버가 봇 차단·빈 응답을 주지 않도록 식별 가능한 UA를 보낸다.
 	defaultUserAgent = "Push-PointBot/2.0 (+https://github.com/coby/push-point)"

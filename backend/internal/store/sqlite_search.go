@@ -334,7 +334,7 @@ func (s *sqliteStore) attachSearchTags(ctx context.Context, items []SearchResult
 //     M6 완료 판정 지표다. 마지막 칸이 오늘이라고 계약이 보장하면 날짜 연산 자체가
 //     사라진다 — 뒤에서부터 세면 된다.
 //  2. **소비자가 셋이다**(웹·iOS·scripts/streak.sh). 채우는 코드를 세 언어로 세 번
-//     짜는 것은 `docs/v2/13-CLIENT-PARITY.md` §3이 막으려는 바로 그 형태다.
+//     짜는 것은 `docs/v2/ko/13-CLIENT-PARITY.md` §3이 막으려는 바로 그 형태다.
 //
 // this_week도 같은 창의 마지막 7칸 합으로 낸다. 예전에는 `unixepoch() - 7*86400`이라
 // 롤링 초 단위였는데, 화면이 이 값과 by_day에서 파생한 "지난주 대비"를 **한 문장 안에**

@@ -32,7 +32,7 @@
   유사도 → Phase A와 점수 앙상블.
   - **추출식 요약(동반 기능)**: 같은 임베딩으로 문장 유사도를 계산해
     본문에서 핵심 문장 2~3개를 뽑는다(TextRank/LexRank, LLM 없이 순수 Go —
-    원문 문장 선택이라 환각 0). 상세는 [08-DEVELOPMENT-PLAN.md](../docs/v2/08-DEVELOPMENT-PLAN.md) M5.
+    원문 문장 선택이라 환각 0). 상세는 [08-DEVELOPMENT-PLAN.md](../docs/v2/ko/08-DEVELOPMENT-PLAN.md) M5.
 
 ## 품질 게이트
 
@@ -43,4 +43,4 @@ M5 종료: 앙상블이 Phase A 대비 +10pp** (절대 60%/80%는 참고치). �
 
 ## 더 보기
 
-- NLU 파이프라인 상세: [../docs/v2/02-TECH-SPEC.md](../docs/v2/02-TECH-SPEC.md)의 NLU 절
+- NLU 파이프라인 상세: [../docs/v2/ko/02-TECH-SPEC.md](../docs/v2/ko/02-TECH-SPEC.md)의 NLU 절

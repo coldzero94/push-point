@@ -25,7 +25,7 @@ type DB struct {
 	Path   string // pushpoint.db 절대/상대 경로
 }
 
-// PRAGMA 5종 (docs/v2/05 §3). DSN _pragma 파라미터로 지정해
+// PRAGMA 5종 (docs/v2/ko/05 §3). DSN _pragma 파라미터로 지정해
 // 풀의 모든 커넥션에 연결 시점마다 적용되게 한다.
 var pragmas = []string{
 	"journal_mode(WAL)",

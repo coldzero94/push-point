@@ -9,7 +9,7 @@ Push-Point 웹 프론트엔드다. **2026-07-21, 웹은 명시적 비목표에�
 완결로 구현한다.
 
 **어느 기능이 어느 클라이언트에 가는지는 기능마다 판정한다** —
-[13-CLIENT-PARITY.md](../docs/v2/13-CLIENT-PARITY.md)의 세 축(①아카이브는 양쪽 다,
+[13-CLIENT-PARITY.md](../docs/v2/ko/13-CLIENT-PARITY.md)의 세 축(①아카이브는 양쪽 다,
 ②진입·플랫폼 기능은 각자 최적으로, ③데이터 위치가 결정)에 넣고 그 근거를 PR에 적는다.
 
 원래는 "유일한 차이는 저장의 진입 방식"이라고 적혀 있었는데, 2026-07-27에 그게 이미
@@ -102,6 +102,6 @@ frontend/
 ## 관련 문서
 
 - API 계약(기계 원본): [`../api/openapi.yaml`](../api/openapi.yaml), 해설: [`../api/README.md`](../api/README.md)
-- API 사람용 명세: [`../docs/v2/06-API-SPECIFICATION.md`](../docs/v2/06-API-SPECIFICATION.md)
-- 프로젝트 개요·클라이언트 방향: [`../docs/v2/01-PROJECT-OVERVIEW.md`](../docs/v2/01-PROJECT-OVERVIEW.md)
-- 마일스톤상 위치: [`../docs/v2/08-DEVELOPMENT-PLAN.md`](../docs/v2/08-DEVELOPMENT-PLAN.md)
+- API 사람용 명세: [`../docs/v2/ko/06-API-SPECIFICATION.md`](../docs/v2/ko/06-API-SPECIFICATION.md)
+- 프로젝트 개요·클라이언트 방향: [`../docs/v2/ko/01-PROJECT-OVERVIEW.md`](../docs/v2/ko/01-PROJECT-OVERVIEW.md)
+- 마일스톤상 위치: [`../docs/v2/ko/08-DEVELOPMENT-PLAN.md`](../docs/v2/ko/08-DEVELOPMENT-PLAN.md)

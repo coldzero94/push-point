@@ -1,5 +1,5 @@
 // Package scraper는 URL에서 링크 메타데이터를 추출하는 계약과 어댑터 레지스트리를 정의한다.
-// (스펙 docs/v2/05 §5, 04-DATA-FLOW §1 참조)
+// (스펙 docs/v2/ko/05 §5, 04-DATA-FLOW §1 참조)
 //
 // [경계]
 //   - Metadata는 스크랩 산출물의 도메인 표현이다. links 테이블 컬럼으로의 매핑(store.ScrapeResult)과

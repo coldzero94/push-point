@@ -9,7 +9,7 @@
 //	자립 모드   http://127.0.0.1:<Start가 돌려준 포트>
 //	홈서버 모드 http://<Tailscale IP>:8420
 //
-// 배선은 internal/app 한 곳에 있어 서버 바이너리와 동일하다(docs/v2/04 §7.4).
+// 배선은 internal/app 한 곳에 있어 서버 바이너리와 동일하다(docs/v2/ko/04 §7.4).
 //
 // Share Extension은 이걸 쓰지 않는다 — 확장은 서버를 띄울 수 없고, 띄울 필요도 없다.
 // 확장은 mobile/ppshare로 SQLite에 직접 쓴다(메모리 예산 근거는 그쪽 패키지 주석).
