@@ -181,7 +181,10 @@ would undo a crop that was never applied and fail a perfectly good cursor.
 - Cut dead time with `trim` + `concat`, and `setpts=PTS/1.25`–`1.5` for pace.
 - h264 at crf 26, 440 px wide: ~0.8 MB for 18 s. A GIF of the same clip needs 9 fps to fit
   2 MB and looks slow because of it.
-- GitHub README keeps `<video src>`, `width` and `muted` but **strips `autoplay` and
-  `loop`** (verified with `gh api -X POST /markdown`), so it is click-to-play there.
+- **GitHub's README renderer deletes `<video>` entirely** — leaving an empty paragraph
+  where the demo was. `POST /markdown` keeps the tag, so testing there and concluding it
+  works is wrong; that mistake shipped a README with a blank hero. Verify against the
+  real thing: `curl -H "Accept: application/vnd.github.html" .../repos/OWNER/REPO/readme`.
+  Link a poster image to the site instead.
 - Look at the last few seconds before publishing. Both shipped defects were visible in a
   single frame.

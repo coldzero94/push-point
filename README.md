@@ -45,13 +45,15 @@ Everything runs in one process on your own machine. A backup is `cp -r data/`.
 ## What it looks like
 
 <p align="center">
-  <video src="https://raw.githubusercontent.com/coldzero94/push-point/main/site/assets/demo-ko.mp4"
-         poster="site/assets/demo-ko-poster.jpg" width="260" muted></video>
+  <a href="https://coldzero94.github.io/push-point/">
+    <img src="site/assets/demo-ko-poster.jpg" width="260" alt="Sharing a page from Safari into Push-Point">
+  </a>
 </p>
 
 <p align="center">
   <em>Reading in Safari → share sheet → a notification with the tags already attached →
-  tap it and the link opens on its own screen. 18 seconds, real recording.</em>
+  tap it and the link opens on its own screen.<br>
+  <a href="https://coldzero94.github.io/push-point/">Watch it run</a> — 18 seconds, real recording.</em>
 </p>
 
 <p align="center">
