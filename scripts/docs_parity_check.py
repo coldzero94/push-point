@@ -82,6 +82,14 @@ if not KO.is_dir() or not EN.is_dir():
     print(f"docs/v2/ko 와 docs/v2/en 이 둘 다 있어야 한다 (ko={KO.is_dir()} en={EN.is_dir()})")
     sys.exit(1)
 
+# docs/v2 밖에도 쌍이 있다. 영어 README가 근거로 인용하는 문서들이라, 여기가 갈라지면
+# 영어 독자는 주장을 검증할 수 없다. `X.md` ↔ `X.en.md` 규약을 쓴다 — 그 문서들은
+# 디렉터리를 나누지 않고 제자리에 있어야 상대 링크가 그대로 산다.
+EXTRA_PAIRS = [
+    (ROOT / "nlu" / "golden" / "README.md", ROOT / "nlu" / "golden" / "README.en.md"),
+    (ROOT / "docs" / "README.md", ROOT / "docs" / "README.en.md"),
+]
+
 ko_files = {p.name for p in KO.glob("*.md")}
 en_files = {p.name for p in EN.glob("*.md")}
 if ko_files - en_files:
@@ -114,6 +122,24 @@ for name in sorted(ko_files & en_files):
         fail.append(f"{name}: 숫자가 다르다 — ko만 {[x for x in nk if x not in ne][:6]}, "
                     f"en만 {[x for x in ne if x not in nk][:6]}")
 
+for kp, ep in EXTRA_PAIRS:
+    if not ep.exists():
+        fail.append(f"{ep.relative_to(ROOT)} 가 없다 — {kp.relative_to(ROOT)}의 영어 쌍둥이")
+        continue
+    k, e = kp.read_text(encoding="utf-8"), ep.read_text(encoding="utf-8")
+    name = ep.relative_to(ROOT)
+    if headings(k) != headings(e):
+        fail.append(f"{name}: 헤딩 구조가 다르다 — ko {len(headings(k))}개, en {len(headings(e))}개")
+    if tables(k) != tables(e):
+        fail.append(f"{name}: 표가 다르다")
+    ck, ce = code_blocks(k), code_blocks(e)
+    if len(ck) != len(ce):
+        fail.append(f"{name}: 코드 블록 개수가 다르다 — ko {len(ck)}, en {len(ce)}")
+    if numbers(k) != numbers(e):
+        nk, ne = numbers(k), numbers(e)
+        fail.append(f"{name}: 숫자가 다르다 — ko만 {[x for x in nk if x not in ne][:6]}, "
+                    f"en만 {[x for x in ne if x not in nk][:6]}")
+
 # 상대 링크가 실제로 가리키는 곳이 있는지. **문서를 옮길 때마다 깨진다** — ko/·en/으로
 # 한 단계 깊어지면서 `../../api/openapi.yaml`이 전부 어긋났고(2026-08-05, 12개), 그건
 # 사람이 클릭하기 전까지 아무 증상이 없다.
@@ -132,4 +158,4 @@ if fail:
     print("\n본문의 뜻은 이 검사가 못 본다 — 구조·표·코드·숫자만 본다.")
     sys.exit(1)
 
-print(f"docs-parity OK — 문서 {len(ko_files)}쌍의 구조·표·코드·숫자가 일치한다")
+print(f"docs-parity OK — 문서 {len(ko_files) + len(EXTRA_PAIRS)}쌍의 구조·표·코드·숫자가 일치한다")

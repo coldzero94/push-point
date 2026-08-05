@@ -14,7 +14,7 @@
   <a href="https://github.com/coldzero94/push-point/actions/workflows/ci.yml"><img src="https://github.com/coldzero94/push-point/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" alt="Go 1.25"></a>
   <a href="https://modernc.org/sqlite"><img src="https://img.shields.io/badge/SQLite-CGO--free-003B57?logo=sqlite&logoColor=white" alt="SQLite, CGO-free"></a>
-  <a href="nlu/golden/README.md"><img src="https://img.shields.io/badge/tagging-no%20LLM%20API-2ea44f" alt="no LLM API"></a>
+  <a href="nlu/golden/README.en.md"><img src="https://img.shields.io/badge/tagging-no%20LLM%20API-2ea44f" alt="no LLM API"></a>
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
   <a href="https://coldzero94.github.io/push-point/">Site</a> ·
   <a href="docs/v2/en/00-README.md">Docs</a> ·
   <a href="api/openapi.yaml">API contract</a> ·
-  <a href="nlu/golden/README.md">Tagging evaluation</a> ·
+  <a href="nlu/golden/README.en.md">Tagging evaluation</a> ·
   <a href="docs/v2/en/08-DEVELOPMENT-PLAN.md">Roadmap</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
@@ -154,7 +154,7 @@ For real use, replace the key with `openssl rand -hex 32`.
 
 ## How tagging is evaluated
 
-The evaluation is the interesting part, and it is documented in full at [nlu/golden/README.md](nlu/golden/README.md).
+The evaluation is the interesting part, and it is documented in full at [nlu/golden/README.en.md](nlu/golden/README.en.md).
 
 Three sets, reported separately and never averaged together:
 
@@ -232,8 +232,8 @@ Docs live in `docs/v2/` in both languages — [English](docs/v2/en/) and [한국
 - [System architecture](docs/v2/en/03-SYSTEM-ARCHITECTURE.md) — single-process design, package roles
 - [API specification](docs/v2/en/06-API-SPECIFICATION.md) — REST endpoints, auth, cursor pagination
 - [Deployment guide](docs/v2/en/07-DEPLOYMENT.md) — running it, operating it, measured benchmarks
-- [Tagging evaluation](nlu/golden/README.md) — the protocol and every measurement to date
-- [Rewrite comparison](docs/README.md) — what changed from the first version and why
+- [Tagging evaluation](nlu/golden/README.en.md) — the protocol and every measurement to date
+- [Rewrite comparison](docs/README.en.md) — what changed from the first version and why
 
 > The v1 Kubernetes stack (PostgreSQL, Redis, MinIO on Minikube) is folded away in `deploy/k8s-future/` — at zero users that was infrastructure built ahead of the product.
 
