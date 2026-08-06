@@ -41,6 +41,17 @@ No declaring done without measurement is this project's rule, and yet **two of t
 
 > **[2026-07-27] A2 is done.** A 25-query `nlu/golden/search.jsonl` + `just eval-search` went in, and
 > the baseline hit@1 0.360 → **0.440** after two fixes, MRR@10 0.413 → **0.507**.
+> **[2026-08-06] The tokenizer swap was tried and reverted.** trigram → unicode61 plus
+> Go-normalized tokens (`tagger.Tokenize` on both the index and the query side). The motive was
+> not speed but the three-rune floor discarding two-syllable Korean. The result was a
+> **regression: hit@1 0.640 → 0.560, MRR 0.666 → 0.637.** Short Korean improved
+> (`습관 만드는 법` 10th→8th, `직방 다방 차이` 3rd→1st) while mixed-language queries fell apart
+> (`DDoS 방어 원리` and `etcd 다른 키값 저장소와 비교` both 1st→2nd). **Trigram's substring
+> matching was doing real work.** With 25 queries a two-query difference is not a firm verdict of
+> "worse", but it is the change that has to show an improvement, and it did not. A second attempt
+> should be a **union of both indexes** rather than a swap, and that is a ranking-fusion design of
+> its own.
+>
 > The performance side arrived **2026-08-06 as `just bench-read`** (named for measuring list and search
 > together rather than search alone). Its first reading misses the gate — search p99 is 33ms at 10k and
 > 335ms at 100k, so latency is **linear in corpus size**. The profile puts the cost in trigram posting-list
