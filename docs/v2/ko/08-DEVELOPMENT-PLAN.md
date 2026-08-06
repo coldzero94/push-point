@@ -386,7 +386,7 @@ hit@3는 그걸 거의 못 본다. **조타 장치 없이 4주를 시작하는 �
 ### M6 다듬기 (4주)
 
 **Week 1~2**
-- iOS 위젯 (`GET /api/v1/stats` 기반). Live Activity는 M6 범위에서 제외 — "M6 이후 후보"로 이동
+- iOS 위젯 (`GET /api/v1/stats` 기반) — **✅ 2026-08-06 구현**. 명세는 10 §8.6, 크기는 small·medium 둘(large는 medium과 같은 말을 하게 되어 만들지 않았다). 서버를 부르지 않고 App Group 스냅샷을 읽는다. Live Activity는 M6 범위에서 제외 — "M6 이후 후보"로 이동
 
 **Week 3**
 - 성능 튜닝: `/debug/pprof` 프로파일링, `just bench-http` 회귀 확인

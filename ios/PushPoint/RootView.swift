@@ -13,6 +13,8 @@ struct RootView: View {
     @EnvironmentObject private var backend: Backend
     @State private var facets: [String: PP.Facet] = [:]
     @State private var tab: Tab = .list
+    /// 위젯이 "오늘 아직"이라고 말한 뒤 눌렸다. 목록이 이걸 보고 저장 시트를 연다.
+    @State private var saveRequested = false
     /// 통계에서 넘어온 필터. 목록이 이 값을 보고 좁혀 보여준다.
     @State private var filter: ListFilter?
 
@@ -25,7 +27,7 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            ContentView(facets: facets, filter: $filter)
+            ContentView(facets: facets, filter: $filter, saveRequested: $saveRequested)
                 .tabItem { Label(t("nav.list"), systemImage: "square.stack") }
                 .tag(Tab.list)
             StatsView(facetOf: { facets[$0] ?? .neutral }) { selected in
@@ -43,6 +45,16 @@ struct RootView: View {
         // 걸어야 한다(`Theme.Applying`). 처음에는 여기 한 곳이면 된다고 적어 뒀는데,
         // 화면을 보니 뜬 시트가 안 따라왔다.
         .pushPointTheme()
+        // 위젯이 연 경우 목적지가 갈린다(10 §8.6): 오늘이 비어 있으면 저장 시트,
+        // 아니면 통계 탭. **알 수 없는 URL은 무시한다** — 기본 탭으로 떨어뜨리면
+        // 오타 하나가 "위젯이 엉뚱한 데로 보낸다"로 보인다.
+        .onOpenURL { url in
+            switch url.host() ?? url.path().trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
+            case "stats": tab = .stats
+            case "save": tab = .list; saveRequested = true
+            default: break
+            }
+        }
         .task(id: backend.state) { await loadFacets() }
     }
 

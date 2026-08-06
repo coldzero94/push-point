@@ -99,6 +99,10 @@ targets:
       # 멀쩡해 보였다. 결과를 나란히 놓는 것 말고 잡을 방법이 없었다.
       - path: ../testdata/resurface-board-cases.json
         buildPhase: resources
+      # 연속 저장 — 웹 rhythm.test.ts·scripts/streak.sh와 같은 파일. iOS만 이 대조 밖이었고
+      # (규칙이 뷰 안의 private func이었다), 위젯이 네 번째 구현이 되기 전에 묶었다.
+      - path: ../testdata/streak-cases.json
+        buildPhase: resources
       # facet 라벨을 **직접 부르기 위해** 넣는다. 상태 라벨은 뷰의 private var라 소스를
       # 훑는 약한 검사였는데, 이쪽은 열거형이라 실제 함수를 호출할 수 있다.
       - path: PushPoint/DesignSystem.swift
@@ -143,6 +147,7 @@ targets:
     dependencies:
       # 확장은 앱 번들 안에 들어간다 — XcodeGen이 app-extension 타입을 자동으로 임베드한다.
       - target: PushPointShare
+      - target: PushPointWidget
       # gomobile 산출물은 **정적** 아카이브다(ar archive). 링크만 하면 되고 번들에
       # 복사하면 안 된다 — embed: true면 "정적 프레임워크를 임베드했다"는 검증 오류가 난다.
       - framework: Frameworks/PPCore.xcframework
@@ -163,6 +168,13 @@ targets:
     info:
       path: PushPoint/Info.plist
       properties:
+        # 위젯이 앱을 여는 통로(10 §8.6). **여기에 적어야 한다** — Info.plist는 XcodeGen이
+        # 이 블록에서 생성하므로, 파일을 손으로 고치면 다음 `just ios-build`가 덮는다.
+        # 실제로 그렇게 잃었다: 딥링크가 한 번 동작한 뒤 재생성에서 사라졌고, 그때 이미
+        # 커밋했으면 "됐다가 안 되는" 기능이 됐을 것이다.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.pushpoint.app
+            CFBundleURLSchemes: [pushpoint]
         CFBundleDisplayName: Push-Point
         UILaunchScreen: {}
         # 인프로세스 서버는 127.0.0.1 평문 HTTP다. ATS가 루프백을 막지 않도록 명시한다.
@@ -173,6 +185,46 @@ targets:
         UIAppFonts:
           - WantedSans-Variable.ttf
           - GeistMono-Variable.ttf
+
+  # 위젯(M6, 10 §8.6). 착수 전에 이 설정에서 타깃이 뜨는지부터 스파이크로 쟀다 —
+  # 빌드·갤러리 등록·렌더 셋(2026-08-06). 계획서 M4의 선행 검증과 같은 순서다.
+  #
+  # **gomobile 바인딩을 링크하지 않는다.** 위젯은 App Group에 놓인 스냅샷만 읽는다 —
+  # ppcore는 49MB라 예산 밖이고, ppshare에 Stats()를 더하면 JSON이 두 벌이 된다.
+  # 생성 타입(Generated)은 그 스냅샷을 **계약 그대로** 디코드하려고 넣는다.
+  PushPointWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PushPointWidget
+      - Shared
+      - PushPoint/Generated
+      - PushPoint/DesignSystem.swift
+      # **에셋과 폰트가 없으면 화면이 백지가 된다.** 처음에 빼먹었더니 `Color("canvas")`도
+      # `Color("fg1")`도 못 풀려 흰 바탕에 흰 글씨가 나왔다 — 빌드는 통과했고 갤러리에
+      # 이름과 설명까지 떴는데 타일만 비어 있었다. ios.md가 폰트에 대해 적어 둔 것과 같은
+      # 형태다: 이름이 틀려도 오류가 아니라 폴백이라, 컴파일러는 아무 말도 하지 않는다.
+      - path: PushPoint/Assets.xcassets
+        buildPhase: resources
+      - path: PushPoint/Resources/Fonts
+        buildPhase: resources
+    dependencies:
+      - package: OpenAPIRuntime
+        product: OpenAPIRuntime
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.pushpoint.app.widget
+        CODE_SIGN_ENTITLEMENTS: PushPointWidget/PushPointWidget.entitlements
+    info:
+      path: PushPointWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Push-Point
+        # 앱과 같은 폰트를 등록한다 — 없으면 Font.custom이 조용히 시스템 폰트로 떨어진다.
+        UIAppFonts:
+          - WantedSans-Variable.ttf
+          - GeistMono-Variable.ttf
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
   PushPointShare:
     type: app-extension

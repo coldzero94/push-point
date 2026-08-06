@@ -13,6 +13,8 @@ struct ContentView: View {
     let facets: [String: PP.Facet]
     /// 통계에서 넘어온 필터. 켜져 있으면 목록이 좁혀지고 해제 칩이 뜬다.
     @Binding var filter: ListFilter?
+    /// 위젯이 저장을 요청했다. 소비하면 되돌린다 — 남겨 두면 탭을 옮길 때마다 시트가 뜬다.
+    @Binding var saveRequested: Bool
 
     @EnvironmentObject private var backend: Backend
     /// 백그라운드에서는 폴링하지 않는다 — 화면에 없는 목록을 갱신할 이유가 없다.
@@ -147,6 +149,9 @@ struct ContentView: View {
             // 어서션에서 죽는다(2026-08-03, 실제로 홈 화면으로 떨어졌다). `.task`는
             // 화면이 올라온 뒤에 돌고, `onChange`는 앱이 이미 떠 있을 때를 맡는다.
             .task { consumePendingNotification() }
+            .onChange(of: saveRequested) { _, want in
+                if want { saving = true; saveRequested = false }
+            }
             .onChange(of: router.pendingLinkID) { _, _ in consumePendingNotification() }
             .navigationDestination(item: $opening) { target in
                 LinkDetailView(linkID: target.id,
