@@ -3,6 +3,7 @@
 //	pushpoint              # API 서버 + 워커 (한 프로세스)
 //	pushpoint seed -n N    # 벤치용 한영 혼합 시드 DB 생성 (고정 난수, 잡 없음)
 //	pushpoint loadgen ...  # HTTP 저장 경로 p50/p95/p99 측정 (scripts/bench_http.sh)
+//	pushpoint readgen ...  # 목록·검색 읽기 경로 p50/p95/p99 측정 (scripts/bench_read.sh)
 //	pushpoint eval         # M3에서 구현
 package main
 
@@ -18,6 +19,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"os/signal"
 	"sort"
@@ -39,6 +41,12 @@ func main() {
 		case "seed":
 			if err := runSeed(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "seed 실패:", err)
+				os.Exit(1)
+			}
+			return
+		case "readgen":
+			if err := runReadgen(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "readgen 실패:", err)
 				os.Exit(1)
 			}
 			return
@@ -103,7 +111,7 @@ func main() {
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|import|eval|summary-eval|golden-capture|golden-refill|golden-from-db|eval-search|sheets-setup|sheets-sync])\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|readgen|import|eval|summary-eval|golden-capture|golden-refill|golden-from-db|eval-search|sheets-setup|sheets-sync])\n", os.Args[1])
 			os.Exit(2)
 		}
 	}
@@ -451,6 +459,118 @@ func runLoadgen(args []string) error {
 	}
 	if out.P99 > 50 {
 		fmt.Fprintf(os.Stderr, "성능 게이트 실패: p99 %.2fms > 50ms\n", out.P99)
+		os.Exit(1)
+	}
+	return nil
+}
+
+// ---- readgen: 읽기 경로(목록·검색) 지연 측정 ----
+
+// runReadgen은 목록 스크롤과 검색의 p50/p95/p99(ms)를 잰다.
+//
+// **이 명령이 없어서 5지표 중 셋을 한 번도 안 쟀다**(08 §4). 저장 p99와 콜드 스타트만
+// 게이트가 있었고, 목록 100k·검색 10k는 목표만 문서에 적혀 있었다. 목표는 재지 않으면
+// 목표가 아니라 희망이다 — 12 §4.6도 "재는 명령이 리포에 없다"고 적어 두고 있었다.
+//
+// 저장과 달리 **커서를 태운다.** 1장만 반복해 받으면 keyset 커서가 깊은 페이지에서
+// 어떻게 되는지 못 본다 — 목록 게이트가 존재하는 이유가 정확히 거기다(OFFSET 금지).
+func runReadgen(args []string) error {
+	fs := flag.NewFlagSet("readgen", flag.ExitOnError)
+	addr := fs.String("addr", "http://localhost:8080", "서버 주소")
+	key := fs.String("key", "dev-key", "API 키")
+	mode := fs.String("mode", "list", "list | search")
+	n := fs.Int("n", 500, "요청 수")
+	limit := fs.Int("limit", 50, "목록 한 장 크기")
+	gate := fs.Float64("gate-ms", 0, "p99 게이트(ms). 0이면 모드 기본값")
+	queries := fs.String("queries", "", "검색어 쉼표 구분 (search 모드)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *gate == 0 {
+		// 08 §4의 목표 그대로. 검색이 더 빡빡한 것은 사람이 기다리는 자리라서다.
+		*gate = map[string]float64{"list": 50, "search": 30}[*mode]
+		if *gate == 0 {
+			return fmt.Errorf("알 수 없는 모드 %q (list|search)", *mode)
+		}
+	}
+	terms := strings.Split(*queries, ",")
+	if *mode == "search" && *queries == "" {
+		// 한영을 섞는다 — FTS5 trigram은 3룬 하한이 있어 한국어 2음절 낱말이 다른 경로를
+		// 타고, 한쪽만 재면 느린 쪽을 통째로 놓친다.
+		terms = []string{"쿠버네티스", "데이터베이스", "kubernetes", "database", "성능", "golang"}
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	lat := make([]float64, 0, *n)
+	cursor := ""
+	pages := 0
+
+	for i := 0; i < *n; i++ {
+		var url string
+		switch *mode {
+		case "list":
+			url = fmt.Sprintf("%s/api/v1/links?limit=%d", *addr, *limit)
+			if cursor != "" {
+				url += "&cursor=" + cursor
+			}
+		case "search":
+			url = fmt.Sprintf("%s/api/v1/search?q=%s&limit=%d", *addr,
+				neturl.QueryEscape(terms[i%len(terms)]), *limit)
+		}
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+*key)
+
+		t0 := time.Now()
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("요청 %d 실패: %w", i+1, err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		elapsed := float64(time.Since(t0).Microseconds()) / 1000.0
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("요청 %d: 예상 밖 상태 코드 %d", i+1, resp.StatusCode)
+		}
+		lat = append(lat, elapsed)
+
+		if *mode == "list" {
+			// **커서를 이어 간다.** 끝에 닿으면 처음부터 다시 — 그래야 얕은 페이지와 깊은
+			// 페이지가 표본에 함께 들어간다.
+			var page struct {
+				NextCursor *string `json:"next_cursor"`
+			}
+			if err := json.Unmarshal(raw, &page); err != nil {
+				return fmt.Errorf("요청 %d: 목록 응답 파싱 실패: %w", i+1, err)
+			}
+			if page.NextCursor == nil || *page.NextCursor == "" {
+				cursor = ""
+			} else {
+				cursor = *page.NextCursor
+				pages++
+			}
+		}
+	}
+
+	sort.Float64s(lat)
+	out := struct {
+		Mode  string  `json:"mode"`
+		N     int     `json:"n"`
+		Pages int     `json:"pages_walked"`
+		P50   float64 `json:"p50_ms"`
+		P95   float64 `json:"p95_ms"`
+		P99   float64 `json:"p99_ms"`
+	}{
+		Mode: *mode, N: *n, Pages: pages,
+		P50: percentile(lat, 0.50), P95: percentile(lat, 0.95), P99: percentile(lat, 0.99),
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
+		return err
+	}
+	if out.P99 > *gate {
+		fmt.Fprintf(os.Stderr, "성능 게이트 실패: %s p99 %.2fms > %.0fms\n", *mode, out.P99, *gate)
 		os.Exit(1)
 	}
 	return nil

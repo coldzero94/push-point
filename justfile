@@ -144,6 +144,13 @@ bench:
 bench-http:
     @if [ -f scripts/bench_http.sh ]; then scripts/bench_http.sh; else echo "scripts/bench_http.sh가 아직 없습니다. M1에서 활성화됩니다."; fi
 
+# 읽기 경로 성능 게이트 — 목록 100k p99 < 50ms · 검색 p99 < 30ms (초과 시 exit 1)
+#
+# 08 §4의 5지표 중 셋을 아무도 재지 않고 있었다. 저장 p99와 콜드 스타트만 명령이 있었고
+# 나머지는 목표만 문서에 있었다 — 재지 않는 목표는 목표가 아니라 희망이다.
+bench-read:
+    @if [ -f scripts/bench_read.sh ]; then scripts/bench_read.sh; else echo "scripts/bench_read.sh가 없습니다."; fi
+
 # 크래시 복구 검증 — 빌드 → fixture 서버 → 저장 → kill -9 → 재기동 → 전량 done 단언 (M2+)
 test-crash:
     @if [ -f scripts/test_crash.sh ]; then scripts/test_crash.sh; else echo "scripts/test_crash.sh가 아직 없습니다. M2에서 활성화됩니다."; fi
