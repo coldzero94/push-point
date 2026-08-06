@@ -123,12 +123,30 @@ internal protocol APIProtocol: Sendable {
     func search(_ input: Operations.search.Input) async throws -> Operations.search.Output
     /// 스프레드시트 연결 상태
     ///
-    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과.
+    /// **연결도 이 API로 한다**(2026-08-06). 예전에는 CLI(`pushpoint sheets-setup`)뿐이었는데, 그러면 시작하려면 터미널을 열 줄 알아야 한다 — 폰만 쓰는 사람에게는 그 자체가 벽이다. 구글이 강제하는 단계(스크립트 붙여넣기 · 배포 · 승인)는 그대로 남지만, 그 앞뒤의 터미널·클립보드·표준입력은 화면으로 옮길 수 있다. CLI도 그대로 둔다.
     ///
     ///
     /// - Remark: HTTP `GET /api/v1/sheets`.
     /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)`.
     func getSheetsStatus(_ input: Operations.getSheetsStatus.Input) async throws -> Operations.getSheetsStatus.Output
+    /// 연결용 Apps Script
+    ///
+    /// 화면이 사용자에게 보여 줄 Apps Script와, 그 스크립트에 박히는 토큰을 돌려준다. **부를 때마다 새 토큰을 만들지 않는다** — 사용자가 스크립트를 붙여넣는 도중에 화면을 새로 고치면 붙여넣은 것과 서버가 아는 것이 갈라지기 때문이다. 이미 연결돼 있으면 그 토큰을 그대로 준다(재배포용).
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/sheets/script`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/script/get(getSheetsScript)`.
+    func getSheetsScript(_ input: Operations.getSheetsScript.Input) async throws -> Operations.getSheetsScript.Output
+    /// 배포 URL로 연결
+    ///
+    /// 사용자가 배포한 Apps Script 웹 앱 URL을 받아 **실제로 한 번 찔러 보고**(ping) 성공했을 때만 저장한다. 저장부터 하고 나중에 실패하면 화면은 "연결됨"인데 동기화만 조용히 안 되는 상태가 되고, 그건 연결이 안 된 것보다 나쁘다.
+    /// 배포 설정이 틀린 경우(액세스 권한이 "모든 사용자"가 아니면 구글이 로그인 페이지를 준다)가 가장 흔한 실패라, 400 본문이 그 사실을 그대로 말한다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/sheets/connect`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/connect/post(connectSheets)`.
+    func connectSheets(_ input: Operations.connectSheets.Input) async throws -> Operations.connectSheets.Output
     /// 지금 동기화
     ///
     /// 아카이브 전량을 시트에 다시 쓴다(교체). 동기 호출이며 링크 수에 비례해 몇 초 걸릴 수 있다 — 저장 API가 아니므로 p99 게이트 대상이 아니다. 연결돼 있지 않으면 409.
@@ -366,13 +384,41 @@ extension APIProtocol {
     }
     /// 스프레드시트 연결 상태
     ///
-    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과.
+    /// **연결도 이 API로 한다**(2026-08-06). 예전에는 CLI(`pushpoint sheets-setup`)뿐이었는데, 그러면 시작하려면 터미널을 열 줄 알아야 한다 — 폰만 쓰는 사람에게는 그 자체가 벽이다. 구글이 강제하는 단계(스크립트 붙여넣기 · 배포 · 승인)는 그대로 남지만, 그 앞뒤의 터미널·클립보드·표준입력은 화면으로 옮길 수 있다. CLI도 그대로 둔다.
     ///
     ///
     /// - Remark: HTTP `GET /api/v1/sheets`.
     /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)`.
     internal func getSheetsStatus(headers: Operations.getSheetsStatus.Input.Headers = .init()) async throws -> Operations.getSheetsStatus.Output {
         try await getSheetsStatus(Operations.getSheetsStatus.Input(headers: headers))
+    }
+    /// 연결용 Apps Script
+    ///
+    /// 화면이 사용자에게 보여 줄 Apps Script와, 그 스크립트에 박히는 토큰을 돌려준다. **부를 때마다 새 토큰을 만들지 않는다** — 사용자가 스크립트를 붙여넣는 도중에 화면을 새로 고치면 붙여넣은 것과 서버가 아는 것이 갈라지기 때문이다. 이미 연결돼 있으면 그 토큰을 그대로 준다(재배포용).
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/sheets/script`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/script/get(getSheetsScript)`.
+    internal func getSheetsScript(headers: Operations.getSheetsScript.Input.Headers = .init()) async throws -> Operations.getSheetsScript.Output {
+        try await getSheetsScript(Operations.getSheetsScript.Input(headers: headers))
+    }
+    /// 배포 URL로 연결
+    ///
+    /// 사용자가 배포한 Apps Script 웹 앱 URL을 받아 **실제로 한 번 찔러 보고**(ping) 성공했을 때만 저장한다. 저장부터 하고 나중에 실패하면 화면은 "연결됨"인데 동기화만 조용히 안 되는 상태가 되고, 그건 연결이 안 된 것보다 나쁘다.
+    /// 배포 설정이 틀린 경우(액세스 권한이 "모든 사용자"가 아니면 구글이 로그인 페이지를 준다)가 가장 흔한 실패라, 400 본문이 그 사실을 그대로 말한다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/sheets/connect`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/connect/post(connectSheets)`.
+    internal func connectSheets(
+        headers: Operations.connectSheets.Input.Headers = .init(),
+        body: Operations.connectSheets.Input.Body
+    ) async throws -> Operations.connectSheets.Output {
+        try await connectSheets(Operations.connectSheets.Input(
+            headers: headers,
+            body: body
+        ))
     }
     /// 지금 동기화
     ///
@@ -1239,6 +1285,53 @@ internal enum Components {
                 case failed_links
                 case by_tag
                 case by_day
+            }
+        }
+        /// 연결 화면이 보여 줄 것 — 붙여넣을 스크립트와 그 안에 박힌 토큰.
+        ///
+        /// - Remark: Generated from `#/components/schemas/SheetsScript`.
+        internal struct SheetsScript: Codable, Hashable, Sendable {
+            /// Apps Script 편집기에 통째로 붙여넣을 내용
+            ///
+            /// - Remark: Generated from `#/components/schemas/SheetsScript/script`.
+            internal var script: Swift.String
+            /// 스크립트에 박힌 공유 비밀. 화면은 보여 줄 필요가 없지만, 사용자가 스크립트를 직접 확인할 때 같은 값인지 대조할 수 있어야 해서 함께 준다.
+            ///
+            ///
+            /// - Remark: Generated from `#/components/schemas/SheetsScript/token`.
+            internal var token: Swift.String
+            /// Creates a new `SheetsScript`.
+            ///
+            /// - Parameters:
+            ///   - script: Apps Script 편집기에 통째로 붙여넣을 내용
+            ///   - token: 스크립트에 박힌 공유 비밀. 화면은 보여 줄 필요가 없지만, 사용자가 스크립트를 직접 확인할 때 같은 값인지 대조할 수 있어야 해서 함께 준다.
+            internal init(
+                script: Swift.String,
+                token: Swift.String
+            ) {
+                self.script = script
+                self.token = token
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case script
+                case token
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/SheetsConnect`.
+        internal struct SheetsConnect: Codable, Hashable, Sendable {
+            /// Apps Script 배포의 웹 앱 URL
+            ///
+            /// - Remark: Generated from `#/components/schemas/SheetsConnect/deploy_url`.
+            internal var deploy_url: Swift.String
+            /// Creates a new `SheetsConnect`.
+            ///
+            /// - Parameters:
+            ///   - deploy_url: Apps Script 배포의 웹 앱 URL
+            internal init(deploy_url: Swift.String) {
+                self.deploy_url = deploy_url
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case deploy_url
             }
         }
         /// 공통 에러 형식 — 코드는 4개가 전부 (단일 사용자라 forbidden/rate_limit 없음)
@@ -4480,7 +4573,8 @@ internal enum Operations {
     }
     /// 스프레드시트 연결 상태
     ///
-    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과.
+    /// **연결도 이 API로 한다**(2026-08-06). 예전에는 CLI(`pushpoint sheets-setup`)뿐이었는데, 그러면 시작하려면 터미널을 열 줄 알아야 한다 — 폰만 쓰는 사람에게는 그 자체가 벽이다. 구글이 강제하는 단계(스크립트 붙여넣기 · 배포 · 승인)는 그대로 남지만, 그 앞뒤의 터미널·클립보드·표준입력은 화면으로 옮길 수 있다. CLI도 그대로 둔다.
     ///
     ///
     /// - Remark: HTTP `GET /api/v1/sheets`.
@@ -4586,6 +4680,387 @@ internal enum Operations {
             /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
             ///
             /// - Remark: Generated from `#/paths//api/v1/sheets/get(getSheetsStatus)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 연결용 Apps Script
+    ///
+    /// 화면이 사용자에게 보여 줄 Apps Script와, 그 스크립트에 박히는 토큰을 돌려준다. **부를 때마다 새 토큰을 만들지 않는다** — 사용자가 스크립트를 붙여넣는 도중에 화면을 새로 고치면 붙여넣은 것과 서버가 아는 것이 갈라지기 때문이다. 이미 연결돼 있으면 그 토큰을 그대로 준다(재배포용).
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/sheets/script`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/script/get(getSheetsScript)`.
+    internal enum getSheetsScript {
+        internal static let id: Swift.String = "getSheetsScript"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/sheets/script/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.getSheetsScript.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.getSheetsScript.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.getSheetsScript.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.getSheetsScript.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/sheets/script/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/sheets/script/GET/responses/200/content/application\/json`.
+                    case json(Components.Schemas.SheetsScript)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.SheetsScript {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.getSheetsScript.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.getSheetsScript.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 스크립트와 안내
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/script/get(getSheetsScript)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.getSheetsScript.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.getSheetsScript.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/script/get(getSheetsScript)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/script/get(getSheetsScript)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 배포 URL로 연결
+    ///
+    /// 사용자가 배포한 Apps Script 웹 앱 URL을 받아 **실제로 한 번 찔러 보고**(ping) 성공했을 때만 저장한다. 저장부터 하고 나중에 실패하면 화면은 "연결됨"인데 동기화만 조용히 안 되는 상태가 되고, 그건 연결이 안 된 것보다 나쁘다.
+    /// 배포 설정이 틀린 경우(액세스 권한이 "모든 사용자"가 아니면 구글이 로그인 페이지를 준다)가 가장 흔한 실패라, 400 본문이 그 사실을 그대로 말한다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/sheets/connect`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/connect/post(connectSheets)`.
+    internal enum connectSheets {
+        internal static let id: Swift.String = "connectSheets"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/sheets/connect/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.connectSheets.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.connectSheets.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.connectSheets.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/sheets/connect/POST/requestBody`.
+            internal enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/sheets/connect/POST/requestBody/content/application\/json`.
+                case json(Components.Schemas.SheetsConnect)
+            }
+            internal var body: Operations.connectSheets.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            ///   - body:
+            internal init(
+                headers: Operations.connectSheets.Input.Headers = .init(),
+                body: Operations.connectSheets.Input.Body
+            ) {
+                self.headers = headers
+                self.body = body
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/sheets/connect/POST/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/sheets/connect/POST/responses/200/content/application\/json`.
+                    case json(Components.Schemas.SheetsStatus)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.SheetsStatus {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.connectSheets.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.connectSheets.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 연결됨 (연결 직후 상태)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/connect/post(connectSheets)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.connectSheets.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.connectSheets.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/sheets/connect/POST/responses/400/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/sheets/connect/POST/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.connectSheets.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.connectSheets.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// URL이 비었거나 형식이 아니거나, 찔러 봤을 때 응답이 계약과 다르다
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/connect/post(connectSheets)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.connectSheets.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            internal var badRequest: Operations.connectSheets.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/connect/post(connectSheets)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/sheets/connect/post(connectSheets)/responses/500`.
             ///
             /// HTTP response code: `500 internalServerError`.
             case internalServerError(Components.Responses.InternalError)

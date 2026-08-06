@@ -223,11 +223,53 @@ export interface paths {
         };
         /**
          * 스프레드시트 연결 상태
-         * @description Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+         * @description Google 스프레드시트 연결 여부와 마지막 동기화 결과.
+         *     **연결도 이 API로 한다**(2026-08-06). 예전에는 CLI(`pushpoint sheets-setup`)뿐이었는데, 그러면 시작하려면 터미널을 열 줄 알아야 한다 — 폰만 쓰는 사람에게는 그 자체가 벽이다. 구글이 강제하는 단계(스크립트 붙여넣기 · 배포 · 승인)는 그대로 남지만, 그 앞뒤의 터미널·클립보드·표준입력은 화면으로 옮길 수 있다. CLI도 그대로 둔다.
          */
         get: operations["getSheetsStatus"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sheets/script": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 연결용 Apps Script
+         * @description 화면이 사용자에게 보여 줄 Apps Script와, 그 스크립트에 박히는 토큰을 돌려준다. **부를 때마다 새 토큰을 만들지 않는다** — 사용자가 스크립트를 붙여넣는 도중에 화면을 새로 고치면 붙여넣은 것과 서버가 아는 것이 갈라지기 때문이다. 이미 연결돼 있으면 그 토큰을 그대로 준다(재배포용).
+         */
+        get: operations["getSheetsScript"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sheets/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 배포 URL로 연결
+         * @description 사용자가 배포한 Apps Script 웹 앱 URL을 받아 **실제로 한 번 찔러 보고**(ping) 성공했을 때만 저장한다. 저장부터 하고 나중에 실패하면 화면은 "연결됨"인데 동기화만 조용히 안 되는 상태가 되고, 그건 연결이 안 된 것보다 나쁘다.
+         *     배포 설정이 틀린 경우(액세스 권한이 "모든 사용자"가 아니면 구글이 로그인 페이지를 준다)가 가장 흔한 실패라, 400 본문이 그 사실을 그대로 말한다.
+         */
+        post: operations["connectSheets"];
         delete?: never;
         options?: never;
         head?: never;
@@ -493,6 +535,17 @@ export interface components {
                 date: string;
                 count: number;
             }[];
+        };
+        /** @description 연결 화면이 보여 줄 것 — 붙여넣을 스크립트와 그 안에 박힌 토큰. */
+        SheetsScript: {
+            /** @description Apps Script 편집기에 통째로 붙여넣을 내용 */
+            script: string;
+            /** @description 스크립트에 박힌 공유 비밀. 화면은 보여 줄 필요가 없지만, 사용자가 스크립트를 직접 확인할 때 같은 값인지 대조할 수 있어야 해서 함께 준다. */
+            token: string;
+        };
+        SheetsConnect: {
+            /** @description Apps Script 배포의 웹 앱 URL */
+            deploy_url: string;
         };
         /** @description 공통 에러 형식 — 코드는 4개가 전부 (단일 사용자라 forbidden/rate_limit 없음) */
         Error: {
@@ -1040,6 +1093,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SheetsStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSheetsScript: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 스크립트와 안내 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SheetsScript"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    connectSheets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SheetsConnect"];
+            };
+        };
+        responses: {
+            /** @description 연결됨 (연결 직후 상태) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SheetsStatus"];
+                };
+            };
+            /** @description URL이 비었거나 형식이 아니거나, 찔러 봤을 때 응답이 계약과 다르다 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -14,6 +14,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,14 +26,33 @@ import (
 	"github.com/coby/push-point/backend/internal/sheetsync"
 )
 
-func runSheetsSetup(_ []string) error {
+func runSheetsSetup(args []string) error {
+	fs := flag.NewFlagSet("sheets-setup", flag.ExitOnError)
+	// **URL을 인자로도 받는다.** 표준입력이 안 붙은 곳(스크립트·에디터 안·CI)에서 돌리면
+	// 다섯 단계를 다 안내해 놓고 마지막에 URL을 못 받고 죽는다 — 사용자는 브라우저에서
+	// 할 일을 다 했는데 결과가 사라진다. 실제로 그렇게 세 번 죽었다.
+	urlFlag := fs.String("url", "", "배포한 웹 앱 URL (주면 안내를 건너뛰고 연결만 한다)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dataDir(), 0o755); err != nil {
 		return fmt.Errorf("sheets-setup: 데이터 디렉터리 준비 실패: %w", err)
 	}
 
-	token, err := sheets.NewToken()
-	if err != nil {
-		return err
+	// **토큰을 매 실행 새로 만들지 않는다.** 안내를 한 번 받아 스크립트를 붙여넣은 뒤
+	// 명령을 다시 돌리면, 예전에는 새 토큰이 나와서 이미 배포한 스크립트와 갈라졌다 —
+	// 배포는 성공했는데 ping만 실패하고, 원인은 화면 어디에도 안 보인다.
+	token := sheetsync.Load(dataDir()).Token
+	if token == "" {
+		var err error
+		if token, err = sheets.NewToken(); err != nil {
+			return err
+		}
+		st := sheetsync.Load(dataDir())
+		st.Token = token
+		if err := sheetsync.Save(dataDir(), st); err != nil {
+			return fmt.Errorf("sheets-setup: 토큰 저장 실패: %w", err)
+		}
 	}
 	script := sheets.AppsScript(token)
 
@@ -44,32 +64,39 @@ func runSheetsSetup(_ []string) error {
 	}
 	copied := copyToClipboard(script)
 
-	fmt.Println()
-	fmt.Println("Google 스프레드시트 연결 — 1분이면 끝납니다.")
-	fmt.Println()
-	if copied {
-		fmt.Println("  스크립트를 클립보드에 넣었습니다. 아래 순서로 붙여넣기만 하면 됩니다.")
-	} else {
-		fmt.Printf("  스크립트: %s  (열어서 전체 복사하세요)\n", scriptPath)
+	if *urlFlag == "" {
+		fmt.Println()
+		fmt.Println("Google 스프레드시트 연결 — 1분이면 끝납니다.")
+		fmt.Println()
+		if copied {
+			fmt.Println("  스크립트를 클립보드에 넣었습니다. 아래 순서로 붙여넣기만 하면 됩니다.")
+		} else {
+			fmt.Printf("  스크립트: %s  (열어서 전체 복사하세요)\n", scriptPath)
+		}
+		fmt.Println()
+		fmt.Println("  1. 브라우저에 새 시트가 열립니다 (안 열리면 sheets.new 로 직접)")
+		fmt.Println("  2. 메뉴에서  확장 프로그램 → Apps Script")
+		fmt.Println("  3. 편집기의 내용을 전부 지우고 붙여넣기 (Cmd+A → Cmd+V)")
+		fmt.Println("  4. 저장(Cmd+S) 후  배포 → 새 배포 → 유형: 웹 앱")
+		fmt.Println("       - 실행 계정: 나")
+		fmt.Println("       - 액세스 권한: 모든 사용자   ← 이걸 빼먹으면 로그인 페이지가 옵니다")
+		fmt.Println("  5. 배포를 누르고 권한을 승인한 뒤, 나온 **웹 앱 URL**을 복사")
+		fmt.Println()
+		openBrowser("https://sheets.new")
 	}
-	fmt.Println()
-	fmt.Println("  1. 브라우저에 새 시트가 열립니다 (안 열리면 sheets.new 로 직접)")
-	fmt.Println("  2. 메뉴에서  확장 프로그램 → Apps Script")
-	fmt.Println("  3. 편집기의 내용을 전부 지우고 붙여넣기 (Cmd+A → Cmd+V)")
-	fmt.Println("  4. 저장(Cmd+S) 후  배포 → 새 배포 → 유형: 웹 앱")
-	fmt.Println("       - 실행 계정: 나")
-	fmt.Println("       - 액세스 권한: 모든 사용자   ← 이걸 빼먹으면 로그인 페이지가 옵니다")
-	fmt.Println("  5. 배포를 누르고 권한을 승인한 뒤, 나온 **웹 앱 URL**을 복사")
-	fmt.Println()
-	openBrowser("https://sheets.new")
 
-	fmt.Print("웹 앱 URL을 여기에 붙여넣고 Enter: ")
-	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
-	if err != nil && strings.TrimSpace(line) == "" {
-		return fmt.Errorf("sheets-setup: URL을 받지 못했습니다")
+	deployURL := strings.TrimSpace(*urlFlag)
+	if deployURL == "" {
+		fmt.Print("웹 앱 URL을 여기에 붙여넣고 Enter: ")
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		if err != nil && strings.TrimSpace(line) == "" {
+			return fmt.Errorf("sheets-setup: URL을 받지 못했습니다 "+
+				"(표준입력이 없는 환경이면 `sheets-setup -url <배포 URL>` 로 주세요. "+
+				"스크립트는 %s 에 그대로 있고 토큰도 유지됩니다)", scriptPath)
+		}
+		deployURL = strings.TrimSpace(line)
 	}
-	deployURL := strings.TrimSpace(line)
 	if deployURL == "" {
 		return fmt.Errorf("sheets-setup: URL이 비어 있습니다")
 	}

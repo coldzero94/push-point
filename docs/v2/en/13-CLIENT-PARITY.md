@@ -106,7 +106,7 @@ would do on the other client?** If you cannot, it is ③; if you can and it simp
 | Browser extension integration | ③ | — | ✅ | The extension only exists in a browser |
 | API key entry | ③ | — | ✅ | An in-process server has no auth |
 | **Dictionary CRUD** | **③** | — | ✅ | **web-only is the right call — reasoning below** |
-| Spreadsheet export | ③ | — | ✅ | The Google authorization is walked by `just sheets-setup` (terminal). The web only shows status and a sync button |
+| Spreadsheet export | ③ | — | ✅ | **Connecting happens on the web too** (2026-08-06). It used to be the terminal's job, which meant getting started required knowing how to open one. Google's three steps (paste, deploy, approve) remain, and since the Apps Script editor does not exist on mobile **this one time needs a computer** |
 
 ### Failed-link CTA — axis ①, and the web does not have it (2026-07-28)
 

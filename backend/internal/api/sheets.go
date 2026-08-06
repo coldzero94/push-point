@@ -11,7 +11,10 @@ package api
 
 import (
 	"context"
+	"strings"
 	"time"
+
+	"github.com/coby/push-point/backend/internal/sheets"
 
 	"github.com/coby/push-point/backend/internal/api/gen"
 	"github.com/coby/push-point/backend/internal/sheetsync"
@@ -20,6 +23,71 @@ import (
 // GetSheetsStatus — 연결 여부와 마지막 동기화 결과.
 func (s *Server) GetSheetsStatus(_ context.Context, _ gen.GetSheetsStatusRequestObject) (gen.GetSheetsStatusResponseObject, error) {
 	return gen.GetSheetsStatus200JSONResponse(statusOf(sheetsync.Load(s.dataDir))), nil
+}
+
+// GetSheetsScript — 화면이 보여 줄 Apps Script와 그 토큰.
+//
+// **토큰을 부를 때마다 새로 만들지 않는다.** 사용자가 스크립트를 붙여넣는 도중에 화면을
+// 새로 고치면 붙여넣은 스크립트와 서버가 아는 토큰이 갈라지고, 그러면 배포는 성공하는데
+// ping만 실패한다 — 원인이 화면 어디에도 안 보이는 종류의 실패다. 이미 연결돼 있으면
+// 그 토큰을 그대로 준다(재배포용).
+func (s *Server) GetSheetsScript(_ context.Context, _ gen.GetSheetsScriptRequestObject) (gen.GetSheetsScriptResponseObject, error) {
+	token := sheetsync.Load(s.dataDir).Token
+	if token == "" {
+		var err error
+		if token, err = sheets.NewToken(); err != nil {
+			return nil, err
+		}
+		// 아직 연결 전이라도 토큰은 남겨 둔다 — 위 문단의 이유.
+		st := sheetsync.Load(s.dataDir)
+		st.Token = token
+		if err := sheetsync.Save(s.dataDir, st); err != nil {
+			return nil, err
+		}
+	}
+	return gen.GetSheetsScript200JSONResponse{Script: sheets.AppsScript(token), Token: token}, nil
+}
+
+// ConnectSheets — 배포 URL을 받아 **찔러 보고** 성공했을 때만 저장한다.
+//
+// 저장부터 하면 화면은 "연결됨"인데 동기화만 조용히 안 되는 상태가 된다. 그건 연결이 안
+// 된 것보다 나쁘다 — 사용자는 어디를 고쳐야 할지 모른 채 버튼만 누르게 된다.
+func (s *Server) ConnectSheets(ctx context.Context, req gen.ConnectSheetsRequestObject) (gen.ConnectSheetsResponseObject, error) {
+	if req.Body == nil || strings.TrimSpace(req.Body.DeployUrl) == "" {
+		return gen.ConnectSheets400JSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, "배포 URL이 비어 있습니다")), nil
+	}
+	st := sheetsync.Load(s.dataDir)
+	token := st.Token
+	if token == "" {
+		return gen.ConnectSheets400JSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput,
+			"먼저 스크립트를 받아 배포하세요 (GET /api/v1/sheets/script)")), nil
+	}
+
+	wh, err := sheets.NewWebhook(strings.TrimSpace(req.Body.DeployUrl), token)
+	if err != nil {
+		return gen.ConnectSheets400JSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, err.Error())), nil
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	title, sheetURL, err := wh.Ping(pingCtx)
+	if err != nil {
+		// **사유만 돌려주고 조언은 붙이지 않는다.** 가장 흔한 실패는 배포의 액세스 권한이
+		// "모든 사용자"가 아닌 경우인데, 그 안내를 여기서 한국어로 붙이면 영어 화면에
+		// 한국어 문장이 섞인다(실제로 그렇게 나왔다). 화면이 자기 언어로 덧붙인다.
+		return gen.ConnectSheets400JSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, err.Error())), nil
+	}
+
+	st.Mode = "webhook"
+	st.DeployURL = strings.TrimSpace(req.Body.DeployUrl)
+	st.SheetURL = sheetURL
+	if st.CreatedAt == 0 {
+		st.CreatedAt = time.Now().Unix()
+	}
+	if err := sheetsync.Save(s.dataDir, st); err != nil {
+		return nil, err
+	}
+	s.logger.Info("시트 연결됨", "title", title, "url", sheetURL)
+	return gen.ConnectSheets200JSONResponse(statusOf(st)), nil
 }
 
 // SyncSheets — 지금 한 번 동기화한다.
