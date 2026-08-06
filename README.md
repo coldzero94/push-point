@@ -58,7 +58,9 @@ screens on the [site](https://coldzero94.github.io/push-point/).
 <summary><b>Saving from the phone</b> — 18 seconds, a real recording</summary>
 <br>
 
-<video src="https://github.com/user-attachments/assets/5db79e13-076a-43e2-8d50-764ae6f2ae71"></video>
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/5db79e13-076a-43e2-8d50-764ae6f2ae71"></video>
+</p>
 
 Reading in Safari → share sheet → a notification with the tags already attached → tap it
 and the link opens on its own screen. You never leave the page you were reading. It
