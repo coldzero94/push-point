@@ -44,6 +44,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "pipegen":
+			if err := runPipegen(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "pipegen 실패:", err)
+				os.Exit(1)
+			}
+			return
 		case "readgen":
 			if err := runReadgen(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "readgen 실패:", err)
@@ -111,7 +117,7 @@ func main() {
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|readgen|import|eval|summary-eval|golden-capture|golden-refill|golden-from-db|eval-search|sheets-setup|sheets-sync])\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|readgen|pipegen|import|eval|summary-eval|golden-capture|golden-refill|golden-from-db|eval-search|sheets-setup|sheets-sync])\n", os.Args[1])
 			os.Exit(2)
 		}
 	}
@@ -161,11 +167,12 @@ func serve() error {
 	// 배선은 internal/app에 있다 — iOS 본체 앱이 폰 안에서 **같은 서버를 인프로세스로**
 	// 띄우기 때문에(mobile/ppcore), 여기서 복제하면 두 실행 모드가 갈라진다.
 	a, err := app.Start(app.Config{
-		DataDir:           cfg.DataDir,
-		APIKey:            cfg.APIKey,
-		Addr:              cfg.Addr,
-		ScrapeConcurrency: cfg.ScrapeConcurrency,
-		AllowPrivateHosts: cfg.AllowPrivateHosts,
+		ScrapeRateInterval: cfg.ScrapeRateInterval,
+		DataDir:            cfg.DataDir,
+		APIKey:             cfg.APIKey,
+		Addr:               cfg.Addr,
+		ScrapeConcurrency:  cfg.ScrapeConcurrency,
+		AllowPrivateHosts:  cfg.AllowPrivateHosts,
 	}, logger)
 	if err != nil {
 		return err
@@ -462,6 +469,156 @@ func runLoadgen(args []string) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+// ---- pipegen: 저장 → 태깅 완료까지의 파이프라인 지연 측정 ----
+
+// runPipegen은 저장 후 링크가 **종단 상태에 닿기까지**를 잰다(08 §4의 3s 예산).
+//
+// **요청 하나를 재는 loadgen과 다른 모양이다.** 저장 API는 201을 즉시 돌려주고
+// (그게 p99 50ms 게이트의 내용이다) 수집·태깅은 잡 큐에서 비동기로 돈다. 그래서 여기서
+// 재는 것은 응답 시간이 아니라 **사용자가 태그를 보게 되기까지**이고, 폴링 말고는 볼
+// 방법이 없다.
+//
+// 종단은 `done` 또는 `failed`다. failed도 종단으로 세는 이유: 예산을 넘겼는지를 재는 것이
+// 목적이고, 실패로 끝난 것도 그 시간은 걸렸다. 다만 실패 건수를 따로 보고해 **전부
+// 실패해서 빨랐던 경우**를 초록으로 읽지 않게 한다.
+func runPipegen(args []string) error {
+	fs := flag.NewFlagSet("pipegen", flag.ExitOnError)
+	addr := fs.String("addr", "http://localhost:8080", "서버 주소")
+	key := fs.String("key", "dev-key", "API 키")
+	target := fs.String("target", "", "저장할 URL의 접두사 (fixture 서버)")
+	n := fs.Int("n", 20, "저장 건수")
+	gate := fs.Float64("gate-ms", 3000, "p99 게이트(ms)")
+	timeout := fs.Duration("timeout", 30*time.Second, "한 건이 종단에 닿기를 기다리는 한도")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *target == "" {
+		return fmt.Errorf("-target 이 필요하다 (예: http://127.0.0.1:19090/page)")
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	nonce := time.Now().UnixNano()
+	lat := make([]float64, 0, *n)
+	failed, tagged := 0, 0
+
+	for i := 0; i < *n; i++ {
+		// **태깅할 거리를 함께 싣는다.** fixture HTML에는 사전이 아는 낱말이 없어서
+		// 수집만으로는 태그가 0건이 되고, 그러면 "저장 → 태깅 완료"라는 이름의 지표가
+		// 태깅을 한 번도 안 재게 된다. 공유 확장이 본문을 실어 보내는 실제 경로와도 같다.
+		body := fmt.Sprintf(
+			`{"url":"%s/%d/%d","title":"쿠버네티스 프로덕션 운영","body_text":"%s"}`,
+			*target, nonce, i, pipeTaggableBody)
+		req, err := http.NewRequest(http.MethodPost, *addr+"/api/v1/links", strings.NewReader(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+*key)
+		req.Header.Set("Content-Type", "application/json")
+
+		t0 := time.Now()
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("저장 %d 실패: %w", i+1, err)
+		}
+		var created struct {
+			ID int64 `json:"id"`
+		}
+		dec := json.NewDecoder(resp.Body)
+		decErr := dec.Decode(&created)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated || decErr != nil || created.ID == 0 {
+			return fmt.Errorf("저장 %d: 상태 %d, id=%d (%v)", i+1, resp.StatusCode, created.ID, decErr)
+		}
+
+		// 폴링 간격은 25ms — 3s 예산에서 1% 미만의 관측 오차다. 더 촘촘히 하면 재는 행위가
+		// 서버를 붙잡아 측정 대상을 바꾼다.
+		deadline := time.Now().Add(*timeout)
+		var status string
+		var nTags int
+		for time.Now().Before(deadline) {
+			time.Sleep(25 * time.Millisecond)
+			st, tg, err := pipeStatus(client, *addr, *key, created.ID)
+			if err != nil {
+				return fmt.Errorf("링크 %d 조회 실패: %w", created.ID, err)
+			}
+			status, nTags = st, tg
+			if st == "done" || st == "failed" {
+				break
+			}
+		}
+		if status != "done" && status != "failed" {
+			return fmt.Errorf("링크 %d가 %s 안에 종단에 닿지 않았다 (마지막 상태 %q)", created.ID, *timeout, status)
+		}
+		if status == "failed" {
+			failed++
+		}
+		if nTags > 0 {
+			tagged++
+		}
+		lat = append(lat, float64(time.Since(t0).Microseconds())/1000.0)
+	}
+
+	sort.Float64s(lat)
+	out := struct {
+		N      int     `json:"n"`
+		Failed int     `json:"failed"`
+		Tagged int     `json:"tagged"`
+		P50    float64 `json:"p50_ms"`
+		P95    float64 `json:"p95_ms"`
+		P99    float64 `json:"p99_ms"`
+	}{
+		N: *n, Failed: failed, Tagged: tagged,
+		P50: percentile(lat, 0.50), P95: percentile(lat, 0.95), P99: percentile(lat, 0.99),
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
+		return err
+	}
+	// **태그가 하나도 안 붙었으면 실패다.** 이 지표의 이름이 "저장 → 태깅 완료"인데
+	// 태깅이 아무 일도 안 하고 끝나면 빠른 것이 아니라 안 한 것이다.
+	if tagged == 0 {
+		fmt.Fprintln(os.Stderr, "파이프라인 게이트 실패: 태그가 붙은 링크가 0건이다")
+		os.Exit(1)
+	}
+	if out.P99 > *gate {
+		fmt.Fprintf(os.Stderr, "파이프라인 게이트 실패: p99 %.0fms > %.0fms\n", out.P99, *gate)
+		os.Exit(1)
+	}
+	return nil
+}
+
+// pipeTaggableBody는 사전이 아는 낱말을 여럿 담은 본문이다. 태거가 실제로 일하게 만드는
+// 것이 목적이라 문장은 자연스러울 필요가 없지만, 여러 facet에 걸치게 해서 한 낱말이
+// 사전에서 빠져도 측정이 통째로 0이 되지 않게 한다.
+const pipeTaggableBody = "쿠버네티스 클러스터를 프로덕션에서 운영하는 일은 설치와 다르다. " +
+	"도커 이미지와 데이터베이스 백업, golang 으로 쓴 백엔드 서비스의 성능 모니터링까지 함께 본다."
+
+// pipeStatus는 링크의 현재 상태와 태그 수를 읽는다.
+func pipeStatus(c *http.Client, addr, key string, id int64) (string, int, error) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/v1/links/%d", addr, id), nil)
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	resp, err := c.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", 0, fmt.Errorf("상태 %d", resp.StatusCode)
+	}
+	var d struct {
+		Status string `json:"status"`
+		Tags   []struct {
+			Name string `json:"name"`
+		} `json:"tags"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		return "", 0, err
+	}
+	return d.Status, len(d.Tags), nil
 }
 
 // ---- readgen: 읽기 경로(목록·검색) 지연 측정 ----

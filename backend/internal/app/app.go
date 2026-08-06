@@ -28,6 +28,9 @@ import (
 // shutdownTimeout은 진행 중 요청 드레인 상한.
 const shutdownTimeout = 10 * time.Second
 
+// 도메인당 요청 간격 기본값. 명시적으로 0을 원하면 음수를 넣는다(벤치만 그렇게 한다).
+const defaultScrapeRateInterval = time.Second
+
 // Config는 인스턴스 하나를 띄우는 데 필요한 전부. config.Load()(환경변수)에 묶이지
 // 않게 값으로 받는다 — iOS는 환경변수가 없고 App Group 경로를 런타임에 받는다.
 type Config struct {
@@ -36,6 +39,10 @@ type Config struct {
 	Addr              string // 포트가 0이면 OS가 고른다(예: "127.0.0.1:0") — Addr()로 확인
 	ScrapeConcurrency int
 	AllowPrivateHosts bool
+	// 도메인당 최소 요청 간격. **제로값이 "간격 없음"이 아니다** — 이 구조체는 환경변수
+	// 검증을 거치지 않는 호출자(mobile/ppcore)가 직접 만들므로, 0을 그대로 쓰면 폰 앱이
+	// 남의 사이트에 예의 없이 붙는다. 0이면 기본 1초로 채운다(validate).
+	ScrapeRateInterval time.Duration
 }
 
 // validate는 Start가 진입점에서 한 번 부른다. store.SaveInput.Normalize()가 SaveLink
@@ -48,6 +55,9 @@ type Config struct {
 func (c *Config) validate() error {
 	if c.DataDir == "" {
 		return errors.New("app: DataDir가 비어 있다")
+	}
+	if c.ScrapeRateInterval == 0 {
+		c.ScrapeRateInterval = defaultScrapeRateInterval
 	}
 	// 빈 키는 열리는 게 아니라 잠긴다(BearerAuth가 빈 토큰을 먼저 거부한다) — Start는
 	// 성공하고 Addr()도 주소를 주는데 모든 요청이 401인 서버가 된다. 조용히 망가지는
@@ -123,6 +133,9 @@ func Start(cfg Config, logger *slog.Logger) (*App, error) {
 		scOpts = append(scOpts, scraper.WithHTTPClient(&http.Client{}))
 		tsOpts = append(tsOpts, thumbs.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	}
+	// 도메인별 예의 간격. 벤치는 0으로 둔다 — fixture 한 호스트에 몰아넣는 하네스에서는
+	// 이 상수가 측정값을 지배해서, 재는 것이 우리 파이프라인이 아니게 된다.
+	scOpts = append(scOpts, scraper.WithRateInterval(cfg.ScrapeRateInterval))
 	sc := scraper.New(scOpts...)
 	ts := thumbs.NewDiskStore(cfg.DataDir, tsOpts...)
 

@@ -420,6 +420,7 @@ nothing to do with Phase B.** The design record exists nowhere else, so it stays
 | M4 | simulator share procedure + `just save-timing` | share tap → sub-2s response (exit 1 if exceeded), save succeeds with 0 loss even when the server is offline |
 | M5 | `just eval` (frozen test) | Entry: McNemar p<0.05 against the constant predictor (0.721) — **met**. Exit: 0 regressions + 5 or more improvements |
 | **M6** | **`just bench-read`** | List at 100k p99 < 50ms · search p99 < 30ms (exit 1 when exceeded). **Added 2026-08-06** — until then three of the five metrics had no command to measure them |
+| **M6** | **`just bench-pipeline`** | Save → tagging complete p99 < 3s, and a run that tags nothing fails. **Added 2026-08-06** — with it all five metrics are measured |
 | M6 | `scripts/streak.sh` (GET /api/v1/stats by_day) | count > 0 for 28 days straight |
 
 `just save-timing` reads the `save-timing.jsonl` the Share Extension accumulates in the App Group

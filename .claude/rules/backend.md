@@ -30,8 +30,14 @@ paths:
 
 ## Performance gates
 
-Five targets, and until 2026-08-06 only two of them had a command. A target nobody measures is
-not a target. Last reading is in the table — re-measure rather than trusting it.
+All five have a command as of 2026-08-06; before that only two did, and a target nobody measures
+is not a target. Last reading is in the table — re-measure rather than trusting it.
+
+`bench-pipeline` sets `PUSHPOINT_SCRAPE_RATE_INTERVAL=-1s` on purpose. The scraper keeps a
+per-domain politeness gap (1s), and a harness that fires twenty saves at one fixture host queues
+on it: measured p50 was **2000ms with the gap and 27ms without** — 99% of the number was the
+harness's own doing. Real use hits a different domain each save. Politeness to someone else's
+site is not part of our pipeline.
 
 | Metric | Target | Command | Last measured (2026-08-06) |
 |---|---|---|---|
@@ -39,7 +45,7 @@ not a target. Last reading is in the table — re-measure rather than trusting i
 | Cold start → serving | < 1s | `scripts/coldstart.sh` | **428ms** ✅ |
 | List scroll API at 100k rows | < 50ms | `just bench-read` | **2.6ms** ✅ |
 | Search (FTS5, 10k links) | < 30ms | `just bench-read` | **33ms** ❌ — and 335ms at 100k, i.e. linear in corpus size |
-| Save → tagging complete (async) | < 3s | **still none** | never measured |
+| Save → tagging complete (async) | < 3s | `just bench-pipeline` | **30ms** ✅ (20/20 tagged) |
 
 The search miss is not the coverage expression. A CPU profile under search load puts 88% inside
 SQLite's VDBE with FTS5 posting-list iteration on top (`_fts5MultiIterNext` 15.7% cumulative);
