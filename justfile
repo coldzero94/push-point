@@ -179,6 +179,13 @@ sheets-setup:
 sheets-sync:
     @cd backend && go run ./cmd/pushpoint sheets-sync
 
+# 시트의 inbox 탭에 적힌 명령을 실행한다 (메모·태그·저장·삭제·재시도)
+#
+# 도는 서버가 필요하다 — 명령을 HTTP API로 실행한다(단일 라이터 SQLite에 두 번째 쓰기
+# 프로세스를 만들지 않기 위해). «실행» 체크가 켜진 행만 돈다.
+sheets-inbox *ARGS:
+    @cd backend && go run ./cmd/pushpoint sheets-inbox {{ARGS}}
+
 # 벤치용 한영 혼합 시드 DB 생성 (고정 난수, 예: just seed 100000)
 seed n='10000':
     @if [ -d backend/cmd/pushpoint ]; then cd backend && go run ./cmd/pushpoint seed -n {{n}}; else echo "backend/cmd/pushpoint가 아직 없습니다. M1에서 활성화됩니다."; fi

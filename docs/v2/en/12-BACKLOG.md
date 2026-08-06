@@ -140,7 +140,7 @@ This group proceeds **in B1 → B2 order and no other.** Undoing B1 is one reind
 
 ### Group D — writing back from the sheet
 
-#### D1. An `inbox` tab — taking commands from the sheet
+#### D1. An `inbox` tab — taking commands from the sheet  ✅ built 2026-08-06 (`just sheets-inbox`)
 
 - **What it solves**: when reading the sheet turns into "I should fix this link's note", today that means moving to the web or the app. The sheet is where the skimming happens, and the means to fix things is not there.
 - **Why the grid is not made editable**: six designs that treat the `links` grid as an editing surface were reviewed and four were cut, and the signature was the same every time. **There is no way to know which cell a human touched** — Sheets gives neither a row/cell edit timestamp nor a revision id, and Drive's `modifiedTime` is per file and gets bumped by our own sync, so it cannot be told apart from a human edit. On the other side `links.updated_at` is bumped by scraping, thumbnails and summarizing alike, so it is no approximation of a human edit time either. Which means that instead of the design preventing one stray sort or a paste one column off, it **executes them faithfully.** The controlled dictionary is no defence line either — every tag name in the sheet came from that dictionary by definition, so no matter how the tag cells get scrambled, `ErrUnknownTag` never fires once.
