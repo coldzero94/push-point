@@ -1,14 +1,14 @@
 # Push-Point
 
 Personal link-saving and auto-tagging app — single user; the technical differentiator is a lightweight, LLM-free NLU.
-Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker pool, site adapters, thumbnails, import) are merged; the web client ships alongside them. Next: M3 rule-based tagging + search eval.
+Current status: M1–M5 are done and M6 is most of the way there. Shipping: the full API, the rule tagger, FTS search with its own eval harness, three clients (web, iOS with a Share Extension and a widget, browser extension), Sheets export *and* an inbox that takes commands back. **M6 leftovers: the technical write-up, and four consecutive weeks of real use — calendar time, not code.** M5's embedding spike was run and cut; the rule tagger is final.
 
 ## Workspace (monorepo)
 
 - `api/` — machine source of truth for the API, `openapi.yaml` (OpenAPI 3.1) — generates backend and client code (`just gen`).
 - `backend/` — Go single binary (API + worker + NLU runtime inference). All executable code lives here.
 - `nlu/` — NLU offline **assets only**: dictionary/ (tag dictionary), golden/ (eval set), models/ (ONNX conversion). Runtime inference is `backend/internal/tagger` (Go); Python is allowed only under `nlu/models/`.
-- `ios/` — M4: SwiftUI app + Share Extension. No code yet.
+- `ios/` — SwiftUI app + Share Extension + widget. XcodeGen generates the project from `project.yml`, so **`Info.plist` is generated output** — hand-editing it survives until the next build and no further.
 - `frontend/` — web app (Vite + React + TS, consumes the `api/openapi.yaml` contract, peer of iOS). **Parity is decided per feature, not assumed** — classify against `docs/v2/ko/13-CLIENT-PARITY.md` and record the axis in the PR. ("Only the share sheet differs" was the old claim; it had already stopped being true.)
 - `docs/v2/` = single source of truth, `docs/v1/` = v1 archive (do not modify), comparison in `docs/README.md`.
 - `deploy/k8s-future/` — preserved v1 k8s manifests (unused, do not modify).
@@ -32,10 +32,13 @@ Current status: M1 (schema, store/queue, full API, bench harness) and M2 (worker
 - `just ios-api-gen` — api/openapi.yaml → ios/PushPoint/Generated/ (swift-openapi-generator CLI, generated output committed — the contract's third consumer). `just ios-stamp-check` is the CI-side gate: it compares a committed hash of the spec instead of regenerating, so it runs without macOS or Swift
 - `just flow [file]` — Maestro flow against the booted simulator's real data (default `maestro/smoke.yaml`)
 - `just ios-uitest` — XCUITest on the simulator with its own seeded fixtures
-- `just ios-test` — iOS unit tests (`PushPointTests` — the cover-hash goldens shared with web)
+- `just ios-test` — iOS unit tests (`PushPointTests`). Several read fixtures shared with web and shell: `cover-ops.json`, `relative-time-cases.json`, `status-labels.json`, `streak-cases.json`, `resurface-board-cases.json`
 - `just ios-api-gen-check` — iOS generated-output drift (the contract's third consumer)
 - `just ios-bind-check` — **the gomobile binding vs the backend it was built from.** `ios-build` depends on it. `ios/Frameworks/` is a gitignored local artifact that `git pull` does not refresh, and a stale one shipped 30 of 42 dictionary tags for two days
 - `just save-timing` — M4 DoD verdict: was the share save under 2s (exits 1 if not)
+- `just bench-read` — list at 100k p99 < 50ms and search p99 < 30ms. **Search currently misses at 33ms**, and that is recorded rather than chased: the fix is a tokenizer decision weighed against `eval-search`, and the swap was tried and measured worse
+- `just bench-pipeline` — save → tagging complete p99 < 3s. A run that tags nothing fails, because a metric named for tagging that never tags is a comfortable lie
+- `just sheets-inbox` — apply the commands written in the sheet's `inbox` tab (note, tags, save, delete, retry). Needs a running server; only rows with `실행` checked run
 - For the remaining recipes (build/gen-check/web-gen-check/test-crash/seed/lint/fmt), run `just` to list them
 
 ## Core rules
