@@ -151,6 +151,13 @@ bench-http:
 bench-read:
     @if [ -f scripts/bench_read.sh ]; then scripts/bench_read.sh; else echo "scripts/bench_read.sh가 없습니다."; fi
 
+# 저장 → 태깅 완료 파이프라인 게이트 — p99 < 3s (초과 시 exit 1)
+#
+# 08 §4 다섯 지표의 마지막. 응답 시간이 아니라 **태그가 보이기까지**를 재므로 폴링이다.
+# fixture 서버를 써서 네트워크에 의존하지 않는다.
+bench-pipeline:
+    @if [ -f scripts/bench_pipeline.sh ]; then scripts/bench_pipeline.sh; else echo "scripts/bench_pipeline.sh가 없습니다."; fi
+
 # 크래시 복구 검증 — 빌드 → fixture 서버 → 저장 → kill -9 → 재기동 → 전량 done 단언 (M2+)
 test-crash:
     @if [ -f scripts/test_crash.sh ]; then scripts/test_crash.sh; else echo "scripts/test_crash.sh가 아직 없습니다. M2에서 활성화됩니다."; fi

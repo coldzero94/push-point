@@ -6,15 +6,22 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Config는 프로세스 전역 설정. Load 한 번으로 채워지며 이후 읽기 전용.
 type Config struct {
-	Addr              string     // PUSHPOINT_ADDR (기본 ":8420")
-	DataDir           string     // PUSHPOINT_DATA_DIR (기본 "./data") — DB·썸네일 루트
-	APIKey            string     // PUSHPOINT_API_KEY (필수)
-	ScrapeConcurrency int        // PUSHPOINT_SCRAPE_CONCURRENCY (기본 8)
-	LogLevel          slog.Level // PUSHPOINT_LOG_LEVEL (debug|info|warn|error, 기본 info)
+	Addr              string // PUSHPOINT_ADDR (기본 ":8420")
+	DataDir           string // PUSHPOINT_DATA_DIR (기본 "./data") — DB·썸네일 루트
+	APIKey            string // PUSHPOINT_API_KEY (필수)
+	ScrapeConcurrency int    // PUSHPOINT_SCRAPE_CONCURRENCY (기본 8)
+	// 도메인당 최소 요청 간격. PUSHPOINT_SCRAPE_RATE_INTERVAL (기본 1s, 0이면 없음).
+	//
+	// **남의 사이트에 대한 예의이지 파이프라인의 일부가 아니다.** 벤치가 fixture 한
+	// 호스트에 몰아넣으면 이 상수가 측정값을 지배한다 — 실측으로 p50 2000ms vs 27ms,
+	// 즉 잰 것의 99%가 하네스가 만든 대기였다. 그래서 벤치는 0으로 둔다.
+	ScrapeRateInterval time.Duration
+	LogLevel           slog.Level // PUSHPOINT_LOG_LEVEL (debug|info|warn|error, 기본 info)
 	// LogFormat은 PUSHPOINT_LOG_FORMAT (json|text|auto, 기본 auto). text는 사람이 읽는
 	// 컬러 출력(개발), json은 구조화 출력(운영 파싱), auto는 stderr가 터미널이면 text
 	// 아니면 json. `just dev`는 text를 강제한다(air가 stderr를 파이프로 감싸 auto만으론
@@ -29,12 +36,13 @@ type Config struct {
 // Load는 환경 변수에서 설정을 읽는다. PUSHPOINT_API_KEY가 없으면 에러.
 func Load() (Config, error) {
 	cfg := Config{
-		Addr:              getenv("PUSHPOINT_ADDR", ":8420"),
-		DataDir:           getenv("PUSHPOINT_DATA_DIR", "./data"),
-		APIKey:            os.Getenv("PUSHPOINT_API_KEY"),
-		ScrapeConcurrency: 8,
-		LogLevel:          slog.LevelInfo,
-		LogFormat:         getenv("PUSHPOINT_LOG_FORMAT", "auto"),
+		Addr:               getenv("PUSHPOINT_ADDR", ":8420"),
+		DataDir:            getenv("PUSHPOINT_DATA_DIR", "./data"),
+		APIKey:             os.Getenv("PUSHPOINT_API_KEY"),
+		ScrapeConcurrency:  8,
+		ScrapeRateInterval: time.Second,
+		LogLevel:           slog.LevelInfo,
+		LogFormat:          getenv("PUSHPOINT_LOG_FORMAT", "auto"),
 	}
 	if cfg.APIKey == "" {
 		return Config{}, fmt.Errorf("config: PUSHPOINT_API_KEY 미설정 (필수)")
@@ -43,6 +51,13 @@ func Load() (Config, error) {
 	case "json", "text", "auto":
 	default:
 		return Config{}, fmt.Errorf("config: PUSHPOINT_LOG_FORMAT=%q 는 json|text|auto 중 하나여야 함", cfg.LogFormat)
+	}
+	if v := os.Getenv("PUSHPOINT_SCRAPE_RATE_INTERVAL"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: PUSHPOINT_SCRAPE_RATE_INTERVAL=%q 는 duration이어야 함 (예: 1s, -1s = 간격 없음)", v)
+		}
+		cfg.ScrapeRateInterval = d
 	}
 	if v := os.Getenv("PUSHPOINT_SCRAPE_CONCURRENCY"); v != "" {
 		n, err := strconv.Atoi(v)
