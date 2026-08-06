@@ -160,6 +160,13 @@ enum Strings {
             "time.timeOfDayPm": "오후 {h}:{mm}",
             "time.today": "오늘",
             "time.yesterday": "어제",
+            "widget.daysUnit": "일 연속",
+            "widget.description": "연속 저장과 30일 리듬을 홈 화면에서 봅니다.",
+            "widget.empty": "앱을 한 번 열면 여기에 연속이 나타나요",
+            "widget.notYetToday": "오늘 아직",
+            "widget.rhythm": "30일",
+            "widget.savedToday": "오늘 저장함",
+            "widget.title": "연속 저장",
         ],
         "en": [
             "common.authFailed": "Authentication failed.",
@@ -310,6 +317,13 @@ enum Strings {
             "time.timeOfDayPm": "{h}:{mm} PM",
             "time.today": "Today",
             "time.yesterday": "Yesterday",
+            "widget.daysUnit": "day streak",
+            "widget.description": "Your streak and 30-day rhythm on the home screen.",
+            "widget.empty": "Open the app once and your streak appears here",
+            "widget.notYetToday": "Nothing today yet",
+            "widget.rhythm": "30 days",
+            "widget.savedToday": "Saved today",
+            "widget.title": "Streak",
         ],
     ]
 }

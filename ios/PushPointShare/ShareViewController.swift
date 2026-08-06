@@ -1,5 +1,6 @@
 import OSLog
 import PPShare
+import WidgetKit
 import UIKit
 
 /// Share Extension — 공유 시트에서 한 번에 저장한다.
@@ -53,6 +54,17 @@ final class ShareViewController: UIViewController {
                 await SaveNotifier.notifySaved(title: title, host: host,
                                                tags: result.tagNames, duplicate: result.duplicate,
                                                linkID: result.id)
+            }
+            // 위젯의 스냅샷을 올린다. **중복 저장은 올리지 않는다** — 이미 있던 링크를
+            // 다시 공유한 것은 새 저장이 아니고, 연속을 그걸로 이어 주면 위젯이 하루를
+            // 지어내는 셈이다.
+            //
+            // 앱이 아니라 여기서도 하는 이유(10 §8.6): 공유 시트로만 쓰는 사용자에게는
+            // 앱이 스냅샷을 갱신할 기회가 없어서, 저장해도 위젯이 "오늘 아직"이라고
+            // 말한다 — 방금 한 일을 부정하는 화면이 된다.
+            if !result.duplicate {
+                StatsSnapshot.bumpToday()
+                WidgetCenter.shared.reloadAllTimelines()
             }
             // 배너까지 띄운 뒤에 잰다 — 사용자에게 "됐다"가 보이는 시점이 곧 응답이고,
             // 저장 함수가 반환한 시점이 아니다.

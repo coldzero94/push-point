@@ -1358,6 +1358,63 @@ the sentence comes first and the bars for 30 days become its evidence underneath
 | Motion | ms tokens + cubic-bezier | **The same durations, ported as `.easeInOut(duration:)`** (§8.2 `DS.Motion`). `.spring` is allowed only at `dampingFraction: 1.0` — the ban on overshoot is common to both platforms |
 | Save entry point | The URL input field (+ a bookmarklet) | The Share Extension (2-second entry) — an OS feature, so the web has none ([13 §1 ② axis](13-CLIENT-PARITY.md)) |
 
+### 8.6 Widget (M6)
+
+08 carried one line — "iOS widget (based on `GET /api/v1/stats`)". This section is what that
+line actually is. **All of it stands on measurement taken 2026-08-06**: before writing any of
+it, a spike checked whether a widget target even comes up in this XcodeGen setup (build,
+gallery registration and render — all three), and only then was this written.
+
+#### How it gets data — a snapshot
+
+**A widget cannot reach the in-process server.** The server runs inside the app process, and
+when the widget is drawn the app is usually not running. Three routes were weighed and one
+taken:
+
+| Route | Why not |
+|---|---|
+| Link `ppcore` | 49MB. Outside a widget's budget, and it means standing up an HTTP server to draw one tile |
+| Add `Stats()` to `ppshare` | It would fit at 19MB, but **the JSON becomes two shapes.** That is exactly why 08 §M4 does not export CRUD as functions from `ppcore` — once standalone mode's JSON drifts from `api/openapi.yaml`, Swift ends up holding two decoders |
+| **App Group snapshot** ← | The app writes the contract's own `Stats` JSON and the widget reads it with the same generated type. One shape, one decoder |
+
+Staleness is handled by having two writers:
+
+- **The app** writes it every time it loads stats.
+- **The Share Extension** bumps the last bucket (today) by one on a successful save and reloads
+  the timeline. That is precisely the action that changes the streak, so the widget does not lie
+  even if the app is never opened. **It edits the same shape in place, so there is still one decoder.**
+
+With no snapshot at all (fresh install) the widget draws an empty state rather than inventing numbers.
+
+#### What it shows
+
+The contract gives five things: `total_links`, `links_this_week`, `failed_links`, `by_tag`,
+`by_day[30]`. **The streak** goes in the middle of it — M6's DoD is four consecutive weeks of
+`scripts/streak.sh`, and it is why this product gets opened daily.
+
+| Size | Content |
+|---|---|
+| `systemSmall` | Streak in days (large numeral) + whether today has a save |
+| `systemMedium` | The above + the 30-day rhythm sparkline |
+
+**There is no `systemLarge`.** With only five statistics, a larger face holds the same content as
+medium, which means a third size saying the same thing — the same judgement §1.3 makes when it
+calls a choice a tax rather than a feature.
+
+#### The streak rule is not written again
+
+`streak` already exists in **three** places (`rhythm.ts`, `scripts/streak.sh`, iOS `StatsView`),
+and `testdata/streak-cases.json` ties the first two together. iOS alone sat outside the fixture
+because it is a `private func` inside a view — the gap 13 §3 records as "iOS not yet". **Before the
+widget becomes a fourth implementation**, that function moves to `Shared/`, joins the fixture, and
+the widget and the stats tab call the same one.
+
+#### On tap
+
+`widgetURL` opens the app. The destination depends on state — **the save sheet when today has no
+save**, the stats tab otherwise. Taking someone to the top of the list right after the widget told
+them "nothing today" is not an answer to what it said.
+
 ## 9. Implementation verification gates
 
 Work that applies this design system can be declared complete only after passing all of the following.

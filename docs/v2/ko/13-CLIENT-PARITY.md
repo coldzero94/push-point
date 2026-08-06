@@ -95,7 +95,7 @@ iOS는 `Backend.swift`가 gomobile로 **인프로세스 서버를 띄운다**. �
 | 저장: 공유 시트 | ② | ✅ | — | OS 기능 |
 | 저장: URL 입력·북마클릿 | ② | — | ✅ | |
 | 키보드 단축키 | ② | — | ✅ | |
-| 위젯 | ② | 예정 | — | |
+| 위젯 | ② | ✅ | — | **2026-08-06 구현**(10 §8.6). 홈 화면은 iOS에만 있는 면이라 웹에 대응물이 없다 |
 | 브라우저 확장 연동 | ③ | — | ✅ | 확장이 브라우저에만 있다 |
 | API 키 입력 | ③ | — | ✅ | 인프로세스 서버에는 인증이 없다 |
 | **사전 CRUD** | **③** | — | ✅ | **웹 전용이 맞다 — 아래 근거** |
@@ -137,7 +137,7 @@ iOS 통계 탭에는 `수집에 실패한 링크 N개`를 눌러 그 목록으�
 
 | 규칙 | 구현 위치 | 일치 검사 |
 |---|---|---|
-| **연속 저장(streak)** | `ios/PushPoint/StatsView.swift` · `scripts/streak.sh` · `frontend/src/lib/rhythm.ts` | `testdata/streak-cases.json`을 웹·셸이 같이 읽는다 (iOS는 아직) |
+| **연속 저장(streak)** | `ios/Shared/Streak.swift` · `scripts/streak.sh` · `frontend/src/lib/rhythm.ts` | `testdata/streak-cases.json`을 **셋이 다 읽는다** (2026-08-06 iOS 합류 — 위젯이 네 번째 구현이 되기 전에 `Shared/Streak.swift`로 꺼냈다) |
 | ~~지난주 대비 · 지배 관심사~~ | — | **삭제됨**(14 §D3·§D4) — 데이터가 받치지 못했다 |
 | 상대 시간 표기 | `ios/Shared/RelativeTime.swift` · `frontend/src/lib/time.ts` | `testdata/relative-time-cases.json`을 **양쪽이 같이 읽는다** (2026-07-30) |
 | 상태 라벨 | `ios/PushPoint/StatusAnnounce.swift` · `frontend/src/lib/statusAnnounce.ts` | `testdata/status-labels.json`을 **양쪽이 같이 읽고, 양쪽 다 함수를 부른다** (2026-07-30) |

@@ -397,7 +397,7 @@ nothing to do with Phase B.** The design record exists nowhere else, so it stays
 ### M6 Polish (4 weeks)
 
 **Week 1~2**
-- iOS widget (based on `GET /api/v1/stats`). Live Activity is excluded from M6 scope — moved to "post-M6 candidate"
+- iOS widget (based on `GET /api/v1/stats`) — **✅ built 2026-08-06**. Spec in 10 §8.6; two sizes, small and medium (large would say the same thing as medium, so it was not made). It does not call the server — it reads an App Group snapshot. Live Activity is excluded from M6 scope — moved to "post-M6 candidate"
 
 **Week 3**
 - Performance tuning: `/debug/pprof` profiling, check for regressions with `just bench-http`

@@ -102,7 +102,7 @@ would do on the other client?** If you cannot, it is ③; if you can and it simp
 | Save: share sheet | ② | ✅ | — | OS feature |
 | Save: URL field · bookmarklet | ② | — | ✅ | |
 | Keyboard shortcuts | ② | — | ✅ | |
-| Widget | ② | planned | — | |
+| Widget | ② | ✅ | — | **built 2026-08-06** (10 §8.6). The home screen is a surface only iOS has, so the web has no counterpart |
 | Browser extension integration | ③ | — | ✅ | The extension only exists in a browser |
 | API key entry | ③ | — | ✅ | An in-process server has no auth |
 | **Dictionary CRUD** | **③** | — | ✅ | **web-only is the right call — reasoning below** |
@@ -148,7 +148,7 @@ they diverge the screens say different things, and there is no basis for believi
 
 | Rule | Where it is implemented | Agreement check |
 |---|---|---|
-| **Save streak** | `ios/PushPoint/StatsView.swift` · `scripts/streak.sh` · `frontend/src/lib/rhythm.ts` | Web and shell both read `testdata/streak-cases.json` (iOS not yet) |
+| **Save streak** | `ios/Shared/Streak.swift` · `scripts/streak.sh` · `frontend/src/lib/rhythm.ts` | **All three read** `testdata/streak-cases.json` (iOS joined 2026-08-06 — pulled out into `Shared/Streak.swift` before the widget could become a fourth implementation) |
 | ~~Week over week · dominant interest~~ | — | **deleted** (14 §D3·§D4) — the data did not hold it up |
 | Relative time strings | `ios/Shared/RelativeTime.swift` · `frontend/src/lib/time.ts` | **Both sides read** `testdata/relative-time-cases.json` (2026-07-30) |
 | Status labels | `ios/PushPoint/StatusAnnounce.swift` · `frontend/src/lib/statusAnnounce.ts` | **Both sides read `testdata/status-labels.json`, and both call the function** (2026-07-30) |
