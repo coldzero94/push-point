@@ -58,6 +58,8 @@ final class FeedModelTests: XCTestCase {
         func deleteTag(_: Operations.deleteTag.Input) async throws -> Operations.deleteTag.Output { fatalError() }
         func getStats(_: Operations.getStats.Input) async throws -> Operations.getStats.Output { fatalError() }
         func getSheetsStatus(_: Operations.getSheetsStatus.Input) async throws -> Operations.getSheetsStatus.Output { fatalError() }
+        func getSheetsScript(_: Operations.getSheetsScript.Input) async throws -> Operations.getSheetsScript.Output { fatalError() }
+        func connectSheets(_: Operations.connectSheets.Input) async throws -> Operations.connectSheets.Output { fatalError() }
         func syncSheets(_: Operations.syncSheets.Input) async throws -> Operations.syncSheets.Output { fatalError() }
     }
 

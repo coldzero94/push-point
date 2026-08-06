@@ -1983,7 +1983,8 @@ internal struct Client: APIProtocol {
     }
     /// 스프레드시트 연결 상태
     ///
-    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과. 연결은 CLI(`pushpoint sheets-setup`)에서 하고 이 API는 **상태 조회와 실행만** 한다 — 연결에는 브라우저에서 구글 승인을 밟는 단계가 있어 서버가 대신할 수 없다.
+    /// Google 스프레드시트 연결 여부와 마지막 동기화 결과.
+    /// **연결도 이 API로 한다**(2026-08-06). 예전에는 CLI(`pushpoint sheets-setup`)뿐이었는데, 그러면 시작하려면 터미널을 열 줄 알아야 한다 — 폰만 쓰는 사람에게는 그 자체가 벽이다. 구글이 강제하는 단계(스크립트 붙여넣기 · 배포 · 승인)는 그대로 남지만, 그 앞뒤의 터미널·클립보드·표준입력은 화면으로 옮길 수 있다. CLI도 그대로 둔다.
     ///
     ///
     /// - Remark: HTTP `GET /api/v1/sheets`.
@@ -2032,6 +2033,252 @@ internal struct Client: APIProtocol {
                         preconditionFailure("bestContentType chose an invalid content type.")
                     }
                     return .ok(.init(body: body))
+                case 401:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Components.Responses.Unauthorized.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unauthorized(.init(body: body))
+                case 500:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Components.Responses.InternalError.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .internalServerError(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// 연결용 Apps Script
+    ///
+    /// 화면이 사용자에게 보여 줄 Apps Script와, 그 스크립트에 박히는 토큰을 돌려준다. **부를 때마다 새 토큰을 만들지 않는다** — 사용자가 스크립트를 붙여넣는 도중에 화면을 새로 고치면 붙여넣은 것과 서버가 아는 것이 갈라지기 때문이다. 이미 연결돼 있으면 그 토큰을 그대로 준다(재배포용).
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/sheets/script`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/script/get(getSheetsScript)`.
+    internal func getSheetsScript(_ input: Operations.getSheetsScript.Input) async throws -> Operations.getSheetsScript.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.getSheetsScript.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/sheets/script",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .get
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.getSheetsScript.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.SheetsScript.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 401:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Components.Responses.Unauthorized.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unauthorized(.init(body: body))
+                case 500:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Components.Responses.InternalError.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .internalServerError(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
+    /// 배포 URL로 연결
+    ///
+    /// 사용자가 배포한 Apps Script 웹 앱 URL을 받아 **실제로 한 번 찔러 보고**(ping) 성공했을 때만 저장한다. 저장부터 하고 나중에 실패하면 화면은 "연결됨"인데 동기화만 조용히 안 되는 상태가 되고, 그건 연결이 안 된 것보다 나쁘다.
+    /// 배포 설정이 틀린 경우(액세스 권한이 "모든 사용자"가 아니면 구글이 로그인 페이지를 준다)가 가장 흔한 실패라, 400 본문이 그 사실을 그대로 말한다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/sheets/connect`.
+    /// - Remark: Generated from `#/paths//api/v1/sheets/connect/post(connectSheets)`.
+    internal func connectSheets(_ input: Operations.connectSheets.Input) async throws -> Operations.connectSheets.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.connectSheets.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/sheets/connect",
+                    parameters: []
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .post
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                let body: OpenAPIRuntime.HTTPBody?
+                switch input.body {
+                case let .json(value):
+                    body = try converter.setRequiredRequestBodyAsJSON(
+                        value,
+                        headerFields: &request.headerFields,
+                        contentType: "application/json; charset=utf-8"
+                    )
+                }
+                return (request, body)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 200:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.connectSheets.Output.Ok.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas.SheetsStatus.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .ok(.init(body: body))
+                case 400:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.connectSheets.Output.BadRequest.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .badRequest(.init(body: body))
                 case 401:
                     let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
                     let body: Components.Responses.Unauthorized.Body

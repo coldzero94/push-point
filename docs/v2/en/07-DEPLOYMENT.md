@@ -332,11 +332,20 @@ So it stays a separate command that never touches the save path and pushes alrea
 
 **It is not for backup.** Backup is already solved one section up — the data is a single SQLite file, so `cp` or `VACUUM INTO` is more complete than a sheet round trip (it carries FTS, corpus_df, tag_feedback and job history too). Where the sheet earns its keep is **what SQLite cannot do** — sweeping through it with filters and pivots, showing it to someone else, wiring it into another tool.
 
-### Setup — one command, one paste
+### Setup — from the settings screen, one paste
+
+**The "Start connecting" button in the web settings** hands over the script and takes the
+deployment URL back (2026-08-06). No terminal — before this there was only `just sheets-setup`,
+which made knowing how to open a terminal a precondition for getting started.
+
+The CLI is still there, and now takes the URL as an argument too (for environments without stdin):
 
 ```
 just sheets-setup
+pushpoint sheets-setup -url <URL>
 ```
+
+The first line is the guided form; the second is for environments without stdin.
 
 No cloud console, no JSON key, no API to switch on. The command puts the script on your clipboard and opens a new sheet in the browser; you paste it under **Extensions → Apps Script**, deploy it, and hand back the single URL that comes out. It verifies the connection and carries straight on into the first sync.
 
