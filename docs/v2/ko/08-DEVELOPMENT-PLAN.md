@@ -408,6 +408,7 @@ hit@3는 그걸 거의 못 본다. **조타 장치 없이 4주를 시작하는 �
 | M3 | `just eval` | 베이스라인 대비 리포트 기록 (게이트 판정은 M5 진입 시) |
 | M4 | 시뮬레이터 공유 절차 + `just save-timing` | 공유 탭→응답 2초 미만 (초과 시 exit 1), 서버 오프라인 시에도 저장 성공·유실 0 |
 | M5 | `just eval` (동결 test) | 진입: 상수 예측기(0.721) 대비 McNemar p<0.05 — **충족**. 종료: 회귀 0 + 개선 5건 이상 |
+| **M6** | **`just bench-read`** | 목록 100k p99 < 50ms · 검색 p99 < 30ms (초과 시 exit 1). **2026-08-06 신설** — 그 전까지 5지표 중 셋을 재는 명령이 없었다 |
 | M6 | `scripts/streak.sh` (GET /api/v1/stats by_day) | 최근 28일 연속 count > 0 |
 
 `just save-timing`은 Share Extension이 App Group에 쌓는 `save-timing.jsonl`을 읽는다

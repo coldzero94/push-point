@@ -41,7 +41,10 @@ No declaring done without measurement is this project's rule, and yet **two of t
 
 > **[2026-07-27] A2 is done.** A 25-query `nlu/golden/search.jsonl` + `just eval-search` went in, and
 > the baseline hit@1 0.360 → **0.440** after two fixes, MRR@10 0.413 → **0.507**.
-> `just bench-search` still does not exist — quality instrumentation paid off first, and the performance side stays separate.
+> The performance side arrived **2026-08-06 as `just bench-read`** (named for measuring list and search
+> together rather than search alone). Its first reading misses the gate — search p99 is 33ms at 10k and
+> 335ms at 100k, so latency is **linear in corpus size**. The profile puts the cost in trigram posting-list
+> iteration, not in the coverage expression.
 >
 > **The observation that came out of it affects the plan**: of the 10 remaining misses, **eight are a language boundary**
 > and no indexing approach solves them. Group B (body indexing) has a measured potential of two out of 25.
