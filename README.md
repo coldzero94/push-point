@@ -44,24 +44,27 @@ Everything runs in one process on your own machine. A backup is `cp -r data/`.
 
 ## What it looks like
 
-<video src="https://github.com/user-attachments/assets/5db79e13-076a-43e2-8d50-764ae6f2ae71"></video>
-
-<p align="center">
-  <em>Reading in Safari → share sheet → a notification with the tags already attached →
-  tap it and the link opens on its own screen. 18 seconds, a real recording —
-  <a href="https://coldzero94.github.io/push-point/">it autoplays on the site</a>.</em>
-</p>
-
 <p align="center">
   <img src="site/assets/web-list-en.png" width="760" alt="The link board in the web app">
 </p>
 
-You never leave the page: a notification confirms the save and shows the tags it worked
-out. Covers on links without a thumbnail are generated from the domain, so the same
-source always draws the same mark — and both clients now draw it *identically*, which
-they did not until a shared fixture started comparing the marks rather than the
-parameters that produce them. Language follows the system and can be switched inside
-the app. More screens on the [site](https://coldzero94.github.io/push-point/).
+Covers on links without a thumbnail are generated from the domain, so the same source
+always draws the same mark — and both clients draw it *identically*, which they did not
+until a shared fixture started comparing the marks rather than the parameters that
+produce them. Language follows the system and can be switched inside the app. More
+screens on the [site](https://coldzero94.github.io/push-point/).
+
+<details>
+<summary><b>Saving from the phone</b> — 18 seconds, a real recording</summary>
+<br>
+
+<video src="https://github.com/user-attachments/assets/5db79e13-076a-43e2-8d50-764ae6f2ae71"></video>
+
+Reading in Safari → share sheet → a notification with the tags already attached → tap it
+and the link opens on its own screen. You never leave the page you were reading. It
+autoplays on the [site](https://coldzero94.github.io/push-point/).
+
+</details>
 
 ## What it does
 
