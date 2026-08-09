@@ -167,6 +167,52 @@ func (d *Dictionary) MatchedSurfaces(c Content) map[string]bool {
 	return out
 }
 
+// TermsInQuery는 질의에서 매칭된 태그의 **표면형까지** 돌려준다 — 이름만이 아니라
+// 형제 별칭 전부.
+//
+// **왜 이름만으로는 모자란가.** `습관 만드는 법`은 `productivity`를 내고, 그게 FTS의
+// `tags` 열을 때린다. 그런데 하네스가 이미 재 놨다 — 태그 열을 golden 라벨에서 태거
+// 예측으로 바꿔도 hit@1이 **정확히 0.000** 움직인다. 이 질의들은 태그 열로 안 풀린다.
+// 정답이 있는 곳은 **제목**이고, 제목에 있는 낱말은 `habit`이지 `productivity`가 아니다.
+//
+// 사전은 이미 그 낱말을 갖고 있다 — 42개 태그 전부가 한국어와 영어 별칭을 함께 담는다.
+// 지금까지 그걸 분류기로만 썼을 뿐, 실은 **이중언어 시소러스**다. `습관`이 매칭되면
+// 형제인 `habit`을 얹고, 그게 'How to Build a New Habit'의 제목을 직접 때린다.
+//
+// 순서는 TagsInQuery와 같은 이유로 고정한다(태그 ID 순, 그 안에서는 사전 기재 순).
+func (d *Dictionary) TermsInQuery(q string) []string {
+	hits := d.matchField(Tokenize(Normalize(q)))
+	if len(hits) == 0 {
+		return nil
+	}
+	ids := make([]int64, 0, len(hits))
+	for id := range hits {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	// **건너편 것만 얹는다.** 한국어 질의에 한국어 별칭을 더해 봐야 다리가 되지 않고
+	// 소음만 는다 — 전부 얹어 재 봤을 때 hit@1이 0.640에서 0.600으로 **내려갔다**.
+	// 목적이 언어 경계를 건너는 것이니 얹을 것도 건너편 문자체계뿐이다.
+	wantLatin := hasHangul(q)
+	out := make([]string, 0, len(ids)*2)
+	seen := make(map[string]bool, len(ids)*2)
+	for _, id := range ids {
+		// 태그 이름은 문자체계와 무관하게 유지한다 — 이게 지금까지의 동작이고, FTS의
+		// tags 열을 때리는 경로다. 별칭만 건너편으로 거른다.
+		for _, term := range append([]string{d.idToName[id]}, d.idToSurfaces[id]...) {
+			if term == "" || seen[strings.ToLower(term)] {
+				continue
+			}
+			if term != d.idToName[id] && hasHangul(term) == wantLatin {
+				continue
+			}
+			seen[strings.ToLower(term)] = true
+			out = append(out, term)
+		}
+	}
+	return out
+}
+
 // TagsInQuery는 **검색 질의**에서 사전 태그를 뽑는다.
 //
 // 문서를 분류하는 그 사전에 질의도 통과시킨다. `고랭 제네릭 언제 쓰나`는 `golang`을,

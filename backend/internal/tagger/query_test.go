@@ -57,3 +57,28 @@ func TestTagsInQuery_isOrdered(t *testing.T) {
 		}
 	}
 }
+
+// TermsInQuery는 **건너편 문자체계의 표면형만** 얹는다. 이게 검색이 언어 경계를 건너는
+// 방식이고, 좁히지 않으면 오히려 나빠진다 — 별칭을 전부 얹어 재 봤을 때 hit@1이
+// 0.640에서 0.600으로 내려갔다. 그 사실이 이 테스트가 지키는 내용이다.
+func TestTermsInQuery_crossScriptOnly(t *testing.T) {
+	d := BuildDictionary([]TagEntry{
+		{ID: 3, Name: "productivity", Aliases: []string{"습관", "생산성", "habit", "routine"}},
+	})
+
+	got := d.TermsInQuery("습관 만드는 법")
+
+	// 이름은 문자체계와 무관하게 유지된다 — FTS의 tags 열을 때리는 경로다.
+	// 영어 형제는 얹히고(제목을 직접 때린다), 한국어 형제는 빠진다(다리가 아니라 소음이다).
+	want := []string{"productivity", "habit", "routine"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("한국어 질의: got %v, want %v", got, want)
+	}
+
+	// 반대 방향도 같은 규칙이다.
+	got = d.TermsInQuery("habit tracker")
+	want = []string{"productivity", "습관", "생산성"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("영어 질의: got %v, want %v", got, want)
+	}
+}

@@ -446,7 +446,7 @@ func (s *sqliteStore) ftsMatchExpanded(ctx context.Context, q string) string {
 	if e == nil {
 		return base
 	}
-	tags := e.TagsInQuery(q)
+	tags := e.TermsInQuery(q)
 	if len(tags) == 0 {
 		return base
 	}

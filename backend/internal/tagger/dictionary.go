@@ -49,7 +49,12 @@ type Dictionary struct {
 	phrases    map[string][]phraseEntry // 다중어 surface: firstTok → tail+tagID
 	nameToID   map[string]int64         // 소문자 이름 → tagID (도메인맵 해소용)
 	idToName   map[int64]string         // 동점 정렬(name asc)용
-	corpus     CorpusStats              // 자체 코퍼스 DF — 제로값이면 IDF 비활성(idf.go)
+	// idToSurfaces는 태그가 가진 표면형 전부(이름 제외, 기재 순). **검색 확장이 쓴다** —
+	// 한국어 표면이 매칭되면 형제인 영어 표면을 얹어 제목을 직접 때리기 위해서다
+	// (match.go의 TermsInQuery). 매칭 인덱스 셋과 달리 토큰화하지 않은 원문을 담는다:
+	// FTS에 넣을 것이라 `machine learning`처럼 공백이 있는 것도 그대로 필요하다.
+	idToSurfaces map[int64][]string
+	corpus       CorpusStats // 자체 코퍼스 DF — 제로값이면 IDF 비활성(idf.go)
 }
 
 // WithCorpus는 자체 코퍼스 통계를 붙인 **새 사전**을 돌려준다. 사전 컴파일과 코퍼스 통계는
@@ -71,15 +76,17 @@ func (d *Dictionary) WithCorpus(c CorpusStats) *Dictionary {
 //   - 2토큰 이상                     → phrases (machine learning, ci/cd, 대규모 언어 모델)
 func BuildDictionary(entries []TagEntry) *Dictionary {
 	d := &Dictionary{
-		exactLatin: map[string][]int64{},
-		phrases:    map[string][]phraseEntry{},
-		nameToID:   map[string]int64{},
-		idToName:   map[int64]string{},
+		exactLatin:   map[string][]int64{},
+		phrases:      map[string][]phraseEntry{},
+		nameToID:     map[string]int64{},
+		idToName:     map[int64]string{},
+		idToSurfaces: map[int64][]string{},
 	}
 	for _, e := range entries {
 		d.nameToID[strings.ToLower(e.Name)] = e.ID
 		d.idToName[e.ID] = e.Name
 		surfaces := append([]string{e.Name}, e.Aliases...)
+		d.idToSurfaces[e.ID] = append([]string(nil), e.Aliases...)
 		for _, s := range surfaces {
 			toks := Tokenize(s)
 			switch {
