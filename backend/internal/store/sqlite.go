@@ -55,6 +55,7 @@ type sqliteStore struct {
 // 인터페이스 계약이 그것을 금한다.
 type QueryExpander interface {
 	TagsInQuery(q string) []string
+	TermsInQuery(q string) []string
 }
 
 // Option은 New의 선택 인자.

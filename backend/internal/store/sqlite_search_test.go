@@ -120,6 +120,10 @@ type fakeExpander []string
 
 func (f fakeExpander) TagsInQuery(string) []string { return f }
 
+// 확장 항목을 그대로 낸다 — 이 가짜는 문자체계를 가리지 않는다. 건너편만 고르는 규칙은
+// tagger 쪽 관심사이고(TermsInQuery), 여기서 검증하는 것은 store가 확장을 어떻게 **쓰는가**다.
+func (f fakeExpander) TermsInQuery(string) []string { return f }
+
 // 커버리지 낱말 모으기. **3룬 하한을 적용하지 않는 것이 요점이다** — MATCH가 버린
 // 2음절 낱말을 순위에서 되찾는 자리라, 여기서 같이 버리면 재랭킹이 할 일이 없어진다.
 func TestCoverageTerms(t *testing.T) {
