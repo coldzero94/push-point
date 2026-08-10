@@ -125,6 +125,17 @@ func (p *DefaultParser) fetchHTML(ctx context.Context, u *url.URL) (*goquery.Doc
 // `transform: short internal buffer`로 실패해 본문이 통째로 비었다(실측: 0B → 4~25KB로 복구).
 // html.Parse는 그 페이지들을 문제없이 처리하므로 파싱 결과를 재사용하는 편이 옳고, 재파싱도
 // 없어진다. ExtractDocument는 내부에서 dom.Clone으로 원본을 보존하므로 doc은 변형되지 않는다.
+// BodyTextForEval은 이미 파싱된 문서에서 **런타임과 똑같이** 본문을 뽑는다.
+//
+// 하네스 전용 진입점이다(`just eval-reader`). 왜 필요한가: 추출의 **모양**을 재려면
+// 원본 HTML이 입력이어야 하는데, `Fetch`는 네트워크를 타므로 커밋된 fixture로는 못 부른다.
+// 그렇다고 하네스가 trafilatura를 따로 부르면 그건 런타임이 아니라 런타임을 닮은 것을
+// 재는 것이고, `.claude/rules/verification.md`가 정확히 그 실수를 이름 붙여 뒀다.
+// 그래서 하네스는 이 함수를 통해 **런타임과 같은 코드**를 지나간다.
+func BodyTextForEval(doc *goquery.Document, u *url.URL) string {
+	return extractBodyText(doc, u)
+}
+
 func extractBodyText(doc *goquery.Document, u *url.URL) string {
 	if doc == nil || len(doc.Nodes) == 0 {
 		return ""
