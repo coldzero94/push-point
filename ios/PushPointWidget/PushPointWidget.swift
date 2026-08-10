@@ -141,7 +141,12 @@ struct Sparkline: View {
 
 @main
 struct PushPointWidgetBundle: WidgetBundle {
-    var body: some Widget { StreakWidget() }
+    var body: some Widget {
+        StreakWidget()
+        // 되살림은 별개 위젯이다 — 연속은 습관을 만드는 숫자이고 되살림은 읽을 거리라
+        // 서로를 대신하지 못한다. 사용자가 홈 화면에 무엇을 둘지 고른다.
+        ResurfaceWidget()
+    }
 }
 
 struct StreakWidget: Widget {
