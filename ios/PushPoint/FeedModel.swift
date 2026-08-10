@@ -1,4 +1,5 @@
 import Foundation
+import WidgetKit
 
 /// 목록에 반영해야 할 링크 한 건의 변화. `FeedModel.apply(_:)`가 유일한 입구다.
 ///
@@ -93,9 +94,18 @@ final class FeedModel {
             // 링크가 맨 위에 카드로 뜬다 — `pollRefresh`가 막는 것과 같은 사고다.
             if let link = try? r.body.json, !recentlyDeleted.contains(link.id) {
                 resurfaced = link
+                // 위젯이 읽을 스냅샷. 앱이 떠 있지 않을 때 링크가 사람에게 가는 유일한
+                // 경로라, 되살림을 받는 이 자리가 스냅샷을 갱신할 유일한 자리이기도 하다.
+                if let data = try? JSONEncoder().encode(link) {
+                    ResurfaceSnapshot.write(data)
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
             }
         case .noContent:
             resurfaced = nil
+            // 후보가 없으면 **지운다.** 안 지우면 지난주 링크가 홈 화면에 계속 남는다.
+            ResurfaceSnapshot.clear()
+            WidgetCenter.shared.reloadAllTimelines()
         default:
             break
         }

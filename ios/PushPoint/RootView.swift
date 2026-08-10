@@ -52,6 +52,9 @@ struct RootView: View {
             switch url.host() ?? url.path().trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
             case "stats": tab = .stats
             case "save": tab = .list; saveRequested = true
+            // 되살림 위젯 → 목록. 되살림 카드가 목록 맨 위에 있어서 그 자리가 목적지다.
+            // 링크를 바로 열지 않는 이유는 위젯 쪽에 적어 뒀다(열람이 기록돼야 후보에서 빠진다).
+            case "resurfaced": tab = .list
             default: break
             }
         }
