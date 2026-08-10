@@ -105,6 +105,40 @@ The last one is the point: a demo whose cursor points at the wrong thing shipped
 landing page and stayed up until a human watched it, because a build cannot see it and
 nobody watches every re-render. `just demo-check` is that gate.
 
+## Exercising the app like a person (the periodic pass)
+
+Everything below was found this way on 2026-08-10, and none of it by reading code: `devops` had
+no word for deployment, a Settings edit that silently changed nothing, and an Export button that
+wrote a 164 KB file while showing the user nothing. A build cannot see any of them.
+
+The pass is manual on purpose — the value is in *looking and judging*, which is exactly the part
+no assertion captures. Roughly twenty minutes.
+
+1. **Seed a believable archive.** Write straight into the App Group DB (`ios.md` has the container
+   recipe) with `created_at` spread across weeks. Backdating is the only way to get a resurface
+   candidate — the rule is 7 days, and nothing you save today qualifies.
+2. **Save two or three real URLs through the app**, not through SQL. Only this path runs the
+   scraper and the tagger, and the tags it produces are the material for judging the dictionary.
+   **Read the tags and ask whether they are what the piece is about.** That question found the
+   0012 gap: a microservices article tagged `data`/`database` because the dominant concepts had no
+   surface in the dictionary.
+3. **Break one thing on purpose.** `https://this-host-does-not-exist.invalid/page` exercises the
+   whole failure route. Give it a minute — retries back off, and it is `pending` until they are
+   spent, which is *not* the same screen as failed.
+4. **Walk the surfaces that are not the list**: settings, the widget gallery, the share sheet.
+   These are the ones no test opens.
+5. **Look at pixels, not just the hierarchy.** The status rail is a 2pt stroke; in a downscaled
+   screenshot it is invisible, and reading one that way produced a wrong "the app shows no failure
+   indicator" conclusion on 2026-08-10. Crop before concluding:
+   `sips -c <h> <w> --cropOffset <y> <x> shot.png --out crop.png && sips -Z 900 crop.png`
+
+Two traps worth repeating because both cost time today:
+
+- **The app restores its last screen on relaunch.** Coordinates aimed at the toolbar can land on
+  a link detail — one tap opened a delete confirmation. Screenshot before tapping anything.
+- **`kill %1` is not reliable across Bash tool calls.** A server that did not die kept serving the
+  old database and made a working restore look broken. Capture `$!` and kill that.
+
 ## The duplication to watch
 
 Maestro flows and XCUITest cases both describe the same screens. That is two sets of assets to update per UI change, which is exactly what the sweep rule in CLAUDE.md exists to prevent. It is tolerable now because the two cover different ground (structure-on-real-data vs behaviour-on-fixtures). **If they start asserting the same things, converge on one** — and the one to keep is whichever runs in CI.
@@ -155,6 +189,10 @@ belong in `--size-*` and are used as `h-(--size-name)`.
 
 Every defect in this file's opening list was found by *looking*. Reading the diff found none
 of them. But the reverse is also true and worth stating: driving the app has never found an
-error path, a cancellation bug, or a race. The one such defect this project shipped — a poller
+error path, a cancellation bug, or a race. **Amended 2026-08-10**: driving can *reach* an error
+path — saving `https://…invalid/page` walks the whole scrape-failure route to a red rail, the
+`lookup … invalid` message and a Retry button, and the app was correct at every step. What driving
+still has not done is *find a defect* on one. Reaching is cheap and worth doing; the claim to keep
+is about yield, not access. The one such defect this project shipped — a poller
 that replaced the list with page one and discarded pagination — was caught by **XCUITest**, not
 by any amount of tapping. Use both; they do not overlap.
