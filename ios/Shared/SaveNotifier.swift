@@ -78,7 +78,15 @@ enum SaveNotifier {
     /// 탭한 알림이 어느 링크였는지 앱이 알아보는 열쇠.
     static let linkIDKey = "pushpoint.linkID"
 
+    /// 저장 결과를 알린다.
+    ///
+    /// **중복일 때 이 배너는 확인이 아니라 알아봄이 된다.** "이미 있습니다"는 사람이 이미
+    /// 아는 사실이다 — 모르는 것은 *언제* 저장했고 *그때 뭐라고 썼는지*다. 그 두 값은
+    /// 저장 경로가 이미 들고 있었고(`created_at`은 중복이면 원본 시각이다) 배너까지
+    /// 오지 않았을 뿐이다. 이 앱이 사람에게 말을 거는 몇 안 되는 순간이라 거기서 아는
+    /// 것을 되풀이하는 것은 그 순간을 버리는 것이다.
     static func notifySaved(title: String, host: String, tags: [String], duplicate: Bool,
+                            priorSavedAt: Int64 = 0, priorNote: String? = nil,
                             linkID: Int64? = nil) async {
         let content = UNMutableNotificationContent()
         content.title = duplicate ? t("notify.duplicate") : t("notify.saved")
@@ -87,12 +95,32 @@ enum SaveNotifier {
         content.subtitle = title.isEmpty ? host : title
         // 태그는 이 앱의 차별점이다. 서버도 네트워크도 없이 그 자리에서 붙었다는 증거라
         // 본문에 그대로 노출한다.
-        content.body = tags.isEmpty ? host : tags.prefix(4).joined(separator: " · ")
+        content.body = duplicate
+            ? recognitionLine(savedAt: priorSavedAt, note: priorNote, tags: tags, host: host)
+            : (tags.isEmpty ? host : tags.prefix(4).joined(separator: " · "))
         content.sound = nil // 저장은 조용해야 한다 — 소리는 방해다
         // **어느 링크인지 싣는다.** 이게 없으면 알림을 눌러도 목록만 열리고, 방금 저장한
         // 것을 다시 찾아야 한다 — 저장이 한 번에 끝난다는 약속이 마지막 한 걸음에서 깨진다.
         if let linkID { content.userInfo[linkIDKey] = linkID }
         await post(content)
+    }
+
+    /// 중복 배너의 본문. **메모가 있으면 메모가 이긴다** — 태그는 기계가 붙인 것이고
+    /// 메모는 그때의 자기 말이라, 되살아나서 값이 있는 쪽은 후자다.
+    ///
+    /// `priorSavedAt`이 0이면(옛 확장 사본이 그 필드를 안 보내는 경우) 날짜 없이 태그로
+    /// 물러난다 — 지어낸 날짜를 보여주느니 예전 배너가 낫다.
+    static func recognitionLine(savedAt: Int64, note: String?, tags: [String], host: String) -> String {
+        var parts: [String] = []
+        if savedAt > 0 {
+            parts.append(t("notify.firstSaved") + " " + RelativeTime.label(Int(savedAt)))
+        }
+        if let note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append("\u{201C}" + note + "\u{201D}")
+        } else if !tags.isEmpty {
+            parts.append(tags.prefix(3).joined(separator: " · "))
+        }
+        return parts.isEmpty ? host : parts.joined(separator: " — ")
     }
 
     /// 실패는 소리와 함께 남긴다 — 사용자가 놓치면 그 링크는 저장되지 않은 채 사라진다.
