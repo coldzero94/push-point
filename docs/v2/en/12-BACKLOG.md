@@ -177,6 +177,71 @@ This group proceeds **in B1 → B2 order and no other.** Undoing B1 is one reind
 
 **What this case points at instead**: the structure where a broad tag wins on frequency in the body is exactly what IDF targets (「영화」 and 「드라마」 are common words). The legitimate follow-up to this regression is not group B but **turning IDF on and measuring it once corpus_df is real**. Until then, **leaving it in a known state** is right — breaking the freeze rule to win back 1.6pp is far more expensive.
 
+### Bundle F — Become a reading app (researched 2026-08-10)
+
+**This is not a feature request; it is a direction sitting on top of a defect.** One root cause:
+`go-trafilatura` serializes the extracted subtree with `etree.IterText(resultBody, " ")` and
+`trim()`s the surviving whitespace. So `res.ContentText` is **flat by construction**, and
+`textutil.Clean(res.ContentText, maxBodyText, true)` at `default_parser.go:142` is called with
+`allowNewline=true` while **having no newlines left to preserve**. That contract has been asserted
+in four places since `textutil.go:45` and is false on the dominant path.
+
+Measured on one article (martinfowler.com/articles/microservices.html):
+
+| capture path | newlines |
+|---|---|
+| server `scraper.extractBodyText` | **0** |
+| extension `extract.js` (byte-identical to the iOS copy) | **29** — it rebuilds boundaries on purpose |
+
+**The shipped consequence is on screen.** That article's summary begins
+`Microservices a definition of this new architectural term The term "Microservice
+Architecture" has sprung up…` — the page heading glued onto the first sentence, which
+`maxSentRunes = 400` in `summarizer/sentence.go` cannot catch.
+
+**And the structure is already in hand.** trafilatura returns both `res.ContentText` (flat) and
+`res.ContentNode` (a tree). On that article the node is 43,463 chars of HTML with `p=119 · h2=6 ·
+li=29`. We discard it one line earlier. **This is not an extractor-swap problem** — serious
+extractors score F1 0.92-0.93 on article bodies. What is missing is not quality but **shape**.
+
+**Stages.** Each carries a gate and a kill criterion; detail lives in the research write-up.
+
+| | what becomes true | size | kill |
+|---|---|---|---|
+| **S0** | Close M6 (four weeks, the write-up). Start two zero-code observations | M (calendar) | none — not a bet |
+| **S1** | `just eval-reader` — a 40-page HTML corpus and a new harness | M | if the server path already passes on 80%, the premise is wrong; stop here |
+| **S2** | DOM tests for `extract.js`, fix the table-cell defect | M | none — a defect fix |
+| **S3** | The server emits blocks (walk `res.ContentNode`). Zero contract, schema, UI, docs | L | miss the wall threshold, or regress `wild` top-3 by more than 0.01 → revert |
+| **S4** | Store blocks (0013), backfill, **publish coverage** | L | stop if under 60% of links are renderable |
+| **S5** | Spend the structure on the **tagger before any screen** (hrefs, code language, alt) | M | delete unless `wild` top-3 gains ≥ +0.02 |
+| **S6** | **Narrow** the ban in `10 §1.3` rather than lifting it | S | the author says no |
+| **S7** | A body section, both clients, one change. `GET /links/{id}/content` | L | if the offline read fails on the first honest try, do not ship |
+| **S8** | Four weeks, then execute **the branch written first** | S (+4 weeks) | the pre-committed threshold |
+
+**Why S5 comes before any screen.** Hrefs, code-fence language and image alt are evidence that was
+**discarded, not mis-ranked** — a different claim from the reranking ceiling of exactly +0.000,
+which measured cases where the right answer was a candidate but sat too low. If this stage passes,
+the corpus work paid for itself with no reader at all; if it fails, the reading direction loses its
+strongest argument.
+
+**S5 is not the `tag_feedback` learning idea (4.4).** That was cut because the ledger records *what*
+was corrected and never *why*. This guesses at no one's intent — it simply stops throwing away
+signal that was already inside the document.
+
+**What could make the whole direction wrong.** S3 and S5 produce good numbers and **nobody opens the
+reader**, because what was broken was never "the body is unreadable" but "there was no reason to come
+back". This repo's measurement culture is well armed against a bad extractor and unarmed against a
+good one serving a feature nobody opens. So **the two cheapest experiments sit in S0 and cost no
+code**: the `body_source` histogram over the real archive (one SQL statement — it says immediately
+whether the extraction bet is large or marginal), and a hand tally of every time you open the
+original and bounce without reading (`opened_at` records the launch and nothing after it, so this
+cannot be derived later). If that tally is near zero after four weeks, what is wanted is not a reader
+but **a better sort axis** (`sqlite.go:441` hardcodes `ORDER BY l.created_at DESC` and the contract
+has no `order` parameter), and this entry closes.
+
+**The order respects M6.** S1 and S2 are pure additions (a corpus, a harness, a test runner) and can
+run inside the four-week window. **S3 onward waits for the streak to bank** — calling it a harness
+would be exactly the "new framing, not new evidence" move `08 §8` and `12 §2` exist to prevent.
+
 ## 4. Reviewed and not included
 
 **The purpose of this section is to stop re-argument.** If an item below is proposed again, it does not get reviewed again without new evidence. Most of them carry a "piece worth keeping", and **that is not a candidate** — it has a condition attached and does not get built before the condition. Promotion to section three requires an observation that the condition has actually been met.
@@ -286,5 +351,7 @@ Observations that would invert the order:
 - If searches per week come out in single digits → **all of group B moves back**, and C1 is the only candidate left.
 - If using the tag filter really does keep running into "have I already seen this?" → **C1 to number one.** This observation admits it depends on memory alone, because there is no instrument for it right now.
 - If `removed` in `tag_feedback` passes 20 rows → 4.4's `feedback-golden` goes above anything on this list. Because that is not backlog, it is **an input to M5**.
+
+**Bundle F (added 2026-08-10) sits outside this order.** Its S0 *is* M6, S1 and S2 are pure additions that can run inside the four-week window, and S3 onward waits for the streak to bank. Items 1-6 above get re-read if F survives its S8.
 
 Finally, **nothing in this document has been decided on yet.** Decisions are written in 08, and what is not written in 08 has not been done.
