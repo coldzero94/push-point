@@ -1,0 +1,180 @@
+{
+  "fetched": 29,
+  "skipped": 1,
+  "pages": [
+    {
+      "file": "001-blog_naver_com.html.gz",
+      "url": "https://blog.naver.com/designprep/224328303583",
+      "host": "blog.naver.com",
+      "bytes": 2873
+    },
+    {
+      "file": "003-podbbang_com.html.gz",
+      "url": "https://www.podbbang.com/",
+      "host": "podbbang.com",
+      "bytes": 120987
+    },
+    {
+      "file": "004-techblog_woowahan_com.html.gz",
+      "url": "https://techblog.woowahan.com/23625/",
+      "host": "techblog.woowahan.com",
+      "bytes": 87726
+    },
+    {
+      "file": "005-techblog_woowahan_com.html.gz",
+      "url": "https://techblog.woowahan.com/2507/",
+      "host": "techblog.woowahan.com",
+      "bytes": 79289
+    },
+    {
+      "file": "006-blog_kubesimplify_com.html.gz",
+      "url": "https://blog.kubesimplify.com/perform-crud-operations-on-kubernetes-using-golang",
+      "host": "blog.kubesimplify.com",
+      "bytes": 395820
+    },
+    {
+      "file": "007-developers_openai_com.html.gz",
+      "url": "https://developers.openai.com/api/docs/guides/function-calling",
+      "host": "developers.openai.com",
+      "bytes": 1169672
+    },
+    {
+      "file": "008-anthropic_com.html.gz",
+      "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+      "host": "anthropic.com",
+      "bytes": 169489
+    },
+    {
+      "file": "009-anthropic_com.html.gz",
+      "url": "https://www.anthropic.com/research/building-effective-agents",
+      "host": "anthropic.com",
+      "bytes": 178815
+    },
+    {
+      "file": "010-en_wikipedia_org.html.gz",
+      "url": "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)",
+      "host": "en.wikipedia.org",
+      "bytes": 1077734
+    },
+    {
+      "file": "011-tomspic_tistory_com.html.gz",
+      "url": "https://tomspic.tistory.com/624",
+      "host": "tomspic.tistory.com",
+      "bytes": 62838
+    },
+    {
+      "file": "012-toss_im.html.gz",
+      "url": "https://toss.im/tossfeed/series/high-interest",
+      "host": "toss.im",
+      "bytes": 409801
+    },
+    {
+      "file": "013-toss_im.html.gz",
+      "url": "https://toss.im/tossfeed/article/saving-investment-ratio",
+      "host": "toss.im",
+      "bytes": 205855
+    },
+    {
+      "file": "014-overreacted_io.html.gz",
+      "url": "https://overreacted.io/a-complete-guide-to-useeffect/",
+      "host": "overreacted.io",
+      "bytes": 752713
+    },
+    {
+      "file": "015-go_dev.html.gz",
+      "url": "https://go.dev/blog/when-generics",
+      "host": "go.dev",
+      "bytes": 45848
+    },
+    {
+      "file": "016-go_dev.html.gz",
+      "url": "https://go.dev/doc/tutorial/generics",
+      "host": "go.dev",
+      "bytes": 45489
+    },
+    {
+      "file": "017-tech_kakao_com.html.gz",
+      "url": "https://tech.kakao.com/posts/651",
+      "host": "tech.kakao.com",
+      "bytes": 83265
+    },
+    {
+      "file": "018-wanted_co_kr.html.gz",
+      "url": "https://www.wanted.co.kr/wd/236400",
+      "host": "wanted.co.kr",
+      "bytes": 149811
+    },
+    {
+      "file": "019-lawtimes_co_kr.html.gz",
+      "url": "https://www.lawtimes.co.kr/",
+      "host": "lawtimes.co.kr",
+      "bytes": 137729
+    },
+    {
+      "file": "020-goal_com.html.gz",
+      "url": "https://www.goal.com/kr",
+      "host": "goal.com",
+      "bytes": 615305
+    },
+    {
+      "file": "021-kofearticle_substack_com.html.gz",
+      "url": "https://kofearticle.substack.com/p/korean-fe-article-go",
+      "host": "kofearticle.substack.com",
+      "bytes": 152927
+    },
+    {
+      "file": "022-melon_com.html.gz",
+      "url": "https://www.melon.com/song/detail.htm?songId=36271131",
+      "host": "melon.com",
+      "bytes": 66933
+    },
+    {
+      "file": "023-lexfridman_com.html.gz",
+      "url": "https://lexfridman.com/podcast/",
+      "host": "lexfridman.com",
+      "bytes": 773310
+    },
+    {
+      "file": "024-tablecheck_com.html.gz",
+      "url": "https://www.tablecheck.com/en/landing/brunch-osaka",
+      "host": "tablecheck.com",
+      "bytes": 165627
+    },
+    {
+      "file": "025-podcasts_apple_com.html.gz",
+      "url": "https://podcasts.apple.com/us/podcast/708-how-we-made-syntax-fm-faster/id1253186678?i=1000639648905",
+      "host": "podcasts.apple.com",
+      "bytes": 148355
+    },
+    {
+      "file": "026-datarian_io.html.gz",
+      "url": "https://datarian.io/blog/proptech",
+      "host": "datarian.io",
+      "bytes": 98901
+    },
+    {
+      "file": "027-docs_python_org.html.gz",
+      "url": "https://docs.python.org/3/tutorial/",
+      "host": "docs.python.org",
+      "bytes": 37108
+    },
+    {
+      "file": "028-blog_naver_com.html.gz",
+      "url": "https://blog.naver.com/hayu_moon/224317646490",
+      "host": "blog.naver.com",
+      "bytes": 2849
+    },
+    {
+      "file": "029-arxiv_org.html.gz",
+      "url": "https://arxiv.org/abs/2408.09627",
+      "host": "arxiv.org",
+      "bytes": 42372
+    },
+    {
+      "file": "030-arxiv_org.html.gz",
+      "url": "https://arxiv.org/abs/2410.12412",
+      "host": "arxiv.org",
+      "bytes": 39582
+    }
+  ]
+}

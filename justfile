@@ -158,6 +158,14 @@ bench-read:
 bench-pipeline:
     @if [ -f scripts/bench_pipeline.sh ]; then scripts/bench_pipeline.sh; else echo "scripts/bench_pipeline.sh가 없습니다."; fi
 
+# 추출의 **모양**을 잰다 — 벽 점수(경계 없이 이어지는 최장 구간)
+#
+# 기존 골든에는 원본 HTML이 없어서 `just eval`·`eval-search`는 이미 추출된 body_text를
+# 읽는다 — 추출을 바꿔도 그 숫자들은 안 움직인다. 이 하네스가 그 사각을 본다.
+# 서버 경로와 클라이언트(extract.js) 경로를 **같은 HTML**로 잰다.
+eval-reader *args:
+    @cd backend && go run ./cmd/pushpoint reader-eval {{args}}
+
 # 크래시 복구 검증 — 빌드 → fixture 서버 → 저장 → kill -9 → 재기동 → 전량 done 단언 (M2+)
 test-crash:
     @if [ -f scripts/test_crash.sh ]; then scripts/test_crash.sh; else echo "scripts/test_crash.sh가 아직 없습니다. M2에서 활성화됩니다."; fi
