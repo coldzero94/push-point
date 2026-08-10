@@ -49,10 +49,12 @@ final class ShareViewController: UIViewController {
                 // 본문 없이 URL만 온 저장에는 재시도 잡이 없어 이 실패는 **영구적**이다.
                 Self.log.error("태깅 실패 id=\(result.id): \(tagError)")
                 await SaveNotifier.notifySaved(title: title, host: host, tags: [t("notify.tagFailed")],
-                                               duplicate: result.duplicate)
+                                               duplicate: result.duplicate,
+                                               priorSavedAt: result.createdAt, priorNote: result.priorNote)
             } else {
                 await SaveNotifier.notifySaved(title: title, host: host,
                                                tags: result.tagNames, duplicate: result.duplicate,
+                                               priorSavedAt: result.createdAt, priorNote: result.priorNote,
                                                linkID: result.id)
             }
             // 위젯의 스냅샷을 올린다. **중복 저장은 올리지 않는다** — 이미 있던 링크를
@@ -122,6 +124,10 @@ final class ShareViewController: UIViewController {
 private struct SaveResult: Decodable {
     let id: Int64
     let duplicate: Bool
+    /// 중복이면 **원본을 저장한 시각**이다(새로 저장한 시각이 아니다).
+    let createdAt: Int64
+    /// 중복일 때만 채워진다 — 그때 이 링크를 저장하며 쓴 메모.
+    let priorNote: String?
     let tags: Int
     let tagNames: [String]
     let summaryLen: Int
@@ -132,6 +138,8 @@ private struct SaveResult: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case id, duplicate, tags
+        case createdAt = "created_at"
+        case priorNote = "prior_note"
         case tagNames = "tag_names"
         case summaryLen = "summary_len"
         case tagError = "tag_error"

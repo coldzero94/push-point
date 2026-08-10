@@ -75,6 +75,16 @@ type result struct {
 	// 보여주기 위해 필요하다 — 개수만으로는 무엇이 붙었는지 알 수 없다.
 	TagNames   []string `json:"tag_names"`
 	SummaryLen int      `json:"summary_len"`
+	// PriorNote는 **중복일 때만** 채워진다 — 그때 이 링크를 저장하며 쓴 메모다.
+	//
+	// 왜 이것만 따로 싣는가: 중복 저장은 이 제품이 사람에게 말을 걸 수 있는 몇 안 되는
+	// 순간인데, 지금은 "이미 있습니다"로 끝난다. 그건 사람이 이미 아는 사실이다.
+	// **모르는 것은 그때 자기가 뭐라고 썼는지다** — `created_at`은 이미 싣고 있으므로
+	// 메모 한 줄이면 배너가 확인을 그만두고 알아봄이 된다.
+	//
+	// 중복이 아닐 때는 조회조차 하지 않는다. 저장 경로는 2초 예산 안에 있고, 새 링크에
+	// 대해서는 돌려줄 과거가 없다.
+	PriorNote string `json:"prior_note,omitempty"`
 	// TagError는 **태깅 자체가 실패**했을 때만 채워진다 — 이 경우 Tags는 0이고, 링크는
 	// 태그 없이 저장된 것이다.
 	TagError string `json:"tag_error,omitempty"`
@@ -153,6 +163,13 @@ func Save(payloadJSON string) (string, error) {
 	}
 
 	res := result{ID: id, CreatedAt: createdAt, Duplicate: dup}
+	if dup {
+		// 조회 실패는 저장을 실패시키지 않는다 — 메모는 배너를 더 낫게 만드는 것이지
+		// 저장의 성립 조건이 아니다.
+		if d, err := st.GetLink(ctx, id); err == nil && d != nil {
+			res.PriorNote = d.Note
+		}
+	}
 	if tr, tagErr := tagjob.Run(ctx, st, id); tagErr != nil {
 		res.TagError = tagErr.Error()
 	} else {
