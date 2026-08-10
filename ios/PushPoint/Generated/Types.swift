@@ -121,6 +121,24 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/search`.
     /// - Remark: Generated from `#/paths//api/v1/search/get(search)`.
     func search(_ input: Operations.search.Input) async throws -> Operations.search.Output
+    /// 아카이브 전체 내려받기
+    ///
+    /// 아카이브를 SQLite 파일 하나로 내보낸다(`VACUUM INTO`). **발췌가 아니라 전부다** — FTS 색인·corpus_df·tag_feedback·잡 이력까지 들어가야 복원한 것이 같은 앱이 된다.
+    /// 자립형 iOS에는 이것 말고 백업 경로가 없다. 데스크톱은 `cp`나 `VACUUM INTO`로 파일을 직접 복사할 수 있지만(07-DEPLOYMENT §7) 폰에는 그 자리가 없어서 앱이 대신한다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/backup`.
+    /// - Remark: Generated from `#/paths//api/v1/backup/get(downloadBackup)`.
+    func downloadBackup(_ input: Operations.downloadBackup.Input) async throws -> Operations.downloadBackup.Output
+    /// 아카이브로 되돌리기
+    ///
+    /// 받은 파일이 우리 아카이브인지 **여기서 확인하고** 대기시킨다. 실제 교체는 다음 기동에 일어난다 — 돌고 있는 서버가 열어 둔 파일을 그 자리에서 갈면 WAL과 본체가 서로 다른 DB를 가리키게 되고, 그 상태는 즉시 안 터지고 나중에 조용히 틀린 답을 준다.
+    /// 그래서 200은 "되돌렸다"가 아니라 **"다음에 열 때 되돌린다"**는 뜻이고, 응답의 `restart_required`가 그것을 말한다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/restore`.
+    /// - Remark: Generated from `#/paths//api/v1/restore/post(restoreBackup)`.
+    func restoreBackup(_ input: Operations.restoreBackup.Input) async throws -> Operations.restoreBackup.Output
     /// 스프레드시트 연결 상태
     ///
     /// Google 스프레드시트 연결 여부와 마지막 동기화 결과.
@@ -380,6 +398,34 @@ extension APIProtocol {
         try await search(Operations.search.Input(
             query: query,
             headers: headers
+        ))
+    }
+    /// 아카이브 전체 내려받기
+    ///
+    /// 아카이브를 SQLite 파일 하나로 내보낸다(`VACUUM INTO`). **발췌가 아니라 전부다** — FTS 색인·corpus_df·tag_feedback·잡 이력까지 들어가야 복원한 것이 같은 앱이 된다.
+    /// 자립형 iOS에는 이것 말고 백업 경로가 없다. 데스크톱은 `cp`나 `VACUUM INTO`로 파일을 직접 복사할 수 있지만(07-DEPLOYMENT §7) 폰에는 그 자리가 없어서 앱이 대신한다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/backup`.
+    /// - Remark: Generated from `#/paths//api/v1/backup/get(downloadBackup)`.
+    internal func downloadBackup(headers: Operations.downloadBackup.Input.Headers = .init()) async throws -> Operations.downloadBackup.Output {
+        try await downloadBackup(Operations.downloadBackup.Input(headers: headers))
+    }
+    /// 아카이브로 되돌리기
+    ///
+    /// 받은 파일이 우리 아카이브인지 **여기서 확인하고** 대기시킨다. 실제 교체는 다음 기동에 일어난다 — 돌고 있는 서버가 열어 둔 파일을 그 자리에서 갈면 WAL과 본체가 서로 다른 DB를 가리키게 되고, 그 상태는 즉시 안 터지고 나중에 조용히 틀린 답을 준다.
+    /// 그래서 200은 "되돌렸다"가 아니라 **"다음에 열 때 되돌린다"**는 뜻이고, 응답의 `restart_required`가 그것을 말한다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/restore`.
+    /// - Remark: Generated from `#/paths//api/v1/restore/post(restoreBackup)`.
+    internal func restoreBackup(
+        headers: Operations.restoreBackup.Input.Headers = .init(),
+        body: Operations.restoreBackup.Input.Body
+    ) async throws -> Operations.restoreBackup.Output {
+        try await restoreBackup(Operations.restoreBackup.Input(
+            headers: headers,
+            body: body
         ))
     }
     /// 스프레드시트 연결 상태
@@ -1285,6 +1331,23 @@ internal enum Components {
                 case failed_links
                 case by_tag
                 case by_day
+            }
+        }
+        /// - Remark: Generated from `#/components/schemas/RestoreResult`.
+        internal struct RestoreResult: Codable, Hashable, Sendable {
+            /// 항상 true — 교체는 다음 기동에 일어난다. 화면이 그 사실을 말해야 한다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/RestoreResult/restart_required`.
+            internal var restart_required: Swift.Bool
+            /// Creates a new `RestoreResult`.
+            ///
+            /// - Parameters:
+            ///   - restart_required: 항상 true — 교체는 다음 기동에 일어난다. 화면이 그 사실을 말해야 한다.
+            internal init(restart_required: Swift.Bool) {
+                self.restart_required = restart_required
+            }
+            internal enum CodingKeys: String, CodingKey {
+                case restart_required
             }
         }
         /// 연결 화면이 보여 줄 것 — 붙여넣을 스크립트와 그 안에 박힌 토큰.
@@ -4520,6 +4583,394 @@ internal enum Operations {
             /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
             ///
             /// - Remark: Generated from `#/paths//api/v1/search/get(search)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 아카이브 전체 내려받기
+    ///
+    /// 아카이브를 SQLite 파일 하나로 내보낸다(`VACUUM INTO`). **발췌가 아니라 전부다** — FTS 색인·corpus_df·tag_feedback·잡 이력까지 들어가야 복원한 것이 같은 앱이 된다.
+    /// 자립형 iOS에는 이것 말고 백업 경로가 없다. 데스크톱은 `cp`나 `VACUUM INTO`로 파일을 직접 복사할 수 있지만(07-DEPLOYMENT §7) 폰에는 그 자리가 없어서 앱이 대신한다.
+    ///
+    ///
+    /// - Remark: HTTP `GET /api/v1/backup`.
+    /// - Remark: Generated from `#/paths//api/v1/backup/get(downloadBackup)`.
+    internal enum downloadBackup {
+        internal static let id: Swift.String = "downloadBackup"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/backup/GET/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.downloadBackup.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.downloadBackup.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.downloadBackup.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            internal init(headers: Operations.downloadBackup.Input.Headers = .init()) {
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/backup/GET/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/backup/GET/responses/200/content/application\/octet-stream`.
+                    case binary(OpenAPIRuntime.HTTPBody)
+                    /// The associated value of the enum case if `self` is `.binary`.
+                    ///
+                    /// - Throws: An error if `self` is not `.binary`.
+                    /// - SeeAlso: `.binary`.
+                    internal var binary: OpenAPIRuntime.HTTPBody {
+                        get throws {
+                            switch self {
+                            case let .binary(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.downloadBackup.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.downloadBackup.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// SQLite 아카이브
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/backup/get(downloadBackup)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.downloadBackup.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.downloadBackup.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/backup/get(downloadBackup)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/backup/get(downloadBackup)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case binary
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/octet-stream":
+                    self = .binary
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .binary:
+                    return "application/octet-stream"
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .binary,
+                    .json
+                ]
+            }
+        }
+    }
+    /// 아카이브로 되돌리기
+    ///
+    /// 받은 파일이 우리 아카이브인지 **여기서 확인하고** 대기시킨다. 실제 교체는 다음 기동에 일어난다 — 돌고 있는 서버가 열어 둔 파일을 그 자리에서 갈면 WAL과 본체가 서로 다른 DB를 가리키게 되고, 그 상태는 즉시 안 터지고 나중에 조용히 틀린 답을 준다.
+    /// 그래서 200은 "되돌렸다"가 아니라 **"다음에 열 때 되돌린다"**는 뜻이고, 응답의 `restart_required`가 그것을 말한다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/restore`.
+    /// - Remark: Generated from `#/paths//api/v1/restore/post(restoreBackup)`.
+    internal enum restoreBackup {
+        internal static let id: Swift.String = "restoreBackup"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/restore/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.restoreBackup.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.restoreBackup.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.restoreBackup.Input.Headers
+            /// - Remark: Generated from `#/paths/api/v1/restore/POST/requestBody`.
+            internal enum Body: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/restore/POST/requestBody/content/application\/octet-stream`.
+                case binary(OpenAPIRuntime.HTTPBody)
+            }
+            internal var body: Operations.restoreBackup.Input.Body
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - headers:
+            ///   - body:
+            internal init(
+                headers: Operations.restoreBackup.Input.Headers = .init(),
+                body: Operations.restoreBackup.Input.Body
+            ) {
+                self.headers = headers
+                self.body = body
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct Ok: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/restore/POST/responses/200/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/restore/POST/responses/200/content/application\/json`.
+                    case json(Components.Schemas.RestoreResult)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas.RestoreResult {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.restoreBackup.Output.Ok.Body
+                /// Creates a new `Ok`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.restoreBackup.Output.Ok.Body) {
+                    self.body = body
+                }
+            }
+            /// 복원 대기됨
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/restore/post(restoreBackup)/responses/200`.
+            ///
+            /// HTTP response code: `200 ok`.
+            case ok(Operations.restoreBackup.Output.Ok)
+            /// The associated value of the enum case if `self` is `.ok`.
+            ///
+            /// - Throws: An error if `self` is not `.ok`.
+            /// - SeeAlso: `.ok`.
+            internal var ok: Operations.restoreBackup.Output.Ok {
+                get throws {
+                    switch self {
+                    case let .ok(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "ok",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct BadRequest: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/restore/POST/responses/400/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/restore/POST/responses/400/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.restoreBackup.Output.BadRequest.Body
+                /// Creates a new `BadRequest`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.restoreBackup.Output.BadRequest.Body) {
+                    self.body = body
+                }
+            }
+            /// Push-Point 아카이브가 아니거나 손상됐다
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/restore/post(restoreBackup)/responses/400`.
+            ///
+            /// HTTP response code: `400 badRequest`.
+            case badRequest(Operations.restoreBackup.Output.BadRequest)
+            /// The associated value of the enum case if `self` is `.badRequest`.
+            ///
+            /// - Throws: An error if `self` is not `.badRequest`.
+            /// - SeeAlso: `.badRequest`.
+            internal var badRequest: Operations.restoreBackup.Output.BadRequest {
+                get throws {
+                    switch self {
+                    case let .badRequest(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "badRequest",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/restore/post(restoreBackup)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/restore/post(restoreBackup)/responses/500`.
             ///
             /// HTTP response code: `500 internalServerError`.
             case internalServerError(Components.Responses.InternalError)

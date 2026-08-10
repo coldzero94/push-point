@@ -320,6 +320,13 @@ type Store interface {
 	// DeleteLink는 소프트 삭제 — deleted_at 기록 + links_fts에서 제거.
 	DeleteLink(ctx context.Context, id int64) error
 
+	// Backup은 아카이브 전체를 path에 파일 하나로 쓴다(VACUUM INTO).
+	//
+	// **인터페이스에 있는 이유**: API 계층은 Store만 알고 *DB는 모른다. 백업만을 위해
+	// 핸들을 따로 넘기면 그 경로가 계약 밖으로 새고, 나중에 두 번째 백업 구현이 생겼을 때
+	// 갈아끼울 자리가 없어진다.
+	Backup(ctx context.Context, path string) error
+
 	// RetryLink는 status='failed'인 링크를 pending으로 되돌리고 scrape 잡을
 	// 재-enqueue한다 (한 트랜잭션, 커밋 후 Wake). failed가 아니면 ErrNotFailed.
 	RetryLink(ctx context.Context, id int64) error

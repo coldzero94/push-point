@@ -41,6 +41,11 @@ func Open(dataDir string) (*DB, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("store: 데이터 디렉터리 생성 실패: %w", err)
 	}
+	// 복원 대기 파일이 있으면 **여기서** 갈아끼운다 — 아무도 DB를 열고 있지 않은 유일한
+	// 순간이다. 자세한 이유는 backup.go의 restoreName 주석.
+	if err := applyStagedRestore(dataDir); err != nil {
+		return nil, err
+	}
 	path := filepath.Join(dataDir, "pushpoint.db")
 	dsn := dsnFor(path)
 

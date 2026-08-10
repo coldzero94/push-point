@@ -135,7 +135,12 @@ struct ContentView: View {
                         .accessibilityIdentifier("settings.open")
                     }
                 }
-            .sheet(isPresented: $settingsOpen) { SettingsSheet().pushPointTheme() }
+            .sheet(isPresented: $settingsOpen) {
+                // **환경 객체를 명시로 넘긴다.** 시트는 별도 표현 계층이라 환경이 늘
+                // 따라오지는 않는다 — 안 따라오면 EnvironmentObject 접근이 런타임에 트랩이고,
+                // 그건 컴파일이 잡아 주지 않는 종류의 실패다.
+                SettingsSheet().environmentObject(backend).pushPointTheme()
+            }
             .sheet(isPresented: $saving) {
                 SaveSheet(onSave: saveLink)
                 .pushPointTheme()

@@ -61,6 +61,10 @@ final class FeedModelTests: XCTestCase {
         func getSheetsScript(_: Operations.getSheetsScript.Input) async throws -> Operations.getSheetsScript.Output { fatalError() }
         func connectSheets(_: Operations.connectSheets.Input) async throws -> Operations.connectSheets.Output { fatalError() }
         func syncSheets(_: Operations.syncSheets.Input) async throws -> Operations.syncSheets.Output { fatalError() }
+        // 백업은 이 스텁이 볼 일이 아니다 — 부르면 터지는 편이 낫다. 안 부른다는 사실도
+        // 검사 대상이라, 조용한 기본 응답을 주면 잘못된 호출이 통과한다.
+        func downloadBackup(_: Operations.downloadBackup.Input) async throws -> Operations.downloadBackup.Output { fatalError() }
+        func restoreBackup(_: Operations.restoreBackup.Input) async throws -> Operations.restoreBackup.Output { fatalError() }
     }
 
     private nonisolated static func link(_ id: Int, status: Components.Schemas.LinkStatus = .done)

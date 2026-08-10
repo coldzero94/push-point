@@ -472,6 +472,67 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/backup:
+    get:
+      operationId: downloadBackup
+      tags: [backup]
+      summary: 아카이브 전체 내려받기
+      description: >
+        아카이브를 SQLite 파일 하나로 내보낸다(`VACUUM INTO`). **발췌가 아니라 전부다** —
+        FTS 색인·corpus_df·tag_feedback·잡 이력까지 들어가야 복원한 것이 같은 앱이 된다.
+
+        자립형 iOS에는 이것 말고 백업 경로가 없다. 데스크톱은 `cp`나 `VACUUM INTO`로 파일을
+        직접 복사할 수 있지만(07-DEPLOYMENT §7) 폰에는 그 자리가 없어서 앱이 대신한다.
+      responses:
+        "200":
+          description: SQLite 아카이브
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/restore:
+    post:
+      operationId: restoreBackup
+      tags: [backup]
+      summary: 아카이브로 되돌리기
+      description: >
+        받은 파일이 우리 아카이브인지 **여기서 확인하고** 대기시킨다. 실제 교체는 다음 기동에
+        일어난다 — 돌고 있는 서버가 열어 둔 파일을 그 자리에서 갈면 WAL과 본체가 서로 다른
+        DB를 가리키게 되고, 그 상태는 즉시 안 터지고 나중에 조용히 틀린 답을 준다.
+
+        그래서 200은 "되돌렸다"가 아니라 **"다음에 열 때 되돌린다"**는 뜻이고, 응답의
+        `restart_required`가 그것을 말한다.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: 복원 대기됨
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestoreResult"
+        "400":
+          description: Push-Point 아카이브가 아니거나 손상됐다
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/sheets:
     get:
       operationId: getSheetsStatus
@@ -1101,6 +1162,14 @@ components:
                 description: "YYYY-MM-DD (서버 로컬타임)"
               count:
                 type: integer
+
+    RestoreResult:
+      type: object
+      required: [restart_required]
+      properties:
+        restart_required:
+          type: boolean
+          description: 항상 true — 교체는 다음 기동에 일어난다. 화면이 그 사실을 말해야 한다.
 
     SheetsScript:
       type: object
