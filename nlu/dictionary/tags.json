@@ -88,7 +88,10 @@
       "백엔드",
       "서버",
       "server",
-      "api"
+      "api",
+      "microservice",
+      "microservices",
+      "마이크로서비스"
     ]
   },
   {
@@ -111,7 +114,10 @@
       "docker",
       "도커",
       "인프라",
-      "infra"
+      "infra",
+      "deploy",
+      "deployment",
+      "배포"
     ]
   },
   {
