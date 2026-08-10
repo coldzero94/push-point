@@ -35,8 +35,13 @@ const DROP_SELECTOR = [
  * 동작한다(명세: 렌더되지 않는 요소는 textContent를 반환). 즉 지금까지 블록 경계가
  * 살아남은 것은 **원본 HTML에 줄바꿈이 있던 사이트에서 우연히** 그랬을 뿐이고,
  * 압축된 HTML(nbcnews.com)에서는 5KB 본문이 두 줄이 되어 요약기가 문장을 나눌 수 없었다.
+ *
+ * `tr`만으로는 모자란다 — 행 경계만 생기고 **셀은 이어붙는다**(`이름크기`). 그 모양은
+ * 요약기의 접착 토큰 휴리스틱에 걸려서 캡처된 표가 통째로 요약에서 버려지고, 화면에는
+ * "이 링크는 요약이 없네"로만 보인다. 그래서 `td, th`도 경계다.
  */
-const BLOCK_SELECTOR = 'p, div, section, article, h1, h2, h3, h4, h5, h6, li, blockquote, pre, tr, figcaption';
+const BLOCK_SELECTOR =
+  'p, div, section, article, h1, h2, h3, h4, h5, h6, li, blockquote, pre, tr, td, th, figcaption';
 
 /** 본문 컨테이너 후보를 우선순위대로 — 없으면 body 전체. */
 const ROOT_SELECTORS = ['article', '[role="main"]', 'main', '#content', '.post-content'];
