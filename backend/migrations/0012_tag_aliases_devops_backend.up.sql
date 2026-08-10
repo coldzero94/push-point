@@ -1,0 +1,26 @@
+-- 별칭 보강: devops · backend (2026-08-10)
+--
+-- 0011과 같은 부류의 공백이고, 이번에는 **앱을 실제로 굴리다가** 나왔다. 저장 시트로
+-- martinfowler.com의 마이크로서비스 글을 저장하니 `data`·`database`·`design`이 붙었다.
+-- 본문(32,720자) 실측:
+--       service    136회
+--       architect   28회
+--       deploy      24회
+--       database    13회   ← 붙은 태그
+--
+-- `database`가 틀린 게 아니다 — 그 글에는 "Decentralized Data Management" 절이 실제로 있다.
+-- **글을 지배하는 개념에 걸릴 표면이 사전에 하나도 없어서** 곁가지가 상위로 올라온 것이다.
+-- 0011의 두 건과 같은 모양이고, `just eval`이 계속 말해 온 것과도 같다
+-- ("미스 8건: 정답 0점 8 · 순위 밀림 0 → 재랭킹 상한 +0.000" — 순위가 아니라 어휘다).
+--
+-- **일부러 넣지 않은 것들** — 0011의 판단 기준을 그대로 따른다(그 개념 밖에서 거의 안 쓰이는
+-- 낱말만 넣는다):
+--   `service`      → customer service·service worker처럼 전혀 다른 뜻으로 너무 흔하다
+--   `architecture` → 갈 자리가 없다. 이 사전의 `design`은 UI/UX(figma·ui·ux)이고,
+--                    프런트엔드 아키텍처도 같은 낱말을 쓴다. 한 태그로 못 보낸다
+--
+-- **측정**: dev 1.000 / test 0.905 / wild 0.821 로 **셋 다 불변**이다. 골든 189건에
+-- 마이크로서비스·배포 글이 없어서 발화할 자리가 없다 — 회귀가 없다는 뜻이고, 개선은
+-- 골든이 볼 수 없다. 그래서 판정은 동기가 된 그 문서에서 직접 했다(PR 참조).
+UPDATE tags SET aliases = '["데브옵스","ci/cd","docker","도커","인프라","infra","deploy","deployment","배포"]' WHERE name = 'devops';
+UPDATE tags SET aliases = '["백엔드","서버","server","api","microservice","microservices","마이크로서비스"]' WHERE name = 'backend';
