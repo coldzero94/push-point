@@ -21,6 +21,7 @@ struct SettingsSheet: View {
     @ObservedObject private var theme = Theme.Store.shared
     @AppStorage("pushpoint.density") private var density: ListDensity = .card
     @State private var notifyStatus: UNAuthorizationStatus = .notDetermined
+    @EnvironmentObject private var backend: Backend
 
     private var remedy: SaveNotifier.Remedy { SaveNotifier.remedy(for: notifyStatus) }
 
@@ -110,6 +111,8 @@ struct SettingsSheet: View {
                 } footer: {
                     Text(t("settings.notifyFooter"))
                 }
+
+                BackupSection(client: backend.client)
             }
             .task { notifyStatus = await SaveNotifier.status() }
             .navigationTitle(t("settings.title"))

@@ -214,6 +214,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 아카이브 전체 내려받기
+         * @description 아카이브를 SQLite 파일 하나로 내보낸다(`VACUUM INTO`). **발췌가 아니라 전부다** — FTS 색인·corpus_df·tag_feedback·잡 이력까지 들어가야 복원한 것이 같은 앱이 된다.
+         *     자립형 iOS에는 이것 말고 백업 경로가 없다. 데스크톱은 `cp`나 `VACUUM INTO`로 파일을 직접 복사할 수 있지만(07-DEPLOYMENT §7) 폰에는 그 자리가 없어서 앱이 대신한다.
+         */
+        get: operations["downloadBackup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 아카이브로 되돌리기
+         * @description 받은 파일이 우리 아카이브인지 **여기서 확인하고** 대기시킨다. 실제 교체는 다음 기동에 일어난다 — 돌고 있는 서버가 열어 둔 파일을 그 자리에서 갈면 WAL과 본체가 서로 다른 DB를 가리키게 되고, 그 상태는 즉시 안 터지고 나중에 조용히 틀린 답을 준다.
+         *     그래서 200은 "되돌렸다"가 아니라 **"다음에 열 때 되돌린다"**는 뜻이고, 응답의 `restart_required`가 그것을 말한다.
+         */
+        post: operations["restoreBackup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sheets": {
         parameters: {
             query?: never;
@@ -535,6 +577,10 @@ export interface components {
                 date: string;
                 count: number;
             }[];
+        };
+        RestoreResult: {
+            /** @description 항상 true — 교체는 다음 기동에 일어난다. 화면이 그 사실을 말해야 한다. */
+            restart_required: boolean;
         };
         /** @description 연결 화면이 보여 줄 것 — 붙여넣을 스크립트와 그 안에 박힌 토큰. */
         SheetsScript: {
@@ -1073,6 +1119,63 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    downloadBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SQLite 아카이브 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    restoreBackup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description 복원 대기됨 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreResult"];
+                };
+            };
+            /** @description Push-Point 아카이브가 아니거나 손상됐다 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalError"];
         };

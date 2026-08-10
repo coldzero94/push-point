@@ -37,6 +37,10 @@ type fakeStore struct {
 
 var _ store.Store = (*fakeStore)(nil)
 
+// Backup은 이 더블에서 할 일이 없다 — API 계층 테스트는 백업의 **배선**만 보고,
+// VACUUM INTO의 내용은 store 쪽 왕복 테스트(backup_test.go)가 본다.
+func (f *fakeStore) Backup(context.Context, string) error { return nil }
+
 func newFakeStore() *fakeStore {
 	f := &fakeStore{
 		links:     make(map[int64]*store.LinkDetail),
