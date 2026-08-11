@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -85,6 +86,11 @@ type result struct {
 	// 중복이 아닐 때는 조회조차 하지 않는다. 저장 경로는 2초 예산 안에 있고, 새 링크에
 	// 대해서는 돌려줄 과거가 없다.
 	PriorNote string `json:"prior_note,omitempty"`
+	// DomainCount는 **새 저장일 때만** 채워진다 — 이 도메인에서 몇 번째인지.
+	// 말할 만하지 않으면(3회 미만) 0이고, 그때 배너는 조용하다.
+	DomainCount int `json:"domain_count,omitempty"`
+	// Domain은 DomainCount가 0이 아닐 때의 그 도메인.
+	Domain string `json:"domain,omitempty"`
 	// TagError는 **태깅 자체가 실패**했을 때만 채워진다 — 이 경우 Tags는 0이고, 링크는
 	// 태그 없이 저장된 것이다.
 	TagError string `json:"tag_error,omitempty"`
@@ -163,11 +169,23 @@ func Save(payloadJSON string) (string, error) {
 	}
 
 	res := result{ID: id, CreatedAt: createdAt, Duplicate: dup}
+	// **알아봄은 저장을 실패시키지 않는다.** 조회가 어긋나도 링크는 저장된 것이고,
+	// 배너가 한 줄 덜 말할 뿐이다. 이 경로는 2초 예산 안에 있다.
+	rung := -1
 	if dup {
-		// 조회 실패는 저장을 실패시키지 않는다 — 메모는 배너를 더 낫게 만드는 것이지
-		// 저장의 성립 조건이 아니다.
 		if d, err := st.GetLink(ctx, id); err == nil && d != nil {
 			res.PriorNote = d.Note
+		}
+		rung = store.RungDuplicate
+	} else if domain, n, err := st.DomainEncounter(ctx, id); err == nil && n > 0 {
+		res.Domain, res.DomainCount = domain, n
+		rung = store.RungDomain
+	}
+	// **보여줬다는 사실을 남긴다.** 무시당한 것이 데이터에 없으면 다음 결정이 취향으로
+	// 정해진다 — 이 분야가 30년째 그랬다(마이그레이션 0013 주석).
+	if rung >= 0 {
+		if err := st.RecordRecognition(ctx, id, rung); err != nil {
+			log.Printf("ppshare: 알아봄 기록 실패 id=%d rung=%d: %v", id, rung, err)
 		}
 	}
 	if tr, tagErr := tagjob.Run(ctx, st, id); tagErr != nil {

@@ -41,6 +41,15 @@ var _ store.Store = (*fakeStore)(nil)
 // VACUUM INTO의 내용은 store 쪽 왕복 테스트(backup_test.go)가 본다.
 func (f *fakeStore) Backup(context.Context, string) error { return nil }
 
+// 알아봄은 이 더블에서 할 일이 없다 — API 계층 테스트가 보는 것은 탭 기록의 **배선**이고,
+// 규칙과 집계는 store 쪽 테스트(recognition_test.go)가 본다.
+func (f *fakeStore) DomainEncounter(context.Context, int64) (string, int, error) { return "", 0, nil }
+func (f *fakeStore) RecordRecognition(context.Context, int64, int) error         { return nil }
+func (f *fakeStore) MarkRecognitionTapped(context.Context, int64) error          { return nil }
+func (f *fakeStore) RecognitionStats(context.Context, int) ([]store.RecognitionStat, error) {
+	return nil, nil
+}
+
 func newFakeStore() *fakeStore {
 	f := &fakeStore{
 		links:     make(map[int64]*store.LinkDetail),

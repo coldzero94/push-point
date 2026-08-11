@@ -65,6 +65,11 @@ final class FeedModelTests: XCTestCase {
         // 검사 대상이라, 조용한 기본 응답을 주면 잘못된 호출이 통과한다.
         func downloadBackup(_: Operations.downloadBackup.Input) async throws -> Operations.downloadBackup.Output { fatalError() }
         func restoreBackup(_: Operations.restoreBackup.Input) async throws -> Operations.restoreBackup.Output { fatalError() }
+        // 알아봄 탭 기록. 부르는 것 자체가 검사 대상이 아니라, 안 부르는 것도 아니라서
+        // 조용히 204를 돌려준다 — 여기서 터지면 알림 탭 경로를 지나는 모든 테스트가 죽는다.
+        func markRecognitionTapped(_: Operations.markRecognitionTapped.Input) async throws -> Operations.markRecognitionTapped.Output {
+            .noContent(.init())
+        }
     }
 
     private nonisolated static func link(_ id: Int, status: Components.Schemas.LinkStatus = .done)
