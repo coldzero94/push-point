@@ -900,6 +900,12 @@ internal enum Components {
             ///
             /// - Remark: Generated from `#/components/schemas/LinkInput/note`.
             internal var note: Swift.String?
+            /// **임포트 전용** — 이 링크를 원래 저장한 시각(unix epoch 초). 생략하면 지금이다.
+            /// 북마크 파일에는 `ADD_DATE`가 들어 있는데 지금까지 버리고 있었다. 그래서 임포트한 아카이브는 전부 임포트한 날에 저장한 것이 되고, **시간축이 통째로 거짓이 된다** — "언제 저장했나"에 기대는 모든 것(되살림 7일 규칙, 알아봄의 날짜, 통계의 30일 창)이 같은 날짜 하나를 보게 된다.
+            /// 미래 시각과 2000년 이전은 거부한다(400). 잘못된 시각은 조용히 틀리는 종류의 데이터이고, 한 번 들어가면 어느 화면에서도 안 보인다.
+            ///
+            /// - Remark: Generated from `#/components/schemas/LinkInput/created_at`.
+            internal var created_at: Swift.Int64?
             /// 클라이언트가 캡처한 제목 (optional, 512바이트로 절단)
             ///
             /// - Remark: Generated from `#/components/schemas/LinkInput/title`.
@@ -921,6 +927,7 @@ internal enum Components {
             /// - Parameters:
             ///   - url:
             ///   - note: 개인 메모 (optional)
+            ///   - created_at: **임포트 전용** — 이 링크를 원래 저장한 시각(unix epoch 초). 생략하면 지금이다.
             ///   - title: 클라이언트가 캡처한 제목 (optional, 512바이트로 절단)
             ///   - description: 클라이언트가 캡처한 설명 (optional, 2048바이트로 절단)
             ///   - body_text: 클라이언트가 추출한 본문 평문 (optional, 32KB로 절단). 값이 있으면 서버는 이 링크의 본문 출처를 'client'로 표시하고, 이후 스크랩이 제목·설명·본문을 덮어쓰지 않는다. 태깅·요약이 이 본문을 입력으로 쓴다 — 그래서 스크랩이 실패해도 태그·요약이 나온다.
@@ -928,6 +935,7 @@ internal enum Components {
             internal init(
                 url: Swift.String,
                 note: Swift.String? = nil,
+                created_at: Swift.Int64? = nil,
                 title: Swift.String? = nil,
                 description: Swift.String? = nil,
                 body_text: Swift.String? = nil,
@@ -935,6 +943,7 @@ internal enum Components {
             ) {
                 self.url = url
                 self.note = note
+                self.created_at = created_at
                 self.title = title
                 self.description = description
                 self.body_text = body_text
@@ -943,6 +952,7 @@ internal enum Components {
             internal enum CodingKeys: String, CodingKey {
                 case url
                 case note
+                case created_at
                 case title
                 case description
                 case body_text

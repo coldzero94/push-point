@@ -158,8 +158,15 @@ func TestIsYouTubeWatchURL(t *testing.T) {
 }
 
 func TestDedupeURLs(t *testing.T) {
-	got := dedupeURLs([]string{"a", "b", "a", "c", "b"})
+	// **URL로 중복을 가른다.** 같은 URL이 서로 다른 ADD_DATE로 두 번 나오는 일이 있고
+	// (폴더를 옮기면 그렇게 된다), 그때 남는 것은 먼저 나온 쪽 — 즉 **더 이른 시각**이다.
+	got := dedupeURLs([]importLink{
+		{URL: "a", CreatedAt: 100}, {URL: "b"}, {URL: "a", CreatedAt: 999}, {URL: "c"}, {URL: "b"},
+	})
 	assertURLs(t, got, []string{"a", "b", "c"})
+	if got[0].CreatedAt != 100 {
+		t.Errorf("먼저 나온 시각이 남아야 한다: %d", got[0].CreatedAt)
+	}
 }
 
 // ---- 전송 테스트 (httptest 서버, 외부 네트워크 없음) ----
@@ -194,11 +201,11 @@ func TestSendLinks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	urls := []string{
-		"https://example.com/1",
-		"https://example.com/2",
-		"https://example.com/dup",
-		"https://example.com/boom",
+	urls := []importLink{
+		{URL: "https://example.com/1"},
+		{URL: "https://example.com/2"},
+		{URL: "https://example.com/dup"},
+		{URL: "https://example.com/boom"},
 	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	// interval=0 — 테스트는 rate limit 없이 즉시 전송.
@@ -220,7 +227,7 @@ func TestSendLinksRateLimit(t *testing.T) {
 	defer srv.Close()
 
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	urls := []string{"https://a.com/1", "https://a.com/2", "https://a.com/3"}
+	urls := []importLink{{URL: "https://a.com/1"}, {URL: "https://a.com/2"}, {URL: "https://a.com/3"}}
 	interval := 20 * time.Millisecond
 
 	start := time.Now()
@@ -238,8 +245,13 @@ func TestSendLinksRateLimit(t *testing.T) {
 
 // ---- 헬퍼 ----
 
-func assertURLs(t *testing.T, got, want []string) {
+// assertURLs는 **URL만** 비교한다 — 시각은 별도 테스트(import_created_test.go)가 본다.
+func assertURLs(t *testing.T, gotLinks []importLink, want []string) {
 	t.Helper()
+	got := make([]string, 0, len(gotLinks))
+	for _, l := range gotLinks {
+		got = append(got, l.URL)
+	}
 	if len(got) != len(want) {
 		t.Fatalf("URL 수 %d, want %d\n got=%v\nwant=%v", len(got), len(want), got, want)
 	}

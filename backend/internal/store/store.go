@@ -22,6 +22,7 @@ import (
 	neturl "net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/coby/push-point/backend/internal/textutil"
 )
@@ -34,6 +35,8 @@ var (
 	ErrNotFailed     = errors.New("store: failed 상태의 링크가 아님")  // → 400 invalid_input
 	ErrInvalidCursor = errors.New("store: 커서 파싱 실패")           // → 400 invalid_input
 	ErrInvalidURL    = errors.New("store: 절대 http(s) URL이 아님") // → 400 invalid_input
+	// ErrInvalidCreatedAt은 임포트 시각이 미래이거나 2000년 이전. → 400 invalid_input
+	ErrInvalidCreatedAt = errors.New("store: created_at이 미래이거나 너무 과거임")
 )
 
 // LinkTag는 링크에 부착된 태그 (link_tags JOIN tags).
@@ -142,6 +145,12 @@ type SaveInput struct {
 	Description string
 	BodyText    string // 비어 있지 않으면 body_source='client'로 표시된다
 	Keywords    string // 발행자 분류(meta keywords·article:section). 태깅 입력 전용
+	// CreatedAt은 **임포트 전용**. 0이면 지금이다.
+	//
+	// 북마크 파일의 `ADD_DATE`를 살리기 위해 있다. 이게 없으면 임포트한 아카이브 전체가
+	// 임포트한 날 저장된 것이 되고, **시간축이 통째로 거짓이 된다** — 되살림의 7일 규칙도,
+	// 알아봄이 말하는 날짜도, 통계의 30일 창도 전부 같은 하루를 본다.
+	CreatedAt int64
 }
 
 // Normalize는 저장 입력을 검증·정제한다. **SaveLink가 스스로 호출하므로 어떤 진입점도
@@ -150,11 +159,25 @@ type SaveInput struct {
 // 저장은 HTTP로만 들어오지 않는다: 서버 없이 도는 iOS(임베드 모드)에서는 Share Extension이
 // 별개 프로세스라 앱의 인프로세스 서버에 붙지 못하고 App Group 큐에 직접 쓰며, 앱이 그것을
 // 드레인해 이 함수를 호출한다. 정제가 HTTP 핸들러에만 있으면 그 경로에서 통째로 사라진다.
+// minImportEpoch는 임포트 시각의 하한 — 2000-01-01.
+//
+// 북마크 파일의 `ADD_DATE`는 0이나 아주 작은 값으로 나오는 경우가 있고(브라우저·내보내기
+// 도구에 따라 다르다), 그걸 그대로 받으면 1970년에 저장한 링크가 아카이브에 생긴다.
+const minImportEpoch = 946684800
+
 func (in SaveInput) Normalize() (SaveInput, error) {
 	in.URL = strings.TrimSpace(in.URL)
 	u, err := neturl.Parse(in.URL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return SaveInput{}, ErrInvalidURL
+	}
+	// **임포트 시각은 절단이 아니라 거부한다.** 캡처 필드와 다르게 다루는 이유: 잘못된
+	// 제목은 화면에서 바로 보이지만 잘못된 시각은 어느 화면에도 안 나타난 채 되살림·통계·
+	// 알아봄을 조용히 틀리게 만든다. 조용히 틀리는 입력은 받지 않는다.
+	if in.CreatedAt != 0 {
+		if in.CreatedAt < minImportEpoch || in.CreatedAt > time.Now().Unix() {
+			return SaveInput{}, ErrInvalidCreatedAt
+		}
 	}
 	// 클라이언트 캡처 필드는 정제 후 **절단**한다(거부하지 않는다) — 클라이언트가 룬/바이트
 	// 경계를 서버와 똑같이 맞출 방법이 없으므로 경계에서 거부하면 정상 캡처가 조용히 실패한다.
