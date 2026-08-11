@@ -50,11 +50,13 @@ final class ShareViewController: UIViewController {
                 Self.log.error("태깅 실패 id=\(result.id): \(tagError)")
                 await SaveNotifier.notifySaved(title: title, host: host, tags: [t("notify.tagFailed")],
                                                duplicate: result.duplicate,
-                                               priorSavedAt: result.createdAt, priorNote: result.priorNote)
+                                               priorSavedAt: result.createdAt, priorNote: result.priorNote,
+                                               domain: result.domain, domainCount: result.domainCount ?? 0)
             } else {
                 await SaveNotifier.notifySaved(title: title, host: host,
                                                tags: result.tagNames, duplicate: result.duplicate,
                                                priorSavedAt: result.createdAt, priorNote: result.priorNote,
+                                               domain: result.domain, domainCount: result.domainCount ?? 0,
                                                linkID: result.id)
             }
             // 위젯의 스냅샷을 올린다. **중복 저장은 올리지 않는다** — 이미 있던 링크를
@@ -128,6 +130,9 @@ private struct SaveResult: Decodable {
     let createdAt: Int64
     /// 중복일 때만 채워진다 — 그때 이 링크를 저장하며 쓴 메모.
     let priorNote: String?
+    /// 새 저장일 때만 채워진다 — 이 도메인에서 몇 번째인지. 3회 미만이면 0(조용하다).
+    let domainCount: Int?
+    let domain: String?
     let tags: Int
     let tagNames: [String]
     let summaryLen: Int
@@ -140,6 +145,8 @@ private struct SaveResult: Decodable {
         case id, duplicate, tags
         case createdAt = "created_at"
         case priorNote = "prior_note"
+        case domainCount = "domain_count"
+        case domain
         case tagNames = "tag_names"
         case summaryLen = "summary_len"
         case tagError = "tag_error"

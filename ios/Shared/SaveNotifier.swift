@@ -87,6 +87,7 @@ enum SaveNotifier {
     /// 것을 되풀이하는 것은 그 순간을 버리는 것이다.
     static func notifySaved(title: String, host: String, tags: [String], duplicate: Bool,
                             priorSavedAt: Int64 = 0, priorNote: String? = nil,
+                            domain: String? = nil, domainCount: Int = 0,
                             linkID: Int64? = nil) async {
         let content = UNMutableNotificationContent()
         content.title = duplicate ? t("notify.duplicate") : t("notify.saved")
@@ -97,7 +98,7 @@ enum SaveNotifier {
         // 본문에 그대로 노출한다.
         content.body = duplicate
             ? recognitionLine(savedAt: priorSavedAt, note: priorNote, tags: tags, host: host)
-            : (tags.isEmpty ? host : tags.prefix(4).joined(separator: " · "))
+            : domainLine(domain: domain, count: domainCount, tags: tags, host: host)
         content.sound = nil // 저장은 조용해야 한다 — 소리는 방해다
         // **어느 링크인지 싣는다.** 이게 없으면 알림을 눌러도 목록만 열리고, 방금 저장한
         // 것을 다시 찾아야 한다 — 저장이 한 번에 끝난다는 약속이 마지막 한 걸음에서 깨진다.
@@ -121,6 +122,19 @@ enum SaveNotifier {
             parts.append(tags.prefix(3).joined(separator: " · "))
         }
         return parts.isEmpty ? host : parts.joined(separator: " — ")
+    }
+
+    /// 새 저장의 본문. **같은 곳에서 여러 번 저장했으면 그 사실을 먼저 말한다.**
+    ///
+    /// 사전도 코퍼스도 쓰지 않는 알아봄이라 6건짜리 아카이브에서도 참이다 — 42개 태그가
+    /// 아직 아무것도 변별하지 못하는 크기에서 값을 하는 유일한 단이다.
+    ///
+    /// count가 0이면 말할 것이 없다는 뜻이고(3회 미만), 그때는 예전처럼 태그를 보여준다.
+    static func domainLine(domain: String?, count: Int, tags: [String], host: String) -> String {
+        let fallback = tags.isEmpty ? host : tags.prefix(4).joined(separator: " · ")
+        guard let domain, !domain.isEmpty, count > 0 else { return fallback }
+        let head = domain + " " + String(format: t("notify.domainNth"), count)
+        return tags.isEmpty ? head : head + " — " + tags.prefix(2).joined(separator: " · ")
     }
 
     /// 실패는 소리와 함께 남긴다 — 사용자가 놓치면 그 링크는 저장되지 않은 채 사라진다.

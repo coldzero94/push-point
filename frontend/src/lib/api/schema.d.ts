@@ -214,6 +214,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/links/{id}/recognized": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 알아봄 알림을 눌렀다
+         * @description 저장 배너가 "이미 있습니다 — 6월 4일, 그때 이렇게 썼습니다"처럼 **알아본** 뒤, 사람이 그 알림을 눌러 링크로 왔다는 사실을 남긴다.
+         *     **왜 이 엔드포인트가 있는가.** 원장(`recognition_events`)이 노출만 기록하면 모든 행이 `tapped_at IS NULL`이 되고, "무시당했다"와 "아직 안 눌렀다"가 구분되지 않아 비율이 뜻을 잃는다. 노출은 공유 확장이 인프로세스로 남기지만 탭은 앱이 받으므로 (`NotificationRouter`), 그 사실이 서버에 닿는 길이 여기 하나다.
+         *     같은 링크의 **가장 최근 미탭 이벤트**에 표시한다. 대상이 없으면 아무 일도 하지 않고 204다 — 이미 눌렀거나 알아봄 없이 열린 경우이고, 둘 다 오류가 아니다.
+         */
+        post: operations["markRecognitionTapped"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/backup": {
         parameters: {
             query?: never;
@@ -1120,6 +1142,37 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    markRecognitionTapped: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 기록됨(또는 표시할 이벤트가 없었음) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description 링크가 없다 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };

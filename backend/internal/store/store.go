@@ -327,6 +327,18 @@ type Store interface {
 	// 갈아끼울 자리가 없어진다.
 	Backup(ctx context.Context, path string) error
 
+	// ---- 알아봄 (마이그레이션 0013) ----
+
+	// DomainEncounter는 이 도메인에서 저장한 것이 몇 번째인지. 말할 만하지 않으면 0.
+	DomainEncounter(ctx context.Context, linkID int64) (string, int, error)
+	// RecordRecognition은 알아봄을 **보여줬다**는 사실을 남긴다 — 무시당한 것도 남아야
+	// 다음 결정이 취향이 아니라 숫자로 정해진다.
+	RecordRecognition(ctx context.Context, linkID int64, rung int) error
+	// MarkRecognitionTapped는 그 링크의 가장 최근 미탭 알아봄에 탭을 기록한다.
+	MarkRecognitionTapped(ctx context.Context, linkID int64) error
+	// RecognitionStats는 최근 days일의 단별 노출·탭 수.
+	RecognitionStats(ctx context.Context, days int) ([]RecognitionStat, error)
+
 	// RetryLink는 status='failed'인 링크를 pending으로 되돌리고 scrape 잡을
 	// 재-enqueue한다 (한 트랜잭션, 커밋 후 Wake). failed가 아니면 ErrNotFailed.
 	RetryLink(ctx context.Context, id int64) error

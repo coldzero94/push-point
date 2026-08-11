@@ -158,6 +158,13 @@ bench-read:
 bench-pipeline:
     @if [ -f scripts/bench_pipeline.sh ]; then scripts/bench_pipeline.sh; else echo "scripts/bench_pipeline.sh가 없습니다."; fi
 
+# 알아봄 원장을 읽는다 — 단별 노출·탭·탭률
+#
+# 마이그레이션 0013과 같은 변경에서 들어왔다. 쌓기만 하고 아무도 안 읽는 원장은
+# 자산이 아니라 부채다(`tag_feedback`이 그랬다).
+recognition *args:
+    @cd backend && go run ./cmd/pushpoint recognition {{args}}
+
 # 추출의 **모양**을 잰다 — 벽 점수(경계 없이 이어지는 최장 구간)
 #
 # 기존 골든에는 원본 HTML이 없어서 `just eval`·`eval-search`는 이미 추출된 body_text를

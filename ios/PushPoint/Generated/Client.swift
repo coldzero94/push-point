@@ -1981,6 +1981,119 @@ internal struct Client: APIProtocol {
             }
         )
     }
+    /// 알아봄 알림을 눌렀다
+    ///
+    /// 저장 배너가 "이미 있습니다 — 6월 4일, 그때 이렇게 썼습니다"처럼 **알아본** 뒤, 사람이 그 알림을 눌러 링크로 왔다는 사실을 남긴다.
+    /// **왜 이 엔드포인트가 있는가.** 원장(`recognition_events`)이 노출만 기록하면 모든 행이 `tapped_at IS NULL`이 되고, "무시당했다"와 "아직 안 눌렀다"가 구분되지 않아 비율이 뜻을 잃는다. 노출은 공유 확장이 인프로세스로 남기지만 탭은 앱이 받으므로 (`NotificationRouter`), 그 사실이 서버에 닿는 길이 여기 하나다.
+    /// 같은 링크의 **가장 최근 미탭 이벤트**에 표시한다. 대상이 없으면 아무 일도 하지 않고 204다 — 이미 눌렀거나 알아봄 없이 열린 경우이고, 둘 다 오류가 아니다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/links/{id}/recognized`.
+    /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)`.
+    internal func markRecognitionTapped(_ input: Operations.markRecognitionTapped.Input) async throws -> Operations.markRecognitionTapped.Output {
+        try await client.send(
+            input: input,
+            forOperation: Operations.markRecognitionTapped.id,
+            serializer: { input in
+                let path = try converter.renderedPath(
+                    template: "/api/v1/links/{}/recognized",
+                    parameters: [
+                        input.path.id
+                    ]
+                )
+                var request: HTTPTypes.HTTPRequest = .init(
+                    soar_path: path,
+                    method: .post
+                )
+                suppressMutabilityWarning(&request)
+                converter.setAcceptHeader(
+                    in: &request.headerFields,
+                    contentTypes: input.headers.accept
+                )
+                return (request, nil)
+            },
+            deserializer: { response, responseBody in
+                switch response.status.code {
+                case 204:
+                    return .noContent(.init())
+                case 401:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Components.Responses.Unauthorized.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .unauthorized(.init(body: body))
+                case 404:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Operations.markRecognitionTapped.Output.NotFound.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .notFound(.init(body: body))
+                case 500:
+                    let contentType = converter.extractContentTypeIfPresent(in: response.headerFields)
+                    let body: Components.Responses.InternalError.Body
+                    let chosenContentType = try converter.bestContentType(
+                        received: contentType,
+                        options: [
+                            "application/json"
+                        ]
+                    )
+                    switch chosenContentType {
+                    case "application/json":
+                        body = try await converter.getResponseBodyAsJSON(
+                            Components.Schemas._Error.self,
+                            from: responseBody,
+                            transforming: { value in
+                                .json(value)
+                            }
+                        )
+                    default:
+                        preconditionFailure("bestContentType chose an invalid content type.")
+                    }
+                    return .internalServerError(.init(body: body))
+                default:
+                    return .undocumented(
+                        statusCode: response.status.code,
+                        .init(
+                            headerFields: response.headerFields,
+                            body: responseBody
+                        )
+                    )
+                }
+            }
+        )
+    }
     /// 아카이브 전체 내려받기
     ///
     /// 아카이브를 SQLite 파일 하나로 내보낸다(`VACUUM INTO`). **발췌가 아니라 전부다** — FTS 색인·corpus_df·tag_feedback·잡 이력까지 들어가야 복원한 것이 같은 앱이 된다.

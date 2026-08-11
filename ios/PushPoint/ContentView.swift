@@ -614,6 +614,14 @@ struct ContentView: View {
         guard let id = router.pendingLinkID else { return }
         router.pendingLinkID = nil
         opening = OpeningLink(id: Int(id))
+        // **알아봄을 눌렀다는 사실을 원장에 남긴다.** 노출만 기록하면 모든 행이
+        // `tapped_at IS NULL`이 되고 "무시당했다"와 "아직 안 눌렀다"가 구분되지 않는다 —
+        // 그러면 비율이 뜻을 잃고, 다음 결정이 다시 취향으로 정해진다.
+        //
+        // 화면 이동을 막지 않는다. 기록 실패는 링크를 여는 것과 아무 상관이 없다.
+        if let client = backend.client {
+            Task { _ = try? await client.markRecognitionTapped(.init(path: .init(id: id))) }
+        }
     }
 
     /// navigationDestination(item:)이 Identifiable을 요구해서 id만 감싼다.

@@ -102,3 +102,18 @@ func (s *Server) RestoreBackup(_ context.Context, req gen.RestoreBackupRequestOb
 		"staged", filepath.Join(s.dataDir, "pushpoint.db.restore"))
 	return gen.RestoreBackup200JSONResponse{RestartRequired: true}, nil
 }
+
+// MarkRecognitionTapped — 알아봄 알림을 눌렀다는 사실을 원장에 남긴다.
+//
+// **표시할 이벤트가 없어도 204다.** 이미 눌렀거나, 알아봄 없이 그냥 열린 링크이거나 —
+// 둘 다 정상이다. 여기서 404를 주면 앱이 알림을 누를 때마다 오류를 처리해야 하는데,
+// 그 오류로 할 수 있는 일이 없다.
+func (s *Server) MarkRecognitionTapped(ctx context.Context, req gen.MarkRecognitionTappedRequestObject) (gen.MarkRecognitionTappedResponseObject, error) {
+	if _, err := s.store.GetLink(ctx, req.Id); err != nil {
+		return gen.MarkRecognitionTapped404JSONResponse(apiErr(gen.ErrorErrorCodeNotFound, "링크가 없습니다")), nil
+	}
+	if err := s.store.MarkRecognitionTapped(ctx, req.Id); err != nil {
+		return nil, err
+	}
+	return gen.MarkRecognitionTapped204Response{}, nil
+}

@@ -121,6 +121,16 @@ internal protocol APIProtocol: Sendable {
     /// - Remark: HTTP `GET /api/v1/search`.
     /// - Remark: Generated from `#/paths//api/v1/search/get(search)`.
     func search(_ input: Operations.search.Input) async throws -> Operations.search.Output
+    /// 알아봄 알림을 눌렀다
+    ///
+    /// 저장 배너가 "이미 있습니다 — 6월 4일, 그때 이렇게 썼습니다"처럼 **알아본** 뒤, 사람이 그 알림을 눌러 링크로 왔다는 사실을 남긴다.
+    /// **왜 이 엔드포인트가 있는가.** 원장(`recognition_events`)이 노출만 기록하면 모든 행이 `tapped_at IS NULL`이 되고, "무시당했다"와 "아직 안 눌렀다"가 구분되지 않아 비율이 뜻을 잃는다. 노출은 공유 확장이 인프로세스로 남기지만 탭은 앱이 받으므로 (`NotificationRouter`), 그 사실이 서버에 닿는 길이 여기 하나다.
+    /// 같은 링크의 **가장 최근 미탭 이벤트**에 표시한다. 대상이 없으면 아무 일도 하지 않고 204다 — 이미 눌렀거나 알아봄 없이 열린 경우이고, 둘 다 오류가 아니다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/links/{id}/recognized`.
+    /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)`.
+    func markRecognitionTapped(_ input: Operations.markRecognitionTapped.Input) async throws -> Operations.markRecognitionTapped.Output
     /// 아카이브 전체 내려받기
     ///
     /// 아카이브를 SQLite 파일 하나로 내보낸다(`VACUUM INTO`). **발췌가 아니라 전부다** — FTS 색인·corpus_df·tag_feedback·잡 이력까지 들어가야 복원한 것이 같은 앱이 된다.
@@ -397,6 +407,24 @@ extension APIProtocol {
     ) async throws -> Operations.search.Output {
         try await search(Operations.search.Input(
             query: query,
+            headers: headers
+        ))
+    }
+    /// 알아봄 알림을 눌렀다
+    ///
+    /// 저장 배너가 "이미 있습니다 — 6월 4일, 그때 이렇게 썼습니다"처럼 **알아본** 뒤, 사람이 그 알림을 눌러 링크로 왔다는 사실을 남긴다.
+    /// **왜 이 엔드포인트가 있는가.** 원장(`recognition_events`)이 노출만 기록하면 모든 행이 `tapped_at IS NULL`이 되고, "무시당했다"와 "아직 안 눌렀다"가 구분되지 않아 비율이 뜻을 잃는다. 노출은 공유 확장이 인프로세스로 남기지만 탭은 앱이 받으므로 (`NotificationRouter`), 그 사실이 서버에 닿는 길이 여기 하나다.
+    /// 같은 링크의 **가장 최근 미탭 이벤트**에 표시한다. 대상이 없으면 아무 일도 하지 않고 204다 — 이미 눌렀거나 알아봄 없이 열린 경우이고, 둘 다 오류가 아니다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/links/{id}/recognized`.
+    /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)`.
+    internal func markRecognitionTapped(
+        path: Operations.markRecognitionTapped.Input.Path,
+        headers: Operations.markRecognitionTapped.Input.Headers = .init()
+    ) async throws -> Operations.markRecognitionTapped.Output {
+        try await markRecognitionTapped(Operations.markRecognitionTapped.Input(
+            path: path,
             headers: headers
         ))
     }
@@ -4583,6 +4611,220 @@ internal enum Operations {
             /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
             ///
             /// - Remark: Generated from `#/paths//api/v1/search/get(search)/responses/500`.
+            ///
+            /// HTTP response code: `500 internalServerError`.
+            case internalServerError(Components.Responses.InternalError)
+            /// The associated value of the enum case if `self` is `.internalServerError`.
+            ///
+            /// - Throws: An error if `self` is not `.internalServerError`.
+            /// - SeeAlso: `.internalServerError`.
+            internal var internalServerError: Components.Responses.InternalError {
+                get throws {
+                    switch self {
+                    case let .internalServerError(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "internalServerError",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// Undocumented response.
+            ///
+            /// A response with a code that is not documented in the OpenAPI document.
+            case undocumented(statusCode: Swift.Int, OpenAPIRuntime.UndocumentedPayload)
+        }
+        internal enum AcceptableContentType: AcceptableProtocol {
+            case json
+            case other(Swift.String)
+            internal init?(rawValue: Swift.String) {
+                switch rawValue.lowercased() {
+                case "application/json":
+                    self = .json
+                default:
+                    self = .other(rawValue)
+                }
+            }
+            internal var rawValue: Swift.String {
+                switch self {
+                case let .other(string):
+                    return string
+                case .json:
+                    return "application/json"
+                }
+            }
+            internal static var allCases: [Self] {
+                [
+                    .json
+                ]
+            }
+        }
+    }
+    /// 알아봄 알림을 눌렀다
+    ///
+    /// 저장 배너가 "이미 있습니다 — 6월 4일, 그때 이렇게 썼습니다"처럼 **알아본** 뒤, 사람이 그 알림을 눌러 링크로 왔다는 사실을 남긴다.
+    /// **왜 이 엔드포인트가 있는가.** 원장(`recognition_events`)이 노출만 기록하면 모든 행이 `tapped_at IS NULL`이 되고, "무시당했다"와 "아직 안 눌렀다"가 구분되지 않아 비율이 뜻을 잃는다. 노출은 공유 확장이 인프로세스로 남기지만 탭은 앱이 받으므로 (`NotificationRouter`), 그 사실이 서버에 닿는 길이 여기 하나다.
+    /// 같은 링크의 **가장 최근 미탭 이벤트**에 표시한다. 대상이 없으면 아무 일도 하지 않고 204다 — 이미 눌렀거나 알아봄 없이 열린 경우이고, 둘 다 오류가 아니다.
+    ///
+    ///
+    /// - Remark: HTTP `POST /api/v1/links/{id}/recognized`.
+    /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)`.
+    internal enum markRecognitionTapped {
+        internal static let id: Swift.String = "markRecognitionTapped"
+        internal struct Input: Sendable, Hashable {
+            /// - Remark: Generated from `#/paths/api/v1/links/{id}/recognized/POST/path`.
+            internal struct Path: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/links/{id}/recognized/POST/path/id`.
+                internal var id: Swift.Int64
+                /// Creates a new `Path`.
+                ///
+                /// - Parameters:
+                ///   - id:
+                internal init(id: Swift.Int64) {
+                    self.id = id
+                }
+            }
+            internal var path: Operations.markRecognitionTapped.Input.Path
+            /// - Remark: Generated from `#/paths/api/v1/links/{id}/recognized/POST/header`.
+            internal struct Headers: Sendable, Hashable {
+                internal var accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.markRecognitionTapped.AcceptableContentType>]
+                /// Creates a new `Headers`.
+                ///
+                /// - Parameters:
+                ///   - accept:
+                internal init(accept: [OpenAPIRuntime.AcceptHeaderContentType<Operations.markRecognitionTapped.AcceptableContentType>] = .defaultValues()) {
+                    self.accept = accept
+                }
+            }
+            internal var headers: Operations.markRecognitionTapped.Input.Headers
+            /// Creates a new `Input`.
+            ///
+            /// - Parameters:
+            ///   - path:
+            ///   - headers:
+            internal init(
+                path: Operations.markRecognitionTapped.Input.Path,
+                headers: Operations.markRecognitionTapped.Input.Headers = .init()
+            ) {
+                self.path = path
+                self.headers = headers
+            }
+        }
+        internal enum Output: Sendable, Hashable {
+            internal struct NoContent: Sendable, Hashable {
+                /// Creates a new `NoContent`.
+                internal init() {}
+            }
+            /// 기록됨(또는 표시할 이벤트가 없었음)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            case noContent(Operations.markRecognitionTapped.Output.NoContent)
+            /// 기록됨(또는 표시할 이벤트가 없었음)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)/responses/204`.
+            ///
+            /// HTTP response code: `204 noContent`.
+            internal static var noContent: Self {
+                .noContent(.init())
+            }
+            /// The associated value of the enum case if `self` is `.noContent`.
+            ///
+            /// - Throws: An error if `self` is not `.noContent`.
+            /// - SeeAlso: `.noContent`.
+            internal var noContent: Operations.markRecognitionTapped.Output.NoContent {
+                get throws {
+                    switch self {
+                    case let .noContent(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "noContent",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// API 키 누락 또는 불일치 (`unauthorized`)
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)/responses/401`.
+            ///
+            /// HTTP response code: `401 unauthorized`.
+            case unauthorized(Components.Responses.Unauthorized)
+            /// The associated value of the enum case if `self` is `.unauthorized`.
+            ///
+            /// - Throws: An error if `self` is not `.unauthorized`.
+            /// - SeeAlso: `.unauthorized`.
+            internal var unauthorized: Components.Responses.Unauthorized {
+                get throws {
+                    switch self {
+                    case let .unauthorized(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "unauthorized",
+                            response: self
+                        )
+                    }
+                }
+            }
+            internal struct NotFound: Sendable, Hashable {
+                /// - Remark: Generated from `#/paths/api/v1/links/{id}/recognized/POST/responses/404/content`.
+                internal enum Body: Sendable, Hashable {
+                    /// - Remark: Generated from `#/paths/api/v1/links/{id}/recognized/POST/responses/404/content/application\/json`.
+                    case json(Components.Schemas._Error)
+                    /// The associated value of the enum case if `self` is `.json`.
+                    ///
+                    /// - Throws: An error if `self` is not `.json`.
+                    /// - SeeAlso: `.json`.
+                    internal var json: Components.Schemas._Error {
+                        get throws {
+                            switch self {
+                            case let .json(body):
+                                return body
+                            }
+                        }
+                    }
+                }
+                /// Received HTTP response body
+                internal var body: Operations.markRecognitionTapped.Output.NotFound.Body
+                /// Creates a new `NotFound`.
+                ///
+                /// - Parameters:
+                ///   - body: Received HTTP response body
+                internal init(body: Operations.markRecognitionTapped.Output.NotFound.Body) {
+                    self.body = body
+                }
+            }
+            /// 링크가 없다
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)/responses/404`.
+            ///
+            /// HTTP response code: `404 notFound`.
+            case notFound(Operations.markRecognitionTapped.Output.NotFound)
+            /// The associated value of the enum case if `self` is `.notFound`.
+            ///
+            /// - Throws: An error if `self` is not `.notFound`.
+            /// - SeeAlso: `.notFound`.
+            internal var notFound: Operations.markRecognitionTapped.Output.NotFound {
+                get throws {
+                    switch self {
+                    case let .notFound(response):
+                        return response
+                    default:
+                        try throwUnexpectedResponseStatus(
+                            expectedStatus: "notFound",
+                            response: self
+                        )
+                    }
+                }
+            }
+            /// 서버 내부 오류 (`internal`) — 핸들러가 처리하지 못한 에러의 공통 종착점이다. `GET /healthz`만 이 응답이 없다 (조건 없는 단일 반환이라 실패 경로가 없다). `GET /thumbs/{dir}/{file}`은 인증만 면제일 뿐 500 면제는 아니다 — 파일 열기·stat 실패 시 500을 낸다.
+            ///
+            /// - Remark: Generated from `#/paths//api/v1/links/{id}/recognized/post(markRecognitionTapped)/responses/500`.
             ///
             /// HTTP response code: `500 internalServerError`.
             case internalServerError(Components.Responses.InternalError)

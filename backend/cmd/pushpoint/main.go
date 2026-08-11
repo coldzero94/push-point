@@ -50,6 +50,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "recognition":
+			if err := runRecognition(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "recognition 실패:", err)
+				os.Exit(1)
+			}
+			return
 		case "reader-eval":
 			if err := runReaderEval(os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, "reader-eval 실패:", err)
@@ -129,7 +135,7 @@ func main() {
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|readgen|pipegen|reader-eval|import|eval|summary-eval|golden-capture|golden-refill|golden-from-db|eval-search|sheets-setup|sheets-sync|sheets-inbox])\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "알 수 없는 서브커맨드 %q (사용: pushpoint [seed|loadgen|readgen|pipegen|reader-eval|recognition|import|eval|summary-eval|golden-capture|golden-refill|golden-from-db|eval-search|sheets-setup|sheets-sync|sheets-inbox])\n", os.Args[1])
 			os.Exit(2)
 		}
 	}
