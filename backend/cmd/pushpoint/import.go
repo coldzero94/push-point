@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,7 +55,7 @@ func runImport(args []string) error {
 	}
 	defer f.Close()
 
-	var urls []string
+	var urls []importLink
 	switch *typ {
 	case "bookmarks":
 		urls, err = extractBookmarkURLs(f)
@@ -89,29 +90,81 @@ func runImport(args []string) error {
 }
 
 // extractBookmarkURLs는 Netscape 북마크 HTML export(<A HREF="...">)에서 모든 http(s) URL을 추출한다.
-func extractBookmarkURLs(r io.Reader) ([]string, error) {
+// importLink는 임포트할 링크 한 건. CreatedAt이 0이면 "모른다"이고, 서버가 지금으로 채운다.
+type importLink struct {
+	URL       string
+	CreatedAt int64
+}
+
+// extractBookmarkURLs는 북마크 HTML에서 URL과 **저장 시각**을 뽑는다.
+//
+// **`ADD_DATE`를 살리는 것이 이 함수의 요점이다.** 예전에는 `a[href]`만 읽고 나머지 속성을
+// 버렸는데, 그러면 임포트한 아카이브 전체가 임포트한 날 저장된 것이 되고 **시간축이 통째로
+// 거짓이 된다** — 되살림의 7일 규칙도, 알아봄이 말하는 날짜도, 통계의 30일 창도 같은 하루를
+// 본다. 12-BACKLOG가 "지금 남은 빚"이라고 부른 것이 이것이다.
+//
+// 넷스케이프 북마크 포맷은 사실상의 표준이라 크롬·사파리·파이어폭스가 모두 `ADD_DATE`를
+// 초 단위로 쓴다. **사파리는 안 쓰는 경우가 있고**, 그때는 0으로 두어 서버가 지금으로
+// 채우게 한다 — 지어낸 시각보다 낫다.
+func extractBookmarkURLs(r io.Reader) ([]importLink, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return nil, err
 	}
-	var urls []string
+	var out []importLink
 	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
 		href, ok := s.Attr("href")
-		if !ok {
+		if !ok || !isHTTPURL(href) {
 			return
 		}
-		if isHTTPURL(href) {
-			urls = append(urls, strings.TrimSpace(href))
-		}
+		out = append(out, importLink{URL: strings.TrimSpace(href), CreatedAt: bookmarkAddDate(s)})
 	})
-	return urls, nil
+	return out, nil
+}
+
+// bookmarkAddDate는 ADD_DATE를 초로 읽는다. 없거나 이상하면 0.
+//
+// 두 단위가 섞여 나온다: 넷스케이프 포맷은 **초**이고, 크롬의 일부 export와 북마크 JSON은
+// **마이크로초**(`time_usec`)다. 자릿수로 가른다 — 초로 읽었을 때 서기 5000년을 넘으면
+// 그건 마이크로초다.
+func bookmarkAddDate(s *goquery.Selection) int64 {
+	raw, ok := s.Attr("add_date")
+	if !ok {
+		raw, ok = s.Attr("ADD_DATE")
+	}
+	if !ok {
+		return 0
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	const year5000 = 95617584000
+	if n > year5000 {
+		n /= 1_000_000
+	}
+	return n
 }
 
 // extractTakeoutURLs는 YouTube Takeout 시청기록/좋아요에서 watch URL을 추출한다.
 // Takeout 기본 export는 HTML(watch-history.html)이고, JSON 형식을 선택하면 titleUrl 배열,
 // CSV는 셀 스캔이다 — 셋 다 지원한다. format이 auto면 첫 비공백 바이트로 감지한다
 // (`[`·`{` → JSON, `<` → HTML, 그 외 → CSV).
-func extractTakeoutURLs(r io.Reader, format string) ([]string, error) {
+// Takeout에는 저장 시각이 없다 — 시청 기록이지 북마크가 아니다. CreatedAt은 0으로 둔다.
+func extractTakeoutURLs(r io.Reader, format string) ([]importLink, error) {
+	plain, err := extractTakeoutPlain(r, format)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]importLink, 0, len(plain))
+	for _, u := range plain {
+		out = append(out, importLink{URL: u})
+	}
+	return out, nil
+}
+
+// extractTakeoutPlain은 형식별 파서를 고른다 — URL만 나온다.
+func extractTakeoutPlain(r io.Reader, format string) ([]string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
@@ -243,15 +296,15 @@ func isYouTubeWatchURL(raw string) bool {
 }
 
 // dedupeURLs는 순서를 유지하며 중복 URL을 제거한다 (같은 파일 내 재등장 노이즈 감소 — 서버도 멱등).
-func dedupeURLs(in []string) []string {
+func dedupeURLs(in []importLink) []importLink {
 	seen := make(map[string]struct{}, len(in))
-	out := make([]string, 0, len(in))
-	for _, u := range in {
-		if _, ok := seen[u]; ok {
+	out := make([]importLink, 0, len(in))
+	for _, l := range in {
+		if _, ok := seen[l.URL]; ok {
 			continue
 		}
-		seen[u] = struct{}{}
-		out = append(out, u)
+		seen[l.URL] = struct{}{}
+		out = append(out, l)
 	}
 	return out
 }
@@ -259,7 +312,7 @@ func dedupeURLs(in []string) []string {
 // sendLinks는 urls를 POST /api/v1/links로 순차 전송한다.
 // interval>0이면 요청 사이에 그만큼 쉬어 rate limit(초당 ~10)한다. 201=저장, 200=중복,
 // 그 외/에러=실패(로그 후 계속). 100건마다 진행률을 로그. 반환은 (saved, dup, failed).
-func sendLinks(ctx context.Context, client *http.Client, addr, key string, urls []string, interval time.Duration, logger *slog.Logger) (saved, dup, failed int) {
+func sendLinks(ctx context.Context, client *http.Client, addr, key string, urls []importLink, interval time.Duration, logger *slog.Logger) (saved, dup, failed int) {
 	endpoint := strings.TrimRight(addr, "/") + "/api/v1/links"
 	for i, u := range urls {
 		if i > 0 && interval > 0 {
@@ -268,7 +321,7 @@ func sendLinks(ctx context.Context, client *http.Client, addr, key string, urls 
 		switch code, err := postLink(ctx, client, endpoint, key, u); {
 		case err != nil:
 			failed++
-			logger.Warn("전송 실패", "url", u, "err", err)
+			logger.Warn("전송 실패", "url", u.URL, "err", err)
 		case code == http.StatusCreated:
 			saved++
 		case code == http.StatusOK:
@@ -286,8 +339,14 @@ func sendLinks(ctx context.Context, client *http.Client, addr, key string, urls 
 }
 
 // postLink는 URL 한 건을 저장 API로 보내고 상태 코드를 돌려준다. 본문은 버린다.
-func postLink(ctx context.Context, client *http.Client, endpoint, key, rawURL string) (int, error) {
-	body, err := json.Marshal(map[string]string{"url": rawURL})
+func postLink(ctx context.Context, client *http.Client, endpoint, key string, l importLink) (int, error) {
+	// **시각을 아는 것만 싣는다.** 0을 보내면 서버가 거부하고(2000년 이전), 그러면
+	// ADD_DATE가 없는 북마크가 통째로 실패한다 — 사파리 export가 그렇다.
+	payload := map[string]any{"url": l.URL}
+	if l.CreatedAt > 0 {
+		payload["created_at"] = l.CreatedAt
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return 0, err
 	}

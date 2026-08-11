@@ -221,11 +221,22 @@ func (s *sqliteStore) SaveLink(ctx context.Context, in SaveInput) (int64, int64,
 		case !errors.Is(err, sql.ErrNoRows):
 			return fmt.Errorf("store: url_hash 중복 확인 실패: %w", err)
 		}
-		if err := tx.QueryRowContext(ctx, `
-			INSERT INTO links (url, url_hash, domain, note, title, description, body_text, body_source, keywords)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at`,
-			url, hash, hostOf(url), note, in.Title, in.Description, in.BodyText, bodySource, in.Keywords,
-		).Scan(&id, &createdAt); err != nil {
+		// **임포트 시각은 created_at과 updated_at 둘 다에 넣는다.** updated_at만 지금으로
+		// 두면 "오래전에 저장했는데 방금 고쳤다"가 되고, 시트 내보내기와 목록 정렬이
+		// 서로 다른 이야기를 한다. 0이면 스키마 기본값(지금)이 그대로 쓰인다.
+		createdCol, createdVal := "", any(nil)
+		if in.CreatedAt > 0 {
+			createdCol, createdVal = ", created_at, updated_at", in.CreatedAt
+		}
+		q := `INSERT INTO links (url, url_hash, domain, note, title, description, body_text, body_source, keywords` +
+			createdCol + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?`
+		args := []any{url, hash, hostOf(url), note, in.Title, in.Description, in.BodyText, bodySource, in.Keywords}
+		if createdVal != nil {
+			q += `, ?, ?`
+			args = append(args, createdVal, createdVal)
+		}
+		q += `) RETURNING id, created_at`
+		if err := tx.QueryRowContext(ctx, q, args...).Scan(&id, &createdAt); err != nil {
 			return fmt.Errorf("store: links INSERT 실패: %w", err)
 		}
 		if err := s.q.EnqueueTx(tx, queue.KindScrape, id); err != nil {

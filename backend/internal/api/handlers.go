@@ -301,9 +301,13 @@ func (s *Server) CreateLink(ctx context.Context, request gen.CreateLinkRequestOb
 		Title:       deref(request.Body.Title),
 		Description: deref(request.Body.Description),
 		BodyText:    deref(request.Body.BodyText),
+		CreatedAt:   derefInt64(request.Body.CreatedAt),
 		Keywords:    deref(request.Body.Keywords),
 	}
 	id, createdAt, duplicate, err := s.store.SaveLink(ctx, in)
+	if errors.Is(err, store.ErrInvalidCreatedAt) {
+		return gen.CreateLink400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, err.Error()))}, nil
+	}
 	if errors.Is(err, store.ErrInvalidURL) {
 		return gen.CreateLink400JSONResponse{BadRequestJSONResponse: gen.BadRequestJSONResponse(apiErr(gen.ErrorErrorCodeInvalidInput, "url must be absolute http(s)"))}, nil
 	}
@@ -675,3 +679,11 @@ type badRequest struct{ msg string }
 func (e badRequest) Error() string { return e.msg }
 
 func badRequestErr(msg string) error { return badRequest{msg: msg} }
+
+// derefInt64는 optional int64 포인터를 값으로 편다. `deref`가 문자열 전용이라 짝이 필요하다.
+func derefInt64(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
