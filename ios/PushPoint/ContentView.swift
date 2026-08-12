@@ -30,6 +30,8 @@ struct ContentView: View {
     /// 열어 볼 링크. NavigationLink 대신 이 값으로 이동한다 — 아래 row 주석 참조.
     @State private var opening: OpeningLink?
     @ObservedObject private var router = NotificationRouter.shared
+    /// 서버가 뜨기를 기다리는 알아봄 탭. `.task(id: backend.state)`가 소비한다.
+    @State private var pendingRecognitionTap: Int64?
     @ObservedObject private var langStore = L.Store.shared
     /// 검색어. 비어 있으면 평소의 보드, 있으면 검색 결과가 그 자리를 대신한다.
     @State private var query = ""
@@ -185,7 +187,10 @@ struct ContentView: View {
             guard scenePhase == .active else { return }
             await refreshNotifyState()
         }
-        .task(id: backend.state) { await load() }
+        .task(id: backend.state) {
+            await flushRecognitionTap()
+            await load()
+        }
         .task(id: filter) { await load() }
         // 타이핑마다 요청을 보내지 않는다. 한 글자마다 FTS를 때리면 폰 안에서 도는
         // 서버라 더 잘 보인다 — 입력이 멎은 뒤에 한 번만 간다.
@@ -618,10 +623,22 @@ struct ContentView: View {
         // `tapped_at IS NULL`이 되고 "무시당했다"와 "아직 안 눌렀다"가 구분되지 않는다 —
         // 그러면 비율이 뜻을 잃고, 다음 결정이 다시 취향으로 정해진다.
         //
+        // **여기서 `backend.client`를 바로 읽으면 안 된다.** 알림 탭으로 앱이 차갑게 뜨는
+        // 경우 이 함수는 첫 프레임 뒤(`.task`)에 도는데 인프로세스 서버는 아직 시작 중이라
+        // client가 nil이다. 화면 이동은 서버가 필요 없어서 **정상으로 보이고 기록만 조용히
+        // 사라진다** — 실측으로 그랬다(2026-08-12, 상세 화면은 열렸고 tapped_at은 0이었다).
+        // 이 파일의 나머지가 전부 `.task(id: backend.state)`로 서버를 기다리는 이유가 이것이다.
+        //
         // 화면 이동을 막지 않는다. 기록 실패는 링크를 여는 것과 아무 상관이 없다.
-        if let client = backend.client {
-            Task { _ = try? await client.markRecognitionTapped(.init(path: .init(id: id))) }
-        }
+        pendingRecognitionTap = id
+    }
+
+    /// 서버가 뜬 뒤에 알아봄 탭을 보낸다. 실패해도 조용히 넘어간다 — 원장 한 줄 때문에
+    /// 링크를 못 여는 일은 없어야 한다.
+    private func flushRecognitionTap() async {
+        guard let id = pendingRecognitionTap, let client = backend.client else { return }
+        pendingRecognitionTap = nil
+        _ = try? await client.markRecognitionTapped(.init(path: .init(id: id)))
     }
 
     /// navigationDestination(item:)이 Identifiable을 요구해서 id만 감싼다.
